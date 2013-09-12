@@ -31,7 +31,7 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d
 from bpy_extras.view3d_utils import region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d
 import blf
-#from development.contour_tools import contour_utilities
+#from development.cgc-retopology import contour_utilities
 
 class ContourControlPoint(object):
     
@@ -276,7 +276,7 @@ class PolySkecthLine(object):
         
 
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         mouse_loc = Vector((x,y))
         
         if len(self.knots):
@@ -542,7 +542,7 @@ class ContourCutLine(object):
         '''
         
         debug = settings.debug
-        #settings = context.user_preferences.addons['contour_tools'].preferences
+        #settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         #this should be moved to only happen if the view changes :-/  I'ts only
         #a few hundred calcs even with a lot of lines. Waste not want not.
@@ -639,7 +639,7 @@ class ContourCutLine(object):
                         blf.draw(0, str(i))
     #draw contour points? later    
     def hit_object(self, context, ob, method = 'VIEW'):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         region = context.region  
         rv3d = context.space_data.region_3d
         
@@ -1155,7 +1155,7 @@ class ContourCutLine(object):
                 print('final alignment quality is %f' % alignment_quality)
               
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if self.head: #this makes sure the head and tail haven't been removed
             active_head = self.head.mouse_over(x, y)
@@ -1661,7 +1661,7 @@ class CutLineManipulatorWidget(object):
                   
     def draw(self, context):
         
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)

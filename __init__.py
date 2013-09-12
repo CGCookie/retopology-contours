@@ -32,7 +32,7 @@ bl_info = {
     "category": "3D View"}
 
 import sys, os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'contour_tools'))    
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'cgc-retopology'))    
 
 '''    
 if "bpy" in locals():
@@ -468,7 +468,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         col.operator("cgcookie.retop_contour", text="Draw Contours", icon='MESH_UVSPHERE')
         #col.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
         
-        cgc_contour = context.user_preferences.addons['contour_tools'].preferences
+        cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
         row = layout.row()
         row.prop(cgc_contour, "cyclic")
         row.prop(cgc_contour, "vertex_count")
@@ -511,7 +511,7 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
 
 def retopo_draw_callback(self,context):
     
-    settings = context.user_preferences.addons['contour_tools'].preferences
+    settings = context.user_preferences.addons['cgc-retopology'].preferences
 
     stroke_color = settings.stroke_rgb
     handle_color = settings.handle_rgb
@@ -603,7 +603,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     
     def modal(self, context, event):
         context.area.tag_redraw()
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
        
         
@@ -1387,7 +1387,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                         #'verts_simple':verts_simple}
     
     def load_from_cache(self,context, tool_type,clip):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         if tool_type not in contour_cache:
             return None
         else:
@@ -1948,7 +1948,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
   
     def invoke(self, context, event):
         #TODO Settings harmon CODE REVIEW
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         self.valid_cut_inds = []
         
@@ -2254,7 +2254,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
     def modal(self, context, event):
         context.area.tag_redraw()
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'MIDDLEMOUSE', 'NUMPAD_2', 'NUMPAD_4', 'NUMPAD_6', 'NUMPAD_8', 'NUMPAD_1', 'NUMPAD_3', 'NUMPAD_5', 'NUMPAD_7', 'NUMPAD_9'}:
@@ -2331,7 +2331,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #HINT you are in the poly sketch code
         
         #TODO Settings harmon CODE REVIEW
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         #TODO Settings harmon CODE REVIEW
         self.settings = settings
