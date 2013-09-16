@@ -481,6 +481,8 @@ def get_path_length(verts):
     sum up the length of a string of vertices
     '''
     l_tot = 0
+    if len(verts) < 2:
+        return 0
     
     for i in range(0,len(verts)-1):
         d = verts[i+1] - verts[i]
@@ -1073,6 +1075,10 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
         new_verts - list of new Vert Locations type list[Mathutils.Vector]
     '''
     
+    if len(verts) < 2:
+        print('this is crazy, there are not enough verts to do anything!')
+        return verts
+        
     if segments >= len(verts):
         print('more segments requested than original verts')
         
@@ -1177,6 +1183,14 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
 def list_shift(seq, n):
     n = n % len(seq)
     return seq[n:] + seq[:n]
+
+def find_doubles(seq):
+    seen = set()
+    seen_add = seen.add
+    # adds all elements it doesn't know yet to seen and all other to seen_twice
+    seen_twice = set(x for x in seq if x in seen or seen_add(x))
+    # turn the set into a list (as requested)
+    return list(seen_twice)
 
 
 def alignment_quality_perpendicular(verts_1, verts_2, eds_1, eds_2):
@@ -1430,15 +1444,15 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
     '''
     
     intersections = []
-    inds = []
-    for i in range(0,len(path1)-1 + 1*cyclic1):
+    inds_1 = []
+    inds_2 = []
+    
+    for i in range(0,len(path1) + 1*cyclic1 - 1):
         
         n = int(math.fmod(i+1, len(path1)))
         v1 = path1[n]
         v2 = path1[i]
-        
-        print([i,n])
-        for j in range(0,len(path2)-1 + 1*cyclic2):
+        for j in range(0,len(path2) + 1*cyclic2 - 1):
             
             m = int(math.fmod(j+1, len(path2)))
             v3 = path2[m]
@@ -1462,9 +1476,39 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
                 diff = inter_2 - inter_1
                 if diff.length < threshold and verif1[1] > 0 and verif2[1] > 0 and verif1[1] < 1 and verif2[1] < 1:
                     intersections.append(.5 * (inter_1 + inter_2))
-                    inds.append([i,j])
+                    inds_1.append(i)
+                    inds_2.append(j)
     
-    return intersections, inds
+    if len(set(inds_1)) != len(inds_1):
+        print('    ')
+        print('HELP, HELP, HELP, HELP, HELP, HELP, HELP, HELP, HELP,')
+        print('there are multiple of the same index in intersection 1')
+        print(inds_1)
+        print(inds_2)
+        print(intersections)
+        doubles = find_doubles(inds_1)
+        ind = inds_1.index(doubles[0],1)
+        
+        inds_1.pop(ind)
+        inds_2.pop(ind)
+        intersections.pop(ind)
+        
+    if len(set(inds_2)) != len(inds_2):
+        print('    ')
+        print('HELP, HELP, HELP, HELP, HELP, HELP, HELP, HELP, HELP,')
+        print('HELP, there are multipl of the same index in intersection 2')
+        print(inds_2)
+        print(inds_1)
+        print(intersections)
+        
+        doubles = find_doubles(inds_2)
+        ind = inds_2.index(doubles[0],1)
+        
+        inds_1.pop(ind)
+        inds_2.pop(ind)
+        intersections.pop(ind)
+        
+    return intersections, inds_1, inds_2
             
             
             
@@ -1655,7 +1699,7 @@ def align_edge_loops(verts_1, verts_2, eds_1, eds_2):
 
 
 
-def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed_index_b, debug = True):
+def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed_index_b, max_tests = 10000, debug = True):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
     space.
@@ -1737,7 +1781,7 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         element_tests = 0
         element = initial_element
         stop_test = None
-        while element and total_tests < 10000 and stop_test != seed_index_b:
+        while element and total_tests < max_tests and stop_test != seed_index_b:
             total_tests += 1
             element_tests += 1
             #first, we know that this face is not coplanar..that's good
@@ -1746,26 +1790,35 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
                 #return None
             if type(element) == bmesh.types.BMFace:
                 element = face_cycle(element, pt, no, prev_eds, verts[initial_element.index])#, edge_mapping)
-                stop_test = element.index
+                if element:
+                    stop_test = element.index
+                else:
+                    stop_test = None
             
             elif type(element) == bmesh.types.BMVert:
+                print('do we ever use the vert cycle?')
                 element = vert_cycle(element, pt, no, prev_eds, verts[initial_element.index])#, edge_mapping)
                 stop_test = None
         
         if stop_test == seed_index_b:
             print('found the other face!')
             verts[initial_element.index].append(pt_b)
+            print('%i vertices found so far' % len(verts[initial_element.index]))
             
         else:
             #trash the vert data...we aren't interested
             #if we want to do other stuff later...we can
-            del verts[initial_element.index]
+            #for now we will go on to the other side of
+            #the seed face
+            print('I think we made a loop w/o finding the intiial ege?')
+            print('Perhaps we found a mesh edge?')
+            #del verts[initial_element.index]
             
-        if total_tests-2 > 10000:
+        if total_tests-2 > max_tests:
             print('maxed out tests')
                    
         print('completed %i tests in this seed search' % element_tests)
-        print('%i vertices found so far' % len(verts[initial_element.index]))                
+                        
     
     #this iterates the keys in verts
     #i have kept the keys consistent for
@@ -1779,19 +1832,18 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         chains = [verts[key] for key in verts if len(verts[key]) > 2]
         if len(chains):
             sizes = [len(chain) for chain in chains]
-        
+            print(sizes)
             best = min(sizes)
             ind = sizes.index(best)
-        
         
             return chains[ind]
         else:
             print('failure no chains > 2 verts')
-            return
+            return []
                     
     else:
         print('failed to find connection in either direction...perhaps points arent coplanar')
-        return 
+        return []
             
             
 
