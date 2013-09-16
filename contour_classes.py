@@ -373,7 +373,8 @@ class PolySkecthLine(object):
                     
                     break
             
-            if active_self:    
+            if active_self:
+                print('this line is active')    
                 return self
             else:
                 return None
@@ -458,7 +459,7 @@ class PolySkecthLine(object):
         self.head = SketchEndPoint(context, self, 'HEAD')
         self.tail = SketchEndPoint(context, self, 'TAIL')
     
-    def snap_to_object(self,ob, raw = True, world = True, polys = True):
+    def snap_to_object(self,ob, raw = True, world = True, polys = True, quads = True):
         
         mx = ob.matrix_world
         imx = mx.inverted()
@@ -487,6 +488,17 @@ class PolySkecthLine(object):
                 self.poly_nodes[i] = mx * snap[0]
                 self.poly_normals.append(mx.to_3x3() * snap[1])
                 self.poly_seeds.append(snap[2])
+            
+        if quads and len(self.extrudes_d):    
+            for i, vert in enumerate(self.extrudes_d):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.extrudes_d[i] = mx * snap[0]
+                
+            for i, vert in enumerate(self.extrudes_u):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.extrudes_u[i] = mx * snap[0]
+                
+            
                 
             
     def intersect_other_paths(self,context, other_paths, separate_other = False):
@@ -709,10 +721,11 @@ class PolySkecthLine(object):
             else:
                 self.poly_nodes.extend(vs[:len(vs)])
         
+        print('Generating a head and tail point')
         self.head = SketchEndPoint(context, self, 'HEAD')
         self.tail = SketchEndPoint(context, self, 'TAIL')
             
-    def generate_quads(self,ob,width):
+    def generate_quads(self,ob):
         mx = ob.matrix_world
         imx = mx.inverted()
         
@@ -721,7 +734,7 @@ class PolySkecthLine(object):
         
         #not necessary?  #already happened?
         #definitely not necesary if we cut the object
-        self.snap_to_object(ob, raw = False, world = False, polys = True)
+        self.snap_to_object(ob, raw = False, world = False, polys = True, quads = False)
             
             
         for i, v in enumerate(self.poly_nodes):
@@ -739,14 +752,15 @@ class PolySkecthLine(object):
             ext = self.poly_normals[i].cross(v)
             ext.normalize()
             
-            self.extrudes_u.append(self.poly_nodes[i] + .5 * width * ext)
-            self.extrudes_d.append(self.poly_nodes[i] - .5 * width * ext)    
+            self.extrudes_u.append(self.poly_nodes[i] + .5 * self.quad_width * ext)
+            self.extrudes_d.append(self.poly_nodes[i] - .5 * self.quad_width * ext)    
             
-            
+        
+        self.snap_to_object(ob, raw = False, world = False, polys = False, quads = True)    
         print('make the quads')
         
         
-        
+            
     def draw(self,context):
         
         #if len(self.raw_world) > 2:
@@ -772,11 +786,11 @@ class PolySkecthLine(object):
         if len(self.extrudes_u) > 2:
             contour_utilities.draw_3d_points(context, self.extrudes_u, self.color4, 2)
             contour_utilities.draw_3d_points(context, self.extrudes_d, self.color4, 2)
-            contour_utilities.draw_polyline_from_3dpoints(context, self.extrudes_u, (0,1,0,1), 1, 'GL_LINE_STIPPLE')
-            contour_utilities.draw_polyline_from_3dpoints(context, self.extrudes_d, (0,1,0,1), 1, 'GL_LINE_STIPPLE')
+            contour_utilities.draw_polyline_from_3dpoints(context, self.extrudes_u, self.color2, 1, 'GL_LINE_STIPPLE')
+            contour_utilities.draw_polyline_from_3dpoints(context, self.extrudes_d, self.color2, 1, 'GL_LINE_STIPPLE')
             
             for i, v in enumerate(self.extrudes_u):
-                contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_u[i],self.extrudes_d[i]], (0,1,0,1), 1, 'GL_LINE_STIPPLE')
+                contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_u[i],self.extrudes_d[i]], self.color2, 1, 'GL_LINE_STIPPLE')
             
         if self.head:
             self.head.draw(context)

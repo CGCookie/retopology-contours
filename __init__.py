@@ -535,19 +535,27 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        col = layout.column()
+        box = layout.box()
+        col = box.column()
         col.operator("cgcookie.retop_contour", text="Draw Contours", icon='MESH_UVSPHERE')
-        col.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
+        col = box.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
         cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
-        row = layout.row()
+        row = box.row()
         row.prop(cgc_contour, "cyclic")
         row.prop(cgc_contour, "vertex_count")
         
-        row = layout.row()
+        row = box.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
+        
+        box = layout.box()
+        row = box.row()
+        row.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
+        
+        row = box.row()
+        row.prop(cgc_contour, "density_factor")
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):  
     bl_label = "Retopology"
@@ -2385,7 +2393,71 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 print('poly nodes is %i long: ' % len(sketch.poly_nodes))
                 print('there are %i segments: ' % sketch.segments)
                 print('    ')
+        
+        
+        if event.type in {'WHEELDOWNMOUSE','WHEELUPMOUSE','NUMPAD_PLUS','NUMPAD_MINUS'}:
             
+            if (event.type == 'WHEELUPMOUSE' and event.ctrl) or (event.type == 'NUMPAD_PLUS' and event.value == 'PRESS'):
+                
+                if self.selected and self.selected.desc == 'SKETCH_LINE' and not self.draw:
+                    self.selected.segments += 1
+                    self.selected.create_vert_nodes(context, mode = 'SEGMENTS')
+                    self.selected.generate_quads(self.original_form)
+                    message = "%s: Set segments to %i" % (event.type, self.selected.segments)
+                    context.area.header_text_set(text = message)
+                
+                    #self.connect_valid_cuts_to_make_mesh()
+                return {'RUNNING_MODAL'}
+            
+            elif (event.type == 'WHEELDOWNMOUSE' and event.ctrl) or (event.type == 'NUMPAD_MINUS' and event.value == 'PRESS'):
+                
+                if self.selected and self.selected.desc == 'SKETCH_LINE' and not self.draw:
+                    if self.selected.segments > 1:
+                        self.selected.segments -= 1
+                        self.selected.create_vert_nodes(context, mode = 'SEGMENTS')
+                        self.selected.generate_quads(self.original_form)
+                        message = "%s: Set segments to %i" % (event.type, self.selected.segments)
+                        context.area.header_text_set(text = message)
+                        
+                return {'RUNNING_MODAL'}
+            
+            elif (event.type == 'WHEELUPMOUSE' and event.alt) or (event.type == 'UP_ARROW' and event.value == 'PRESS'):
+                
+                if self.selected and self.selected.desc == 'SKETCH_LINE' and not self.draw:
+                    
+                    if event.shift:
+                        self.selected.quad_width += .05 * self.original_form.dimensions.length * 1/settings.density_factor
+                    
+                    else:
+                        self.selected.quad_width += .1 * self.original_form.dimensions.length * 1/settings.density_factor
+                   
+                    message = "%s: Set width to %f" % (event.type, round(self.selected.quad_width,3))
+                    context.area.header_text_set(text = message)
+                    self.selected.generate_quads(self.original_form)
+                    #message = "%s: Set segments to %i" % (event.type, self.selected.segments)
+                    #context.area.header_text_set(text = message)
+                
+                    #self.connect_valid_cuts_to_make_mesh()
+                return {'RUNNING_MODAL'}
+            
+            elif (event.type == 'WHEELDOWNMOUSE' and event.alt) or (event.type == 'DOWN_ARROW' and event.value == 'PRESS'):
+                
+                if self.selected and self.selected.desc == 'SKETCH_LINE' and not self.draw:
+                    if event.shift:
+                        self.selected.quad_width -= .05 * self.original_form.dimensions.length * 1/settings.density_factor
+                    
+                    else:
+                        self.selected.quad_width -= .1 * self.original_form.dimensions.length * 1/settings.density_factor
+                    
+                    if self.selected.quad_width < 0:
+                        self.selected.quad_width = .01 * self.original_form.dimensions.length * 1/settings.density_factor
+                        
+                    message = "%s: Set width to %f" % (event.type, round(self.selected.quad_width,3))
+                    context.area.header_text_set(text = message)
+                    self.selected.generate_quads(self.original_form)
+                return {'RUNNING_MODAL'}
+            
+                
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'MIDDLEMOUSE', 'NUMPAD_2', 'NUMPAD_4', 'NUMPAD_6', 'NUMPAD_8', 'NUMPAD_1', 'NUMPAD_3', 'NUMPAD_5', 'NUMPAD_7', 'NUMPAD_9'}:
             
             return {'PASS_THROUGH'}
@@ -2449,7 +2521,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 
                 
                 
-                if event.ctrl and self.hover_target:
+                if not self.draw and self.hover_target:
                     for sketch in self.sketch_lines:
                         sketch.select = False
                         sketch.color2 = (settings.sketch_color2[0], settings.sketch_color2[1],settings.sketch_color2[2],1)
@@ -2519,7 +2591,9 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                                     
                         
                         for line in all_new:
-                            line.create_vert_nodes(context)
+                            #the target density will carry over in the new lines
+                            line.create_vert_nodes(context, mode = 'QUAD_SIZE')
+                            line.generate_quads(self.original_form)
                             
                         for line in all_new:
                             if len(line.poly_nodes) < 2:
@@ -2565,7 +2639,100 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             context.area.header_text_set()
             return {'CANCELLED'}
             
+        elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
+            if context.mode == 'EDIT_MESH':
+                back_to_edit = True
+            else:
+                back_to_edit = False
+                
+            bm = self.dest_bme
+                
+            #the world_matrix of the orignal form
+            orig_mx = self.original_form.matrix_world
+    
+            #the world matrix of the destination (retopo) mesh
+            reto_mx = self.destination_ob.matrix_world
+            reto_imx = reto_mx.inverted()
             
+            #make list of bmverts
+            
+            for line in self.sketch_lines: 
+                bmverts = []
+                    
+                for i, vert in enumerate(line.extrudes_u):
+                    new_vert = bm.verts.new(tuple(reto_imx * vert))
+                    bmverts.append(new_vert)
+                    
+                for i, vert in enumerate(line.extrudes_d):
+                    new_vert = bm.verts.new(tuple(reto_imx * vert))
+                    bmverts.append(new_vert)
+                
+
+            
+                # Initialize the index values of this sequence
+                self.dest_bme.verts.index_update()
+                
+                #gather a few
+                n_faces = len(line.extrudes_u) - 1
+
+                #this will leave room later for t junctions etc
+                total_faces = []
+                for j in range(0,n_faces): #there are only 2 rings...but i left it here for readability
+                    
+                    ind0 = j
+                    ind1 = j + 1
+                    ind2 = j + 1 + n_faces + 1
+                    ind3 = j +n_faces + 1
+                    total_faces.append((ind0,ind1,ind2,ind3))
+            
+                bmfaces = []
+                for face in total_faces:
+
+                    #actual BMVerts not indices I think?
+                    new_face = tuple([bmverts[i] for i in face])
+                    bmfaces.append(bm.faces.new(new_face))
+            
+            
+            # Finish up, write the modified bmesh back to the mesh
+            
+            #if editmode...we have to do it this way
+            if context.mode == 'EDIT_MESH':
+                bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
+            
+            #if object mode....we do it like this
+            else:
+                #write the data into the object
+                bm.to_mesh(self.dest_me)
+            
+                #remember we created a new object
+                #moving this to the invoke?
+                context.scene.objects.link(self.destination_ob)
+                
+                self.destination_ob.select = True
+                context.scene.objects.active = self.destination_ob
+                
+                if context.space_data.local_view:
+                    view_loc = context.space_data.region_3d.view_location.copy()
+                    view_rot = context.space_data.region_3d.view_rotation.copy()
+                    view_dist = context.space_data.region_3d.view_distance
+                    bpy.ops.view3d.localview()
+                    bpy.ops.view3d.localview()
+                    #context.space_data.region_3d.view_matrix = mx_copy
+                    context.space_data.region_3d.view_location = view_loc
+                    context.space_data.region_3d.view_rotation = view_rot
+                    context.space_data.region_3d.view_distance = view_dist
+                    context.space_data.region_3d.update()
+                    
+            self.destination_ob.update_tag()
+            context.scene.update()
+            
+            context.area.header_text_set()
+            contour_utilities.callback_cleanup(self,context)
+            bm.free()
+
+            return{'FINISHED'}
+            
+                
         else:
             return {'RUNNING_MODAL'}
     
@@ -2612,7 +2779,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             print(inter_dict1)
             print(inter_dict2)    
             #the first edge may have been intersected
-            #meaning the first ver will be there already
+            #meaning the first vert will be there already
             if 0 not in inds_1 and 0 not in inter_dict1:
                 inds_1.insert(0,0)
                 
@@ -2703,6 +2870,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 sketch.raw_world = seg
                 sketch.world_path = seg
                 sketch.snap_to_object(self.original_form)
+                sketch.quad_length = stroke1.quad_length
+                sketch.quad_width = stroke1.quad_width
                 #give them a highlight color for now
                 sketch.color2 = (settings.sketch_color5[0], settings.sketch_color5[1],settings.sketch_color5[2],1)
                 
@@ -2713,6 +2882,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 sketch = PolySkecthLine(context, [])
                 sketch.raw_world = seg
                 sketch.world_path = seg
+                sketch.quad_length = stroke2.quad_length
+                sketch.quad_width = stroke2.quad_width
                 return_strokes.append(sketch)
                 
         return return_strokes        
