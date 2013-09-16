@@ -341,19 +341,66 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     search_factor = FloatProperty(
             name = "Search Factor",
-            description = "percentage of object distance to search",
+            description = "percentage of object distance to search for new cuts",
             default=.2,
             min = 0,
             max = 1,
             )
         
-    intersect_factor = IntProperty(
+    intersect_threshold = FloatProperty(
             name = "Intersect Factor",
-            description = "Stringence for connecting new loops",
-            default=2,
+            description = "Stringence for connecting new strokes",
+            default=1.,
+            min = .000001,
+            max = 1,
+            )
+    
+    merge_threshold = FloatProperty(
+            name = "Intersect Factor",
+            description = "distance below which to snap strokes together",
+            default=1.,
+            min = .000001,
+            max = 1,
+            )
+    
+    density_factor = IntProperty(
+            name = "Density Factor",
+            description = "Fraction of diagonal to start mesh density of poly sketch...bigger numbers = smaller quads",
+            default=40,
+            min = 1,
+            max = 1000,
+            )
+    
+    cull_factor = IntProperty(
+            name = "Cull Factor",
+            description = "Fraction of screen drawn points to throw away. Bigger = less detail",
+            default = 4,
             min = 1,
             max = 10,
             )
+    
+    smooth_factor = IntProperty(
+            name = "Smooth Factor",
+            description = "Iterations to smooth drawn strokes",
+            default = 5,
+            min = 1,
+            max = 10,
+            )
+    
+    feature_factor = IntProperty(
+            name = "Smooth Factor",
+            description = "Fraction of sketch bounding box to be considered feature. Smaller = More Detail",
+            default = 4,
+            min = 1,
+            max = 10,
+            )
+    
+    sketch_color1 = FloatVectorProperty(name="sketch Color", description="Vert Color", min=0, max=1, default=(1,1,0), subtype="COLOR")
+    sketch_color2 = FloatVectorProperty(name="sketch Color", description="Edge Color", min=0, max=1, default=(0,1,.1), subtype="COLOR")
+    sketch_color3 = FloatVectorProperty(name="sketch Color", description="Tip Color", min=0, max=1, default=(0,.5,1), subtype="COLOR")
+    sketch_color4 = FloatVectorProperty(name="sketch Color", description="Tail/Sketch Color", min=0, max=1, default=(.8,0.3,.4), subtype="COLOR")
+    sketch_color5 = FloatVectorProperty(name="sketch Color", description="Highlight Color", min=0, max=1, default=(1,.1,.1), subtype="COLOR")
+    
     
     
     
@@ -400,7 +447,31 @@ class ContourToolsAddonPreferences(AddonPreferences):
         row = box.row(align=True)
         row.prop(self, "show_cut_indices", text = "Edge Indices")
 
-
+        #Poly Sketch Settings
+        box = layout.box().column(align=False)
+        row = box.row()
+        row.label(text="Poly Sketch Settings")
+        
+        
+        row = box.row()
+        row.prop(self, "cull_factor", text="Cull Factor")
+        row.prop(self, "intersect_threshold", text="Intersection Threshold")
+        row.prop(self, "density_factor", text="Density Factor")
+        
+        row = box.row()
+        row.prop(self, "merge_threshold", text="Merge Threshold")
+        row.prop(self, "smooth_factor", text="Smooth Factor")
+        row.prop(self, "feature_factor", text="Smooth Factor")
+        
+        
+        row = box.row()
+        row.prop(self, "sketch_color1", text="Color 1")
+        row.prop(self, "sketch_color2", text="Color 2")
+        row.prop(self, "sketch_color3", text="Color 3")
+        row.prop(self, "sketch_color4", text="Color 4")
+        row.prop(self, "sketch_color5", text="Color 5")
+            
+        
         # Widget Settings
         box = layout.box().column(align=False)
         row = box.row()
@@ -466,9 +537,10 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         layout = self.layout
         col = layout.column()
         col.operator("cgcookie.retop_contour", text="Draw Contours", icon='MESH_UVSPHERE')
-        #col.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
+        col.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
+        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
-        cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
+        cgc_contour = context.user_preferences.addons['contour_tools'].preferences
         row = layout.row()
         row.prop(cgc_contour, "cyclic")
         row.prop(cgc_contour, "vertex_count")
@@ -476,9 +548,6 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         row = layout.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
-
-        col = layout.column()
-        col.operator("cgcookie.clear_cache", text = "Clear Cache")
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):  
     bl_label = "Retopology"
@@ -511,7 +580,7 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
 
 def retopo_draw_callback(self,context):
     
-    settings = context.user_preferences.addons['cgc-retopology'].preferences
+    settings = context.user_preferences.addons['contour_tools'].preferences
 
     stroke_color = settings.stroke_rgb
     handle_color = settings.handle_rgb
@@ -524,6 +593,7 @@ def retopo_draw_callback(self,context):
             cut_line.update_screen_coords(context)
                     
         self.post_update = False
+        
     for cut_collection in [self.cut_lines]: #, self.valid_cuts]:
         if len(cut_collection) > 0:
             for i, c_cut in enumerate(cut_collection):
@@ -551,7 +621,9 @@ def retopo_draw_callback(self,context):
 
     if self.follow_lines != [] and settings.show_edges:
         for follow in self.follow_lines:
-            contour_utilities.draw_polyline_from_3dpoints(context, follow, (g_color[0], g_color[1], g_color[2], 1), settings.line_thick,"GL_LINE_STIPPLE")
+            contour_utilities.draw_polyline_from_3dpoints(context, follow, 
+                                                          (g_color[0], g_color[1], g_color[2], 1), 
+                                                          settings.line_thick,"GL_LINE_STIPPLE")
 
     if self.cut_line_widget and settings.draw_widget:
         self.cut_line_widget.draw(context)
@@ -605,7 +677,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
-       
+        #there are several "states" of user interaction that will modify
+        #how the program responds to different keys and events
+        
+        #hotey  default False
+        #drag   defailt False
+        #widget_manipulation default False
+        #drawing  default False
         
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
             self.undo_action(context)
@@ -753,11 +831,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 #actual BMVerts not indices I think?
                 new_face = tuple([bmverts[i] for i in face])
                 bmfaces.append(bm.faces.new(new_face))
-                                    
+            
+            
             # Finish up, write the modified bmesh back to the mesh
+            
             #if editmode...we have to do it this way
             if context.mode == 'EDIT_MESH':
-                print('try to update the edit mesh')
                 bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
             
             #if object mode....we do it like this
@@ -806,7 +885,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 bpy.ops.object.editmode_toggle()
                 bpy.ops.object.editmode_toggle()
                 if self.sel_verts and len(self.sel_verts):
-                    bpy.ops.mesh.bridge_edge_loops(type='SINGLE', use_merge=False, merge_factor=0.5, number_cuts=0, interpolation='PATH', smoothness=1, profile_shape_factor=0, profile_shape='SMOOTH')
+                    bpy.ops.mesh.bridge_edge_loops(type='SINGLE', 
+                                                   use_merge=False, 
+                                                   merge_factor=0.5, 
+                                                   number_cuts=0, 
+                                                   interpolation='PATH', 
+                                                   smoothness=1, 
+                                                   profile_shape_factor=0, 
+                                                   profile_shape='SMOOTH')
+                    
                     bpy.ops.mesh.select_all(action='DESELECT')
                     if restore_vert_mode:
                         context.tool_settings.mesh_select_mode[0] = False
@@ -948,7 +1035,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                         a_line = None
                                         b_line = None
                                         
-                                    self.cut_line_widget = CutLineManipulatorWidget(context, settings, self.hover_target, event.mouse_region_x,event.mouse_region_y,cut_line_a = a_line, cut_line_b = b_line)
+                                    self.cut_line_widget = CutLineManipulatorWidget(context, 
+                                                                                    settings, 
+                                                                                    self.hover_target, 
+                                                                                    event.mouse_region_x,
+                                                                                    event.mouse_region_y,
+                                                                                    cut_line_a = a_line, 
+                                                                                    cut_line_b = b_line)
                                     self.cut_line_widget.derive_screen(context)
                                     
                             else:
@@ -988,7 +1081,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 #bpy.data.meshes.remove(me)
             return {'CANCELLED'}  
         
-        elif event.type in {'MIDDLEMOUSE', 'NUMPAD_2', 'NUMPAD_4', 'NUMPAD_6', 'NUMPAD_8', 'NUMPAD_1', 'NUMPAD_3', 'NUMPAD_5', 'NUMPAD_7', 'NUMPAD_9'}:
+        elif event.type in {'MIDDLEMOUSE', 
+                            'NUMPAD_2', 
+                            'NUMPAD_4', 
+                            'NUMPAD_6', 
+                            'NUMPAD_8', 
+                            'NUMPAD_1', 
+                            'NUMPAD_3', 
+                            'NUMPAD_5', 
+                            'NUMPAD_7', 
+                            'NUMPAD_9'}:
 
             if event.value == 'PRESS':
                 self.navigating = True
@@ -1204,7 +1306,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #user just finished using the widget
                     if self.drag_target.desc == 'CUT_LINE' and self.widget_interaction:
-                        if not settings.live_update: #meaning all this hasn't been done
+                        if not settings.live_update:
                             self.drag_target.hit_object(context, self.original_form, method = '3_AXIS_COM')
                             self.drag_target.cut_object(context, self.original_form, self.bme)
                             self.hover_target.simplify_cross(self.segments)    
@@ -1387,7 +1489,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                         #'verts_simple':verts_simple}
     
     def load_from_cache(self,context, tool_type,clip):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons['contour_tools'].preferences
         if tool_type not in contour_cache:
             return None
         else:
@@ -1694,7 +1796,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
 
     def sort_cuts(self):
         
-        if len(self.cut_lines) < 2 and not self.existing_cut:
+        if len(self.cut_lines) < 2:
             print('waiting on other cut lines')
             self.verts = []
             self.edges = []
@@ -1708,7 +1810,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #a mesh
         valid_cuts = [c_line for c_line in self.cut_lines if c_line.verts != [] and c_line.verts_simple != []]
         self.cut_lines = valid_cuts
-        
         if len(valid_cuts) < 2:
             print('for some reason our cut lines dont add up')
             
@@ -1883,7 +1984,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         total_edges = []
         total_faces = []
         
-        if len(self.valid_cuts) < 2 and not self.existing_cut:
+        if len(self.valid_cuts) < 2:
             print('waiting on other cut lines')
             self.verts = []
             self.edges = []
@@ -1896,7 +1997,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         n_lines = len(self.valid_cuts[0].verts_simple)
         
         
-        print('work out the edges')
         #work out the connectivity edges
         for i, cut_line in enumerate(self.valid_cuts):
             for v in cut_line.verts_simple:
@@ -1911,7 +2011,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         cyclic = 0 in self.valid_cuts[0].eds_simple[-1]
         
-        print('work out the faces')
         #work out the connectivity faces:
         for j in range(0,n_rings - 1):
             for i in range(0,n_lines-1):
@@ -1930,7 +2029,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
 
         self.follow_lines = []
-        print('make the follow lines')
         for i in range(0,len(self.valid_cuts[0].verts_simple)):
             tmp_line = []
             if self.existing_cut:
@@ -1948,7 +2046,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
   
     def invoke(self, context, event):
         #TODO Settings harmon CODE REVIEW
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons['contour_tools'].preferences
         
         self.valid_cut_inds = []
         
@@ -2227,6 +2325,10 @@ def poly_sketch_draw_callback(self,context):
     if len(self.draw_cache):
         contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1,.5,1,.8), 2, "GL_LINE_SMOOTH")
     
+    
+    if len(self.sketch_intersections):
+        contour_utilities.draw_3d_points(context, self.sketch_intersections, (0,0, 1,1), 5)
+        
     if len(self.sketch_lines):    
         for line in self.sketch_lines:
             line.draw(context)
@@ -2257,6 +2359,33 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         
+        
+        
+        if event.type == 'K' and self.selected and self.selected.desc == 'SKETCH_LINE':
+            if event.value == 'PRESS':
+                self.selected.cut_by_endpoints(self.original_form, self.bme)
+            
+            return {'RUNNING_MODAL'}
+            
+        if event.type == 'R':
+            #for line in self.sketch_lines:
+                #if len(line.poly_nodes) <= 2:
+                    #print('getting rid of one')
+                    #self.sketch_lines.remove(line) 
+                            
+            print('################')
+            print('               ')
+            print('PROGRESS REPORT')
+            print('               ')
+            
+            for i, sketch in enumerate(self.sketch_lines):
+                print('this is the %i segment' % i)
+                print('world path is %i long: ' % len(sketch.world_path))
+                print('raw world is %i long: ' % len(sketch.raw_world))
+                print('poly nodes is %i long: ' % len(sketch.poly_nodes))
+                print('there are %i segments: ' % sketch.segments)
+                print('    ')
+            
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'MIDDLEMOUSE', 'NUMPAD_2', 'NUMPAD_4', 'NUMPAD_6', 'NUMPAD_8', 'NUMPAD_1', 'NUMPAD_3', 'NUMPAD_5', 'NUMPAD_7', 'NUMPAD_9'}:
             
             return {'PASS_THROUGH'}
@@ -2266,6 +2395,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             #toggle drawing
             if event.value == 'PRESS':
+                #toggle the draw on press
                 self.draw = self.draw == False
             
             
@@ -2273,14 +2403,22 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 message = "Stick draw on"
                 
             else:
-                message = "Experimental poly_sketch 'D' to draw"
+                message = "Experimental poly_sketch tap 'D' to draw"
             context.area.header_text_set(text = message)    
             #else:
                 #self.draw = False
                 #self.draw_cache = []
                 
             return {'RUNNING_MODAL'}
+        
+        elif event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
+            if self.hover_target:
+                self.sketch_lines.remove(self.hover_target)
+                self.hover_target = None
+                self.selected = None
                 
+            return{'RUNNING_MODAL'}
+                    
         elif event.type == 'MOUSEMOVE':
             
             if self.drag and self.draw:
@@ -2288,32 +2426,135 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))
                 
             if not self.drag and not self.draw:
+                selection = []
+                self.hover_target = None
                 for sketch in self.sketch_lines:
-                    sketch.active_element(context, event.mouse_region_x, event.mouse_region_y)
-                
-            
+                    act = sketch.active_element(context, event.mouse_region_x, event.mouse_region_y)
+                    if act and act.desc == 'SKETCH_LINE':
+                        self.hover_target = act
+                        self.hover_target.color2 = (settings.sketch_color5[0], settings.sketch_color5[1],settings.sketch_color5[2],1)
+                        
+                    elif not act and not sketch.select:
+                        sketch.color2 = (settings.sketch_color2[0], settings.sketch_color2[1],settings.sketch_color2[2],1)
+
+                        
+
+                    
             
             return {'RUNNING_MODAL'}
                     
                     
         elif event.type == 'LEFTMOUSE':
             if event.value == 'PRESS':
-                self.drag = True
+                
+                
+                
+                if event.ctrl and self.hover_target:
+                    for sketch in self.sketch_lines:
+                        sketch.select = False
+                        sketch.color2 = (settings.sketch_color2[0], settings.sketch_color2[1],settings.sketch_color2[2],1)
+                    
+                    #tell the operator who is selected    
+                    self.selected = self.hover_target
+                    #tell the line that it's selected
+                    self.selected.select = True
+                    #color it appropriately
+                    self.selected.color2 = (settings.sketch_color5[0], settings.sketch_color5[1],settings.sketch_color5[2],1)
+                
+
+                else:
+                    self.drag = True
+                
+                
             else:
                 if self.draw:
                     if len(self.draw_cache) > 10:
-                        sketch = PolySkecthLine(self.draw_cache)
+                        #new sketch
                         
-                        print('raycasting now')
+                        sketch = PolySkecthLine(context, self.draw_cache,
+                                                cull_factor = settings.cull_factor, 
+                                                smooth_factor = settings.smooth_factor,
+                                                feature_factor = settings.feature_factor)
+                        
+                        #cast onto object
                         sketch.ray_cast_path(context, self.original_form)
-                        #sketch.find_knots()
-                        sketch.smooth_path(ob = self.original_form)
-                        sketch.create_vert_nodes()
-                        sketch.generate_quads(self.original_form,1)
                         
-                        self.sketch_lines.append(sketch)
-                    
+                        #find knots later
+                        #sketch.find_knots()
+                        
+                        #make the path reasonable
+                        sketch.smooth_path(context, ob = self.original_form)
+                        
+                        
+                        
+                        #start with just the new stroke
+                        all_new = [sketch]
+                        #all the existing non intersecting strokes are self.sketch_lines
+                        
+                        if len(self.sketch_lines):
+                            new_strokes = True
+                            tests = 0
+                            while new_strokes != [] and tests < 100:
+                                tests += 1
+                                if tests > 99:
+                                    print('numbered out...too many tests')
+                                
+                                for sketch in all_new:
+                                    
+                                    break_out = False
+                                    for line in self.sketch_lines:
+                                        
+                                        new_strokes = self.intersect_strokes(context, sketch, line)
+                                        if new_strokes != []:
+                                            print('removing the old from the existing')
+                                            self.sketch_lines.remove(line)
+                                            print('removing the original from the new set')
+                                            all_new.remove(sketch)
+                                            print('adding %i new strokes back to the new set' % len(new_strokes))
+                                            all_new.extend(new_strokes)
+                                            break_out = True
+                                            break
+                                    if break_out:
+                                        break
+                                    
+                        
+                        for line in all_new:
+                            line.create_vert_nodes(context)
+                            
+                        for line in all_new:
+                            if len(line.poly_nodes) < 2:
+                                print('cleaning a small line')
+                                all_new.remove(line)
+                                
+                        self.sketch_lines.extend(all_new)  
+                        
+                        for sketch in self.sketch_lines:
+                            sketch.select = False
+                            
+                        self.selected = None
+                        
+                        
+                                
+                        #other_sketches = sketch.intersect_other_paths(context, self.sketch_lines, separate_other = True)
+                        
+                        #.create_vert_nodes()
+                        #sketch.generate_quads(self.original_form,1)
+                        
+                        #self.sketch_lines.append(sketch)
+                        #if len(other_sketches):
+                            #for line in other_sketches:
+                                #line.create_vert_nodes()
+                                
+                                
+                            #self.sketch_lines.extend(other_sketches)
+                        
                         self.draw_cache = []
+                        
+                    #for line in self.sketch_lines:
+                        #if len(line.poly_nodes) <= 2:
+                            #print('getting rid of one')
+                            #self.sketch_lines.remove(line)             
+                        
                 
                 self.drag = False
                 
@@ -2327,6 +2568,160 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
         else:
             return {'RUNNING_MODAL'}
+    
+    
+    def intersect_strokes(self,context, stroke1, stroke2):
+        settings = context.user_preferences.addons['contour_tools'].preferences
+
+        return_strokes = []
+        inter_dict1 = {}
+        inter_dict2 = {}
+        
+        new_intersects, inds_1, inds_2 = contour_utilities.intersect_paths(stroke1.world_path, stroke2.world_path, cyclic1 = False, cyclic2 = False, threshold = .1)
+        
+        
+        
+        if new_intersects != []:
+            for i, index in enumerate(inds_1):
+                inter_dict1[index] = new_intersects[i]
+            for i, index in enumerate(inds_2):
+                inter_dict2[index] = new_intersects[i]
+                    
+            
+            n1 = len(stroke1.raw_world) - 1
+            n2 = len(stroke2.raw_world) - 1
+            verts1 = stroke1.world_path.copy()
+            verts2 = stroke2.world_path.copy()
+            
+            
+            print('lengths')
+            print(len(verts1))
+            print(len(verts2))
+            
+            print('raw inds')
+            print(inds_1)
+            print(inds_2)
+            
+            if n1 not in inds_1:
+                inds_1.append(n1+1)
+                
+            if n2 not in inds_2:
+                inds_2.append(n2+1)
+            
+            print('dictionaries')    
+            print(inter_dict1)
+            print(inter_dict2)    
+            #the first edge may have been intersected
+            #meaning the first ver will be there already
+            if 0 not in inds_1 and 0 not in inter_dict1:
+                inds_1.insert(0,0)
+                
+            else:
+                print('special damn case')
+                
+            if 0 not in inds_2 and 0 not in inter_dict2:
+                inds_2.insert(0,0)
+                
+            else:
+                print('special damn case')
+                
+            inds_1.sort()
+            inds_2.sort()
+            
+            print('tagged ends')
+            print(inds_1)
+            print(inds_2)
+            
+            segments1 = []
+            segments2 = []
+            
+            for i in range(0,len(inds_1) - 1):
+                
+                start_index = inds_1[i]
+                end_index = inds_1[i+1]
+                print('start index: %i stop_index: %i' % (start_index, end_index))
+                
+                if i > 0:
+                    seg = verts1[start_index+1:end_index]
+                
+                else:
+                    if start_index == 0 and 0 in inter_dict1:
+                        seg_0 = [verts1[0], inter_dict1[0]]
+                        seg = verts1[1:end_index]
+                        seg.insert(0,inter_dict1[start_index])
+                    
+                        segments1.append(seg_0)
+                        
+                    else:
+                        seg = verts1[start_index:end_index]
+                    
+                if start_index > 0:
+                    seg.insert(0,inter_dict1[start_index])
+                    
+                if end_index < n1+1 and not (start_index == 0 and 0 in inter_dict1):
+                    seg.append(inter_dict1[end_index])
+                
+                segments1.append(seg)
+                
+                
+            tot_length = sum([len(seg) -1 for seg in segments1])
+            print('length difference %i' % (tot_length - len(verts1)))
+             
+            for i in range(0,len(inds_2) - 1):
+                
+                start_index = inds_2[i]
+                end_index = inds_2[i+1]
+                print('start index: %i stop_index: %i' % (start_index, end_index))
+                
+                if i > 0:
+                    seg = verts2[start_index+1:end_index]
+                
+                else:
+                    if start_index == 0 and 0 in inter_dict2:
+                        seg_0 = [verts2[0], inter_dict2[0]]
+                        seg = verts2[1:end_index]
+                        seg.insert(0,inter_dict2[0])
+                        segments2.append(seg_0)
+                    
+                    else:
+                        seg = verts2[start_index:end_index]
+                        
+                    
+                    
+                if start_index > 0:
+                    seg.insert(0,inter_dict2[start_index])
+                    
+                if end_index < n2+1 and not (start_index == 0 and 0 in inter_dict2):
+                    seg.append(inter_dict2[end_index])
+                
+                segments2.append(seg)
+                
+            
+            for seg in segments1:
+                #make a blank new stroke
+                sketch = PolySkecthLine(context, [])
+                sketch.raw_world = seg
+                sketch.world_path = seg
+                sketch.snap_to_object(self.original_form)
+                #give them a highlight color for now
+                sketch.color2 = (settings.sketch_color5[0], settings.sketch_color5[1],settings.sketch_color5[2],1)
+                
+                return_strokes.append(sketch)
+                
+            for seg in segments2:
+                #make a new stroke
+                sketch = PolySkecthLine(context, [])
+                sketch.raw_world = seg
+                sketch.world_path = seg
+                return_strokes.append(sketch)
+                
+        return return_strokes        
+        #build new stroke1 segments
+        
+        #build new stroke 2 segments
+        
+        
+        
     def invoke(self, context, event):
         #HINT you are in the poly sketch code
         
@@ -2529,6 +2924,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
         #store points
         self.draw_cache = []
+        
+        self.sketch_intersections = []
             
        
         if settings.use_x_ray:
@@ -2574,7 +2971,7 @@ def register():
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_panel)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour)
-    #bpy.utils.register_class(CGCOOKIE_OT_retopo_poly_sketch)
+    bpy.utils.register_class(CGCOOKIE_OT_retopo_poly_sketch)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_menu)
 
     # Create the addon hotkeys
@@ -2595,7 +2992,7 @@ def unregister():
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_panel)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_menu)
-    #bpy.utils.unregister_class(CGCOOKIE_OT_retopo_poly_sketch)
+    bpy.utils.unregister_class(CGCOOKIE_OT_retopo_poly_sketch)
     bpy.utils.unregister_class(ContourToolsAddonPreferences)
 
     # Remove addon hotkeys

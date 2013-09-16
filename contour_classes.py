@@ -24,6 +24,7 @@ Created by Patrick Moore
 import bpy
 import math
 import time
+import copy
 from mathutils import Vector, Quaternion
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import contour_utilities
@@ -33,6 +34,40 @@ from bpy_extras.view3d_utils import region_2d_to_location_3d
 import blf
 #from development.cgc-retopology import contour_utilities
 
+
+class SketchEndPoint(object):
+    def __init__(self,context, parent, end, color = (.1,.2,.8,1), size = 4, mouse_radius = 10):
+        '''
+        end = enum in 'HEAD' or 'TAIL'
+        '''
+        settings = context.user_preferences.addons['contour_tools'].preferences
+        
+        if len(parent.raw_world) < 3:
+            return None
+        
+        self.desc = 'SKETCH_END'
+        self.color = color
+        
+        if end == 'HEAD':
+            self.world_position = parent.raw_world[0].copy()
+            self.dir = self.world_position - parent.raw_world[1]
+            self.color = (settings.sketch_color3[0], settings.sketch_color3[1],settings.sketch_color3[2],1)
+            
+        if end == 'TAIL':
+            self.world_position = parent.raw_world[-1].copy()
+            self.dir = self.world_position
+            self.color = (settings.sketch_color4[0], settings.sketch_color4[1],settings.sketch_color4[2],1)
+            
+        self.screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.world_position)
+        
+        self.parent = parent
+        
+        self.size = size
+        self.mouse_rad = mouse_radius
+        
+    def draw(self,context):
+        contour_utilities.draw_3d_points(context, [self.world_position], self.color, self.size)
+        
 class ContourControlPoint(object):
     
     def __init__(self, parent, x, y, color = (1,0,0,1), size = 2, mouse_radius=10):
@@ -217,24 +252,25 @@ class ExistingVertList(object):
 
 class PolySkecthLine(object):
     
-    def __init__(self, raw_points,
-                 cull_factor = 5,
+    def __init__(self, context, raw_points,
+                 cull_factor = 3,
                  smooth_factor = 5,
-                 feature_factor = 5,
-                 color1 = (1,0,0,1),
-                 color2 = (0,1,0,1),
-                 color3 = (0,0,1,1),
-                 color4 = (1,1,0,1)):
+                 feature_factor = 5):
         
+        settings = context.user_preferences.addons['contour_tools'].preferences
+        ####IDENTIFIER###
+        self.desc = 'SKETCH_LINE'
+        self.select = True
         ####DATA####
-        self.raw_screen = [raw_points[0]]
+        if len(raw_points):
+            self.raw_screen = [raw_points[0]]
+        else:
+            self.raw_screen = []
         
         #toss a bunch of data
         for i, v in enumerate(raw_points):
             if not math.fmod(i, cull_factor):
                 self.raw_screen.append(v)
-        
-        
         
         #culled raw_screen
         #raycast onto object
@@ -243,8 +279,18 @@ class PolySkecthLine(object):
         #atenuated and smoothed
         self.world_path = []
         
+        #a collection of verts to draw for testing
+        self.test_verts = []
+        
+        
         #this is free data from raycast
+        #and from ob.closest_point
+        self.path_seeds = []
         self.path_normals = []
+        
+        self.poly_seeds = []
+        self.poly_normals = []
+        
         
         #region 2d version of world path
         self.screen_path = []
@@ -259,6 +305,11 @@ class PolySkecthLine(object):
         self.extrudes_d = []
         
         
+        
+        ####WIDGETY THINGS####
+        self.head = None
+        self.tail = None
+        
         ####PROCESSIG CONSTANTS###
         self.cull_factor = cull_factor
         self.smooth_factor = smooth_factor
@@ -267,45 +318,69 @@ class PolySkecthLine(object):
         self.poly_loc = 'CENTERED' #ABOVE, #BELOW
         
         self.segments = 10
+        self.quad_size = 1
         
         ####VISULAIZTION STUFF####
-        self.color1 = color1
-        self.color2 = color2
-        self.color3 = color3
-        self.color4 = color4
+        self.color1 = (settings.sketch_color1[0], settings.sketch_color1[1],settings.sketch_color1[2],1)
+        self.color2 = (settings.sketch_color2[0], settings.sketch_color2[1],settings.sketch_color2[2],1)
+        self.color3 = (settings.sketch_color3[0], settings.sketch_color3[1],settings.sketch_color3[2],1)
+        self.color4 = (settings.sketch_color4[0], settings.sketch_color4[1],settings.sketch_color4[2],1)
+        self.color5 = (settings.sketch_color5[0], settings.sketch_color5[1],settings.sketch_color5[2],1)
         
 
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons['contour_tools'].preferences
         mouse_loc = Vector((x,y))
+        
+        if self.head:
+            a = self.head.screen
+            v = a - mouse_loc
+            if v.length < self.head.mouse_rad:
+                return self.head
+            
+        if self.tail:
+            a = self.tail.screen
+            v = a - mouse_loc
+            if v.length < self.tail.mouse_rad:
+                return self.tail
+            
         
         if len(self.knots):
             for i in self.knots:
-                a = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.poly_nodes[i])
-                
-
-        if len(self.poly_nodes):
+                a = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.knots[i])
+                v = a - mouse_loc
+                if v.length < 10:
+                    return self.self.knots[i]
+            
+        if len(self.world_path):
             
             #Check by testing distance to all edges
             active_self = False
-            self.color2 = (0,1,0,1)
-            for i in range(0,len(self.poly_nodes) -1):
+            
+            for i in range(0,len(self.world_path) -1):
                 
-                a = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.poly_nodes[i])
-                b = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.poly_nodes[i+1])
+                a = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.world_path[i])
+                b = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.world_path[i+1])
                 intersect = intersect_point_line(mouse_loc, a, b)
         
                 dist = (intersect[0] - mouse_loc).length_squared
                 bound = intersect[1]
                 if (dist < 100) and (bound < 1) and (bound > 0):
                     active_self = True
-                    self.color2 = (1,1,0,1)
-                    print('found edge %i' % i)
+                    
                     break
-                
-            return active_self
+            
+            if active_self:    
+                return self
+            else:
+                return None
         
     def ray_cast_path(self,context, ob):
+        
+        settings = context.user_preferences.addons['contour_tools'].preferences
+        self.quad_size = ob.dimensions.length * 1/settings.density_factor
+        
+        
         region = context.region  
         rv3d = context.space_data.region_3d
         self.raw_world = []
@@ -323,6 +398,9 @@ class PolySkecthLine(object):
             if hit[2] != -1:
                 self.raw_world.append(mx * hit[0])
                 
+        self.head = SketchEndPoint(context, self, 'HEAD')
+        self.tail = SketchEndPoint(context, self, 'TAIL')
+        
         
     def find_knots(self):
         print('find those knots')
@@ -332,7 +410,7 @@ class PolySkecthLine(object):
         self.knots = contour_utilities.simplify_RDP(self.raw_world, error)
         
         
-    def smooth_path(self, ob = None):
+    def smooth_path(self,context, ob = None):
         print('              ')
 
         start_time = time.time()
@@ -360,38 +438,253 @@ class PolySkecthLine(object):
                 
                 #resnap so we don't loose the surface
                 if ob:
-                    print(segment)
                     for i, vert in enumerate(segment):
-                        print(vert)
                         snap = ob.closest_point_on_mesh(imx * vert)
                         segment[i] = mx * snap[0]
-                        
             
             self.world_path.extend(segment)
         
         
         end_time = time.time()
-        print('smoothed and snapped %r in %f seconds' % (ob != None, end_time - start_time))            
-        print('verify')
-        print(self.raw_world[1])
-        print('              ')
+        print('smoothed and snapped %r in %f seconds' % (ob != None, end_time - start_time)) 
         
+        #resnap everthing we can to get normals an stuff
+        #TODO do this the last time on the smooth factor duh
+        self.snap_to_object(ob)
         
+        self.head = SketchEndPoint(context, self, 'HEAD')
+        self.tail = SketchEndPoint(context, self, 'TAIL')
     
-    def create_vert_nodes(self):
+    def snap_to_object(self,ob, raw = True, world = True, polys = True):
+        
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        
+        print('made to snap...is this the problem or the solution?')
+        if raw and len(self.raw_world):
+            for i, vert in enumerate(self.raw_world):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.raw_world[i] = mx * snap[0]
+                
+                
+        if world and len(self.world_path):
+            self.path_normals = []
+            self.path_seeds = []
+            for i, vert in enumerate(self.world_path):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.world_path[i] = mx * snap[0]
+                self.path_normals.append(mx.to_3x3() * snap[1])
+                self.path_seeds.append(snap[2])
+                
+        if polys and len(self.poly_nodes):
+            self.poly_normals = []
+            self.poly_seeds = []
+            for i, vert in enumerate(self.poly_nodes):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.poly_nodes[i] = mx * snap[0]
+                self.poly_normals.append(mx.to_3x3() * snap[1])
+                self.poly_seeds.append(snap[2])
+                
+            
+    def intersect_other_paths(self,context, other_paths, separate_other = False):
+        '''
+        '''
+        
+        new_sketches = [] 
+        #no guarantees we will find intersections in order
+        intersection_points = {}  #dictionary keeping the index of the first vert in edge intersected mapped to the intersection
+        intersection_inds = []  #the indices of verts (and the i + 1 edge)
+        for line in other_paths:
+            #test tip and tails:
+            tip_tip = self.head.world_position - line.head.world_position
+            tip_tail = self.head.world_position - line.tail.world_position
+            tail_tip = self.tail.world_position - line.head.world_position
+            tail_tail = self.tail.world_position - line.tail.world_position
+            #print('tips and tails')
+            #print('lengths tiptip: %f, \n tip_tail: %f, \n tail_tip: %f, \n tail_tail: %f' % (tip_tip.length, tip_tail.length, tail_tail.length, tail_tip.length))
+                    
+            new_intersects, inds_1, inds_2 = contour_utilities.intersect_paths(self.world_path, line.world_path, cyclic1 = False, cyclic2 = False, threshold = .1)
+            
+            print('   ')
+            print('raw new intersection indices and verts')
+            print(inds_1)
+            print(new_intersects)
+            print('   ')
+            
+            #easier to just remove the tip and tail intersections
+            #TODO make sure thresholds are correlated here
+            if tip_tip.length < .1 or tip_tail.length < .1:
+                print('tip intersection')
+                new_intersects.pop(0)
+            if tail_tip.length < .1 or tail_tail.length < .1:
+                print('tail intersection')
+                new_intersects.pop()
+                
+        
+            if new_intersects != []:
+                intersection_inds.extend(inds_1)
+                for i, index in enumerate(inds_1):
+                    intersection_points[index] = new_intersects[i]
+                    
+                    #scary code within code reference :-/
+                    if separate_other:
+                        print('             ')
+                        print('going to split the other one hopefully in a logical place!')
+                        fragments = line.intersect_other_paths(context,[self],separate_other = False)
+                        if fragments != []:
+                            line.create_vert_nodes()
+                            new_sketches.extend(fragments)
+           
+        if intersection_inds != []:
+            #split up the segments
+            print('intersections were found')
+            n = len(self.raw_world) - 1
+            
+            verts = self.world_path.copy()
+
+            
+            intersection_inds.sort()
+
+            if n not in intersection_inds:
+                intersection_inds.append(n+1)
+            #the first edge may have been intersected
+            #meaning the first ver will be there already
+            if 0 not in intersection_inds:
+                intersection_inds.insert(0,0)
+            
+            segments = []
+            short_segments = []
+            print('the world path is %i long' % len(self.world_path))
+            print('these are the intersection indices')
+            print(intersection_inds)
+            for i in range(0,len(intersection_inds) - 1):
+                
+                start_index = intersection_inds[i]
+                end_index = intersection_inds[i+1]
+                print('start index: %i stop_index: %i' % (start_index, end_index))
+                
+                #can't wrap my head around why this needs to happen
+                #I think we are getting some bad references where things
+                #are pointing ot old copies  #major bug at the moment
+            
+                seg = verts[start_index:end_index]
+                
+                if i >= 1:
+                    #replace the start vert with the intersection vert
+                    if start_index in intersection_points:
+                        seg.insert(0,intersection_points[start_index])
+                    
+                if end_index < n:
+                    #tag the next intersection point on the end
+                    seg.append(intersection_points[end_index])
+                
+                
+                if len(seg) < 3:
+                    print('interpolating tip or tail because it has %i verts' % len(seg))
+                    new_seg = contour_utilities.space_evenly_on_path(seg, [[0,1],[1,2]], 4, 0)[0]
+                    short_segments.append(new_seg)
+                
+                else:
+                    segments.append(seg)
+                    
+                if segments == []:
+                    segments = short_segments
+            
+            if segments != []:
+                self.world_path = segments[0]
+                self.raw_world = segments[0]
+                self.head = SketchEndPoint(context, self, 'HEAD')
+                self.tail = SketchEndPoint(context, self, 'TAIL')
+            
+            if len(segments) > 1:
+                print('split line into %i segments' % len(segments))
+                for i in range(1,len(segments)):
+                    #powerful copy module....then replace the world part
+                    sketch = copy.deepcopy(self)
+                    sketch.raw_world = segments[i]
+                    sketch.world_path = segments[i]
+                    sketch.head = SketchEndPoint(context, sketch, 'HEAD')
+                    sketch.tail = SketchEndPoint(context, sketch, 'TAIL')
+                    new_sketches.append(sketch)
+                
+                    
+        return new_sketches
+            
+    
+    def cut_by_path(self):
+        '''
+        deep cut using contour tool to cut between each
+        path vertex.  Most strict, slowest, and most sensitive
+        to error.  However,  it will give best results on deep
+        crevices.
+        '''
+        
+        print('not implemented')
+        
+        
+            
+    def cut_by_endpoints(self,ob, bme):
+        '''
+        good for straigh cuts in 1 of 3 dimensions
+        so as long as your path is a straight line from
+        end to end, this is the best method.
+        '''
+        
+        if len(self.path_seeds) < 3:
+            print('no path seed points, perhaps this stroke is bad?')
+            print('forcing resnap of all paths now.  Try to cut again.')
+            self.snap_to_object(ob)
+            return
+        mx = ob.matrix_world
+        
+        #TODO  Check for a world path
+        pt1 = self.world_path[0]
+        pt2 = self.world_path[-1]
+        
+        
+        seed1 = self.path_seeds[0]
+        seed2 = self.path_seeds[-1]
+        
+        #normals parallel to the plane
+        B1 = self.path_normals[0]
+        B2 = self.path_normals[-1]
+        
+        B_avg = B1.lerp(B2,.5)
+        T = pt2 - pt1
+        
+        B_avg.normalize()
+        T.normalize()
+        
+        no = B_avg.cross(T)
+        
+        new_verts = contour_utilities.cross_section_2_seeds(bme, mx, pt1, no, pt1, seed1, pt2, seed2, max_tests = 1000)
+        
+        if len(new_verts) > 0:
+            self.test_verts = [mx * v for v in new_verts]
+        
+        
+        
+        
+            
+    def create_vert_nodes(self,context):
         self.poly_nodes = []
         curve_len = contour_utilities.get_path_length(self.world_path)
-        desired_density = self.segments/curve_len
-            
+        
+        self.segments = round(curve_len/self.quad_size)
+        
+        if self.segments <= 1:
+            print('not worth it')
+            return
+        
+        
+        desired_density = 1/self.quad_size 
+        
+         
         if len(self.knots) > 2:
-            
-            
             segments = []
             for i in range(0,len(self.knots) - 1):
                 segments.append(self.world_path[self.knots[i]:self.knots[i+1]+1])
-                
-            
-            
+                  
         else:
             segments = [self.world_path]
             
@@ -405,20 +698,19 @@ class PolySkecthLine(object):
             else:
                 self.poly_nodes.extend(vs[:len(vs)])
         
-        
+        self.head = SketchEndPoint(context, self, 'HEAD')
+        self.tail = SketchEndPoint(context, self, 'TAIL')
             
     def generate_quads(self,ob,width):
         mx = ob.matrix_world
         imx = mx.inverted()
         
-        self.normals = []
         self.extrudes_u = []
         self.extrudes_d = []
         
-        for vert in self.poly_nodes:
-            snap = ob.closest_point_on_mesh(imx * vert)
-            #this wil be toughy
-            self.normals.append(mx.to_3x3() * snap[1])
+        #not necessary?  #already happened?
+        #definitely not necesary if we cut the object
+        self.snap_to_object(ob, raw = False, world = False, polys = True)
             
             
         for i, v in enumerate(self.poly_nodes):
@@ -433,7 +725,7 @@ class PolySkecthLine(object):
                 v2 = self.poly_nodes[i+1] - self.poly_nodes[i]
                 v = v1.lerp(v2, .5)
                 
-            ext = self.normals[i].cross(v)
+            ext = self.poly_normals[i].cross(v)
             ext.normalize()
             
             self.extrudes_u.append(self.poly_nodes[i] + .5 * width * ext)
@@ -448,12 +740,14 @@ class PolySkecthLine(object):
         
         #if len(self.raw_world) > 2:
             #contour_utilities.draw_polyline_from_3dpoints(context, self.raw_world, self.color1, 1, 'GL_LINES')
+        
+        if len(self.test_verts) > 0:
+            contour_utilities.draw_3d_points(context, self.test_verts, self.color5, 3)
             
         #draw the smothed path
-        if len(self.world_path) > 2:
-            
+        if len(self.world_path) > 1 and len(self.poly_nodes) < 2:
             contour_utilities.draw_polyline_from_3dpoints(context, self.world_path, self.color2, 1, 'GL_LINE_STIPPLE')
-        
+            contour_utilities.draw_3d_points(context, self.world_path, self.color1, 3)
         #draw the knots
         if len(self.knots) > 2:
             points = [self.raw_world[i] for i in self.knots]
@@ -461,8 +755,8 @@ class PolySkecthLine(object):
             
         #draw the knots
         if len(self.poly_nodes) > 2 and len(self.extrudes_u) == 0:
-            contour_utilities.draw_3d_points(context, self.poly_nodes, self.color4, 3)
-            contour_utilities.draw_polyline_from_3dpoints(context, self.poly_nodes, (0,1,0,1), 1, 'GL_LINE_STIPPLE')
+            contour_utilities.draw_3d_points(context, self.poly_nodes, self.color1, 3)
+            contour_utilities.draw_polyline_from_3dpoints(context, self.poly_nodes, self.color2, 1, 'GL_LINE_STIPPLE')
         
         if len(self.extrudes_u) > 2:
             contour_utilities.draw_3d_points(context, self.extrudes_u, self.color4, 2)
@@ -473,7 +767,10 @@ class PolySkecthLine(object):
             for i, v in enumerate(self.extrudes_u):
                 contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_u[i],self.extrudes_d[i]], (0,1,0,1), 1, 'GL_LINE_STIPPLE')
             
-        
+        if self.head:
+            self.head.draw(context)
+        if self.tail:
+            self.tail.draw(context)
             
 class ContourCutLine(object): 
     
@@ -542,7 +839,7 @@ class ContourCutLine(object):
         '''
         
         debug = settings.debug
-        #settings = context.user_preferences.addons['cgc-retopology'].preferences
+        #settings = context.user_preferences.addons['contour_tools'].preferences
         
         #this should be moved to only happen if the view changes :-/  I'ts only
         #a few hundred calcs even with a lot of lines. Waste not want not.
@@ -639,7 +936,7 @@ class ContourCutLine(object):
                         blf.draw(0, str(i))
     #draw contour points? later    
     def hit_object(self, context, ob, method = 'VIEW'):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons['contour_tools'].preferences
         region = context.region  
         rv3d = context.space_data.region_3d
         
@@ -1155,7 +1452,7 @@ class ContourCutLine(object):
                 print('final alignment quality is %f' % alignment_quality)
               
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons['contour_tools'].preferences
         
         if self.head: #this makes sure the head and tail haven't been removed
             active_head = self.head.mouse_over(x, y)
@@ -1303,8 +1600,6 @@ class CutLineManipulatorWidget(object):
         self.vec_y = self.cut_line.vec_y.copy()
         self.initial_plane_no = self.cut_line.plane_no.copy()
         self.initial_seed = self.cut_line.seed_face_index
-        self.initial_int_shift = self.cut_line.int_shift
-        self.initial_shift = self.cut_line.shift
         
         self.wedge_1 = []
         self.wedge_2 = []
@@ -1646,7 +1941,6 @@ class CutLineManipulatorWidget(object):
     
     def cancel_transform(self):
         
-        self.cut_line = ContourCutLine
         #reset our initial values
         self.cut_line.plane_com = self.initial_com
         self.cut_line.plane_no = self.initial_plane_no
@@ -1654,14 +1948,11 @@ class CutLineManipulatorWidget(object):
         self.cut_line.vec_x = self.vec_x
         self.cut_line.vec_y = self.vec_y
         self.cut_line.seed_face_index = self.initial_seed
-        
-        self.cut_line.int_shift = self.initial_int_shift
-        self.cut_line.shift = self.initial_shift
                 
                   
     def draw(self, context):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons['contour_tools'].preferences
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
