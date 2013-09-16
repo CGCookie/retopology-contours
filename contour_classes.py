@@ -392,8 +392,14 @@ class PolySkecthLine(object):
             vec = region_2d_to_vector_3d(region, rv3d, v)
             loc = region_2d_to_location_3d(region, rv3d, v, vec)
 
-            a = loc + 3000*vec
-            b = loc - 3000*vec
+            if rv3d.is_perspective:
+                print('is perspe')
+                a = loc - 3000*vec
+                b = loc + 3000*vec
+            else:
+                print('is not perspe')
+                b = loc - 3000*vec
+                a = loc + 3000*vec
 
             mx = ob.matrix_world
             imx = mx.inverted()
