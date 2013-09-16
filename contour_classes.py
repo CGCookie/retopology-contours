@@ -40,7 +40,7 @@ class SketchEndPoint(object):
         '''
         end = enum in 'HEAD' or 'TAIL'
         '''
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if len(parent.raw_world) < 3:
             return None
@@ -257,7 +257,7 @@ class PolySkecthLine(object):
                  smooth_factor = 5,
                  feature_factor = 5):
         
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         ####IDENTIFIER###
         self.desc = 'SKETCH_LINE'
         self.select = True
@@ -329,7 +329,7 @@ class PolySkecthLine(object):
         
 
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         mouse_loc = Vector((x,y))
         
         if self.head:
@@ -377,7 +377,7 @@ class PolySkecthLine(object):
         
     def ray_cast_path(self,context, ob):
         
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         self.quad_size = ob.dimensions.length * 1/settings.density_factor
         
         
@@ -839,7 +839,7 @@ class ContourCutLine(object):
         '''
         
         debug = settings.debug
-        #settings = context.user_preferences.addons['contour_tools'].preferences
+        #settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         #this should be moved to only happen if the view changes :-/  I'ts only
         #a few hundred calcs even with a lot of lines. Waste not want not.
@@ -936,7 +936,7 @@ class ContourCutLine(object):
                         blf.draw(0, str(i))
     #draw contour points? later    
     def hit_object(self, context, ob, method = 'VIEW'):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         region = context.region  
         rv3d = context.space_data.region_3d
         
@@ -1452,7 +1452,7 @@ class ContourCutLine(object):
                 print('final alignment quality is %f' % alignment_quality)
               
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if self.head: #this makes sure the head and tail haven't been removed
             active_head = self.head.mouse_over(x, y)
@@ -1952,7 +1952,7 @@ class CutLineManipulatorWidget(object):
                   
     def draw(self, context):
         
-        settings = context.user_preferences.addons['contour_tools'].preferences
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
