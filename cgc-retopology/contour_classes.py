@@ -317,8 +317,11 @@ class PolySkecthLine(object):
         
         self.poly_loc = 'CENTERED' #ABOVE, #BELOW
         
+        #this is an interesting connundrum
+        #do we aim for n segmetns or a density/quad size
         self.segments = 10
-        self.quad_size = 1
+        self.quad_width = 1
+        self.quad_length = 1
         
         ####VISULAIZTION STUFF####
         self.color1 = (settings.sketch_color1[0], settings.sketch_color1[1],settings.sketch_color1[2],1)
@@ -378,8 +381,8 @@ class PolySkecthLine(object):
     def ray_cast_path(self,context, ob):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
-        self.quad_size = ob.dimensions.length * 1/settings.density_factor
-        
+        self.quad_length = ob.dimensions.length * 1/settings.density_factor
+        self.quad_width = self.quad_length
         
         region = context.region  
         rv3d = context.space_data.region_3d
@@ -666,18 +669,26 @@ class PolySkecthLine(object):
         
         
             
-    def create_vert_nodes(self,context):
+    def create_vert_nodes(self,context, mode = 'QUAD_SIZE'):
+        '''
+        mode enum in 'N_SEGMENTS','QUAD_SIZE'
+        '''
         self.poly_nodes = []
         curve_len = contour_utilities.get_path_length(self.world_path)
         
-        self.segments = round(curve_len/self.quad_size)
+        if mode == 'QUAD_SIZE':
+            self.segments = round(curve_len/self.quad_length)
         
+        elif mode == 'SEGMENTS' and self.segments > 0:
+            self.quad_length = curve_len/self.segments
+            
+            
         if self.segments <= 1:
             print('not worth it')
             return
         
         
-        desired_density = 1/self.quad_size 
+        desired_density = 1/self.quad_length 
         
          
         if len(self.knots) > 2:
