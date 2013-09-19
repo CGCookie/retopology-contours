@@ -37,3 +37,6 @@ ehthumbs.db
 Thumbs.db
 .project
 .pydevproject
+__pycache__/__init__.cpython-33.pyc
+__pycache__/contour_classes.cpython-33.pyc
+__pycache__/contour_utilities.cpython-33.pyc
