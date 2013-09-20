@@ -301,10 +301,11 @@ class PolySkecthLine(object):
         #locations of perpendicular
         #poly edges
         self.poly_nodes = []
+        self.visible_poly = []
         self.extrudes_u = []
+        self.visible_u = []
         self.extrudes_d = []
-        
-        
+        self.visible_d = []
         
         ####WIDGETY THINGS####
         self.head = None
@@ -394,20 +395,37 @@ class PolySkecthLine(object):
 
             if rv3d.is_perspective:
                 print('is perspe')
-                a = loc - 3000*vec
+                a = loc
                 b = loc + 3000*vec
             else:
                 print('is not perspe')
-                b = loc - 3000*vec
-                a = loc + 3000*vec
+                b = loc - 3000 * vec
+                a = loc + 3000 * vec
 
             mx = ob.matrix_world
             imx = mx.inverted()
             hit = ob.ray_cast(imx*a, imx*b)
+            previous_hit = hit
+            tests = 0
             
-            if hit[2] != -1:
-                self.raw_world.append(mx * hit[0])
+            #a = imx * a
+            #b = imx * b
+            
+            #while hit[2] != -1 and tests < 10:
+                #tests += 1
+                #print('extra raycasts')
+                #previous_hit = hit
+                #if rv3d.is_perspective:
+                #    b = hit[0]
+                #else:
+                #    a = hit[0]
+                    
+                #hit = ob.ray_cast(a, b)
                 
+            if hit[2] != -1:
+            #if previous_hit[2] != -1:
+                self.raw_world.append(mx * hit[0])
+                    
         self.head = SketchEndPoint(context, self, 'HEAD')
         self.tail = SketchEndPoint(context, self, 'TAIL')
         
@@ -727,6 +745,7 @@ class PolySkecthLine(object):
             else:
                 self.poly_nodes.extend(vs[:len(vs)])
         
+        self.visible_poly = [True] * len(self.poly_nodes)
         print('Generating a head and tail point')
         self.head = SketchEndPoint(context, self, 'HEAD')
         self.tail = SketchEndPoint(context, self, 'TAIL')
@@ -763,10 +782,85 @@ class PolySkecthLine(object):
             
         
         self.snap_to_object(ob, raw = False, world = False, polys = False, quads = True)    
+        self.visible_u = [True] * len(self.extrudes_u)
+        self.visible_d = [True] * len(self.extrudes_d)
         print('make the quads')
         
         
+    def update_visibility(self,context,ob):
+        
+        region = context.region  
+        rv3d = context.space_data.region_3d
+        
+        if context.space_data.use_occlude_geometry:
+            rv3d = context.space_data.region_3d
+            eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
+            view_dir = rv3d.view_rotation * Vector((0,0,1))
             
+            print('are these vectors similar?')
+            print(eyevec)
+            print(view_dir)
+            
+            
+            eyevec.length = 100000
+            eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
+            view_loc = rv3d.view_location
+            print('are the locations similar')
+            print(eyeloc)
+            print(view_loc)
+            
+            
+            imx = ob.matrix_world.inverted()
+            
+            self.visible_poly = []
+            self.visible_u = []
+            self.visible_d = []
+            #self.visible_world = []
+            
+            visibility_list = []
+            for vert_list in [self.poly_nodes, self.extrudes_u, self.extrudes_d, self.world_path]:
+                visible = []
+                for vert in vert_list:
+                    
+                    if rv3d.is_perspective:
+                        hit = ob.ray_cast(imx  * eyeloc, imx * (vert - .001 * view_dir))
+                        if hit[2] != -1:
+                            hit = ob.ray_cast(imx  * eyeloc, imx * (vert + .001 * view_dir))
+                            
+                        if hit[2] != -1:
+                            visible.append(False)
+                        
+                        else:
+                            visible.append(True)
+                            
+                        #if hit[0]:
+                        #    vno = -vno
+                        #    vco = self.findworldco(vert.co + vno)
+                        #    hit = self.scn.ray_cast(vco, eyevec)
+                    else:
+                        hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
+                        if hit[2] != -1:
+                            hit = ob.ray_cast(imx * (vert + .001 * view_dir), imx * (vert - 10000 * view_dir))
+                        
+                        if hit[2] != -1:
+                            visible.append(True)
+                        
+                        else:
+                            visible.append(False)
+                        
+                visibility_list.append(visible)
+                        
+            
+            self.visible_poly = visibility_list[0]
+            self.visible_u = visibility_list[1]
+            self.visible_d = visibility_list[2]
+            #self.visible_world = visibility_list[3]
+        else:
+            self.visible_poly = [True] * len(self.poly_nodes)
+            self.visible_u = [True] * len(self.extrudes_u)
+            self.visible_d = [True] * len(self.extrudes_d)
+            self.visible_world = [True] * len(self.world_path)
+                       
     def draw(self,context):
         
         #if len(self.raw_world) > 2:
@@ -775,7 +869,7 @@ class PolySkecthLine(object):
         if len(self.test_verts) > 0:
             contour_utilities.draw_3d_points(context, self.test_verts, self.color5, 3)
             
-        #draw the smothed path
+        #draw the smoothed path
         if len(self.world_path) > 1 and len(self.poly_nodes) < 2:
             contour_utilities.draw_polyline_from_3dpoints(context, self.world_path, self.color2, 1, 'GL_LINE_STIPPLE')
             contour_utilities.draw_3d_points(context, self.world_path, self.color1, 3)
@@ -784,19 +878,37 @@ class PolySkecthLine(object):
             points = [self.raw_world[i] for i in self.knots]
             contour_utilities.draw_3d_points(context, points, self.color3, 5)
             
-        #draw the knots
+        #draw the poly noes
         if len(self.poly_nodes) > 2 and len(self.extrudes_u) == 0:
-            contour_utilities.draw_3d_points(context, self.poly_nodes, self.color1, 3)
-            contour_utilities.draw_polyline_from_3dpoints(context, self.poly_nodes, self.color2, 1, 'GL_LINE_STIPPLE')
+            
+            if False not in self.visible_poly:
+                contour_utilities.draw_3d_points(context, self.poly_nodes, self.color1, 3)
+                contour_utilities.draw_polyline_from_3dpoints(context, self.poly_nodes, self.color2, 1, 'GL_LINE_STIPPLE')
+            else:
+                for i, v in enumerate(self.poly_nodes):
+                    if self.visible_poly[i]:
+                        contour_utilities.draw_3d_points(context, [v], self.color1, 3)
+                        
+                        if i < len(self.poly_nodes) - 1 and self.visible_poly[i+1]:
+                            contour_utilities.draw_polyline_from_3dpoints(context, [v, self.poly_nodes[i+1]], self.color2, 1, 'GL_LINE_STIPPLE')
         
         if len(self.extrudes_u) > 2:
-            contour_utilities.draw_3d_points(context, self.extrudes_u, self.color4, 2)
-            contour_utilities.draw_3d_points(context, self.extrudes_d, self.color4, 2)
-            contour_utilities.draw_polyline_from_3dpoints(context, self.extrudes_u, self.color2, 1, 'GL_LINE_STIPPLE')
-            contour_utilities.draw_polyline_from_3dpoints(context, self.extrudes_d, self.color2, 1, 'GL_LINE_STIPPLE')
             
-            for i, v in enumerate(self.extrudes_u):
-                contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_u[i],self.extrudes_d[i]], self.color2, 1, 'GL_LINE_STIPPLE')
+            for i,v in enumerate(self.extrudes_u):
+                if self.visible_u[i]:
+                    contour_utilities.draw_3d_points(context, [v], self.color4, 2)
+                
+                if self.visible_d[i]:
+                    contour_utilities.draw_3d_points(context, [self.extrudes_d[i]], self.color4, 2)
+            
+                if i < len(self.extrudes_u) - 1 and self.visible_u[i+1]:
+                    contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_u[i], self.extrudes_u[i+1]], self.color2, 1, 'GL_LINE_STIPPLE')
+                
+                if i < len(self.extrudes_d) - 1 and self.visible_d[i+1]:
+                    contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_d[i], self.extrudes_d[i+1]], self.color2, 1, 'GL_LINE_STIPPLE')
+            
+                if self.visible_d[i] and self.visible_u[i]:
+                    contour_utilities.draw_polyline_from_3dpoints(context, [self.extrudes_u[i],self.extrudes_d[i]], self.color2, 1, 'GL_LINE_STIPPLE')
             
         if self.head:
             self.head.draw(context)
@@ -965,6 +1077,7 @@ class ContourCutLine(object):
                         loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, point)
                         blf.position(0, loc[0], loc[1], 0)
                         blf.draw(0, str(i))
+    
     #draw contour points? later    
     def hit_object(self, context, ob, method = 'VIEW'):
         settings = context.user_preferences.addons['cgc-retopology'].preferences

@@ -2329,7 +2329,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
 
 
 def poly_sketch_draw_callback(self,context):
-                
+    
+    if (self.post_update or self.navigating) and context.space_data.use_occlude_geometry:
+        for line in self.sketch_lines:
+            line.update_visibility(context, self.original_form)
+            
+        self.post_update = False
+                        
     if len(self.draw_cache):
         contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1,.5,1,.8), 2, "GL_LINE_SMOOTH")
     
@@ -2460,6 +2466,16 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'MIDDLEMOUSE', 'NUMPAD_2', 'NUMPAD_4', 'NUMPAD_6', 'NUMPAD_8', 'NUMPAD_1', 'NUMPAD_3', 'NUMPAD_5', 'NUMPAD_7', 'NUMPAD_9'}:
             
+            for line in self.sketch_lines:
+                line.update_visibility(context, self.original_form)
+            
+            if event.value == 'PRESS':
+                self.navigating = True
+                
+            else:
+                self.navigating = False
+                
+            self.post_update = True
             return {'PASS_THROUGH'}
             
             
@@ -3095,6 +3111,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
         #store points
         self.draw_cache = []
+        self.post_update = False
         
         self.sketch_intersections = []
             
