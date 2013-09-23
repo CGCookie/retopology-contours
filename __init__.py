@@ -2570,9 +2570,15 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                         #find knots later
                         #sketch.find_knots()
                         
+
+                        
+                        for line in self.sketch_lines:
+                            snapped = sketch.snap_self_to_other_line(line)
+                            if snapped:
+                                sketch.snap_to_object(self.original_form)
+                        
                         #make the path reasonable
                         sketch.smooth_path(context, ob = self.original_form)
-                        
                         
                         
                         #start with just the new stroke

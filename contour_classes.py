@@ -32,6 +32,7 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d
 from bpy_extras.view3d_utils import region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d
 import blf
+
 #from development.cgc-retopology import contour_utilities
 
 
@@ -524,7 +525,66 @@ class PolySkecthLine(object):
                 
             
                 
+    def snap_self_to_other_line(self,other):
+        
+        
+        snap_factor =min([other.quad_length / 2.1, other.quad_width / 2.1])
+        #test all the parallel edges
+        n_edges = len(other.extrudes_d) - 1
+        
+        midpoints = []
+        for i in range(0,n_edges):
+            p1 = .5 * other.extrudes_d[i+1] + .5 * other.extrudes_d[i]
+            p2 = .5 * other.extrudes_u[i+1] + .5 * other.extrudes_u[i]
+            midpoints.append(p1)
+            midpoints.append(p2)
             
+        endpoints = [.5 * other.extrudes_d[0] + .5 * other.extrudes_u[0], .5 * other.extrudes_d[-1] + .5 * other.extrudes_u[-1]]
+
+        new_tip = None
+        new_tail = None
+        #test the tips
+        for v in midpoints:
+            tip = self.raw_world[0] - v
+            tail = self.raw_world[-1] - v
+            if tip.length < snap_factor:
+                new_tip = v
+                
+            if tail.length < snap_factor:
+                new_tail = v
+ 
+        if not new_tip:
+            print('no new tip')
+            for v in endpoints:
+                tip = self.raw_world[0] - v
+                if tip.length < .8 * snap_factor:
+                    new_tip = v
+                
+        if not new_tail:
+            print('no new tail')
+            for v in endpoints:
+                tail = self.raw_world[-1] - v
+                if tail.length < .8 * snap_factor:
+                    new_tail = v
+                    
+                    
+        if new_tip or new_tail:
+            
+            self.quad_width = other.quad_length
+            if not new_tip:
+                new_tip = self.raw_world[0]
+                
+            if not new_tail:
+                new_tail = self.raw_world[-1]
+            
+            self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, new_tip, new_tail)
+        
+            return True
+        
+        else:
+            return False
+        
+                
     def intersect_other_paths(self,context, other_paths, separate_other = False):
         '''
         '''
@@ -797,17 +857,17 @@ class PolySkecthLine(object):
             eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
             view_dir = rv3d.view_rotation * Vector((0,0,1))
             
-            print('are these vectors similar?')
-            print(eyevec)
-            print(view_dir)
+            #print('are these vectors similar?')
+            #print(eyevec)
+            #print(view_dir)
             
             
             eyevec.length = 100000
             eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
             view_loc = rv3d.view_location
-            print('are the locations similar')
-            print(eyeloc)
-            print(view_loc)
+            #print('are the locations similar')
+            #print(eyeloc)
+            #print(view_loc)
             
             
             imx = ob.matrix_world.inverted()
