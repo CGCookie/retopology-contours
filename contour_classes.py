@@ -319,6 +319,12 @@ class PolySkecthLine(object):
         
         self.poly_loc = 'CENTERED' #ABOVE, #BELOW
         
+        #dictionary of points of interest for snapping
+        self.snap_dict = {}
+        
+        #list of snap relationships
+        self.snap_relationships = []
+        
         #this is an interesting connundrum
         #do we aim for n segmetns or a density/quad size
         self.segments = 10
@@ -395,11 +401,11 @@ class PolySkecthLine(object):
             loc = region_2d_to_location_3d(region, rv3d, v, vec)
 
             if rv3d.is_perspective:
-                print('is perspe')
+                #print('is perspe')
                 a = loc
                 b = loc + 3000*vec
             else:
-                print('is not perspe')
+                #print('is not perspe')
                 b = loc - 3000 * vec
                 a = loc + 3000 * vec
 
@@ -523,35 +529,112 @@ class PolySkecthLine(object):
                 snap = ob.closest_point_on_mesh(imx * vert)
                 self.extrudes_u[i] = mx * snap[0]
                 
-            
-                
+       
     def snap_self_to_other_line(self,other):
         
         
-        snap_factor =min([other.quad_length / 2.1, other.quad_width / 2.1])
-        #test all the parallel edges
-        n_edges = len(other.extrudes_d) - 1
-        
-        midpoints = []
-        for i in range(0,n_edges):
-            p1 = .5 * other.extrudes_d[i+1] + .5 * other.extrudes_d[i]
-            p2 = .5 * other.extrudes_u[i+1] + .5 * other.extrudes_u[i]
-            midpoints.append(p1)
-            midpoints.append(p2)
-            
-        endpoints = [.5 * other.extrudes_d[0] + .5 * other.extrudes_u[0], .5 * other.extrudes_d[-1] + .5 * other.extrudes_u[-1]]
+        snap_factor = min([other.quad_length / 2.1, other.quad_width / 2.1])
 
+        
         new_tip = None
         new_tail = None
-        #test the tips
-        for v in midpoints:
-            tip = self.raw_world[0] - v
-            tail = self.raw_world[-1] - v
-            if tip.length < snap_factor:
-                new_tip = v
+        
+        
+        keys = ['P_UP','P_DN','T_UP','T_DN','TIP','TAIL','L_TIP','L_TAIL']
+        
+        relations = []
+        for key in keys:
+            vs = other.snap_dict[key]
+            
+            for endpoint in ['TIP', 'TAIL']:
                 
-            if tail.length < snap_factor:
-                new_tail = v
+                tail = endpoint == 'TAIL'
+                for i, v in enumerate(vs):
+                    
+                    
+                    #direction path is pointing away from endpoint
+                    #  world_path[1] - world_path[0] for tip and world_path[-2] - world_path[-1] for tail
+                    self_direc = (1 - 2*tail) * (self.world_path[1 -2 * tail] - self.world_path[0 - 2 * tail])  
+                    self_direc.normalize()
+                    
+                    #vecto representing distance to feature point
+                    end_n = 0 + -1 * tail  #eg...0 for tip, -1 for tail 
+                    dist_vec = self.raw_world[end_n] - v
+                    
+                    #TODO make snap factor dynamic based on self.quad size and other.quad size
+                    if dist_vec.length < snap_factor:
+                    #if tip.length < snap_factor:
+                        if key != 'P_UP' and key != 'P_DN':
+                            
+                            
+                            if i == len(vs) -1:
+                                n = i - 1
+                            else:
+                                n = i + 1
+                                
+                            other_direc = vs[n] - vs[i]
+                            other_direc.normalize()
+                            
+                            a = other_direc.dot(self_direc)
+                            print('this is the validation test')
+                            print(a)
+                            if abs(a) < math.sin(math.pi / 6) and key in {'T_UP','T_DN'}:
+                                #relations.append(['TIP', key, v, i, tip.length, other])
+                                relations.append([endpoint, key, v, i, dist_vec.length, other])
+                            
+                            #TODO...make sure it crosses :-)    
+                            elif abs(a) > math.cos(math.pi / 6) and key in {'L_TIP','L_TAIL'}:
+                                #relations.append(['TIP', key, v, i, tip.length, other])
+                                relations.append([endpoint, key, v, i, dist_vec.length, other])
+                        else:
+                            if i == 0 or i == len(vs) -1:
+                                
+                                if i == 0:
+                                    n = 1
+                                else:
+                                    n = -2
+                                
+                                other_direc = vs[n] - vs[i]
+                                other_direc.normalize()
+                                
+
+                                
+                                #make sketch path is oriented at least a little parallel
+                                print('this is the validatino test')
+                                print(other_direc.dot(self_direc))
+                                if other_direc.dot(self_direc) > math.cos(math.pi / 6):
+                                    relations.append([endpoint, key, v, i, dist_vec.length, other])
+        
+        if relations != []:
+            for rel in self.snap_relationships:
+                #this would indicate it has already been tested
+                #at a prevoius time.  Which may occur if we start moving
+                #paths
+                if rel[5] == other:
+                    self.snap_relationships.remove(rel)
+                
+            self.snap_relationships.extend(relations)
+            print(relations)
+            return True
+        
+        else:
+            return False 
+        
+        '''
+        if relations != []:
+            tip_snaps = [r for r in relations if r[0] == 'TIP']
+            tail_snaps = [r for r in relations if r[0] == 'TIP']
+            
+            for snap in tip_snaps:
+                
+                #make sure any parallel items
+                if snap[1] == 'P_UP' or snap[1] == 'P_DN':
+                    verify = self.
+            
+            #if the connection is paralllel
+                #force quad length the same
+                #check how many segments are close
+                #record that number somwehre
  
         if not new_tip:
             print('no new tip')
@@ -583,8 +666,237 @@ class PolySkecthLine(object):
         
         else:
             return False
+        '''
+    
+    
+    def parallel_snap(self, context, rel, ob, hard = False, new_nodes = False, new_quads = False):
+        '''
+        sub routine for zipping parallelish quad paths together
+        '''
         
+        #if len(t_junctions):
+            #self.quad_width = 1/len(t_junctions) * sum([rel[5].quad_length for rel in t_junctions])
+
+
+        if new_nodes or self.poly_nodes == []:
+            self.quad_length =  rel[5].quad_length
+            self.create_vert_nodes(context, mode = 'QUAD_SIZE')
+        
+        #simple_snap vert nodes
+        #and keep track to snap poly nodes later
+        
+        test_verts = rel[5].snap_dict[rel[1]].copy()
+        up_verts = rel[5].extrudes_u.copy()
+        dn_verts = rel[5].extrudes_d.copy()
+        snap_ind_pairs = []
+        
+        #check the tip/tail or
+        tail_other = False
+        if rel[3] != 0:
+            test_verts.reverse()
+            up_verts.reverse()
+            dn_verts.reverse()
+            tail_other = True
+        
+        
+        for i in range(0,len(self.poly_nodes)):
+            
+            if rel[0] == 'TAIL':
+                n = len(self.poly_nodes) - 1 - i
+            else:
+                n = i
+            
+            #make sure we don't overshoot any mismathces in length
+            if i < len(test_verts) - 1:
+                dist_v = self.poly_nodes[n] - test_verts[i]
+                if (dist_v.length < rel[5].quad_width/2 or dist_v.length < self.quad_width/2) and i != 0:
+                    
+                    
+                    if hard:
+                        print('snap poly nodes with hard snapping!')
+                        self.poly_nodes[n] = test_verts[i]
+                    
+                    snap_ind_pairs.append([n,i])
+        
+        #this will give us an approximate quad setup
+        #if we don't have one already           
+        if new_quads or self.extrudes_d == []:
+            self.generate_quads(ob)
+        
+        for pair in snap_ind_pairs:
+            print(pair)
+            if (rel[0] == 'TIP' and tail_other) or (rel[0] == 'TAIL' and not tail_other):
+                if rel[1] == 'P_UP':
+                    print('soft snapping self up to other up')
+                    self.extrudes_u[pair[0]] = up_verts[pair[1]]
+                    
+                elif rel[1] == 'P_DN':
+                    print('soft snapping self dn to other dn')
+                    self.extrudes_d[pair[0]] = dn_verts[pair[1]]
+                    
+            else:
+                if rel[1] == 'P_UP':
+                    print('soft snapping self dn to other up')
+                    self.extrudes_d[pair[0]] = up_verts[pair[1]]
+                    
+                elif rel[1] == 'P_DN':
+                    print('soft snapping self up to other dn')
+                    self.extrudes_u[pair[0]] = dn_verts[pair[1]]
+        
+        
+    def process_relations(self,context, ob, sketch_lines, hard = True):
+        '''
+        sketch lines is needed to verify that the relationship
+        is still valid.  In case it has been delted
+        hard - keyword, boolean.  Will snap quad centers not just verts
+               snap will be more rigid.
+        '''
+        
+        #rel has structure as follows
+        #rel[0] = 'TIP' or 'TAIL' indicating which end of self is related
+        #rel[1] is the type or relationhip.  Eg a T joint, a parallel joint, an extension etc.
+        #rel[2] is the location of the snap point
+        #rel[3] is the index of the snap point in the other snap list
+        #rel[4] is the distance to ths snap point (used for distinguishing between multiple)
+        #relp5] is the other poly sketch line
+        
+        
+        #validate all current relationships
+        for rel in self.snap_relationships:
+            if rel[5] not in sketch_lines:
+                self.snap_relationships.remove(rel)
                 
+                
+        
+        
+        #first, count the number of parallel and t joings
+        #These have different priorities in different situations
+        parallels = []
+        t_junctions = []
+        
+        for rel in self.snap_relationships:
+            if rel[1] in {'P_UP','P_DN'}:
+                parallels.append(rel)
+                
+            if rel[1] in {'T_UP', 'T_DN'}:
+                t_junctions.append(rel)
+                
+        print('number of parallels is %i' % len(parallels))
+        
+        
+        #now we need to snap the tip and tail to where they need to be
+        #we snap to T junctions first, parallels later
+        new_tip = self.raw_world[0]
+        new_tail = self.raw_world[-1]
+        n_tip = 0
+        n_tail = 0
+        
+        #this will also tell us the number of tip and tail relationships
+        for rel in t_junctions:
+            if rel[0] == 'TIP':
+                n_tip += 1
+                new_tip = new_tip + rel[2]
+                
+            if rel[0] == 'TAIL':
+                n_tail += 1
+                new_tail = new_tail + rel[2]
+        
+        
+        if n_tip == 0:
+            for rel in parallels:
+                if rel[0] == 'TIP':
+                    n_tip += 1
+                    new_tip = new_tip + rel[2]
+                    
+        if n_tail == 0:
+            for rel in parallels:
+                if rel[0] == 'TAIL':
+                    n_tail += 1
+                    new_tail = new_tail + rel[2]
+                
+        
+        if n_tip != 0:
+            new_tip = 1/n_tip * (new_tip - self.raw_world[0])
+        if n_tail != 0:
+            new_tail = 1/n_tail * (new_tail -self.raw_world[-1])
+        
+        if n_tip or n_tail:
+            print(new_tip)
+            print(new_tail)
+            self.raw_world =  contour_utilities.fit_path_to_endpoints(self.raw_world, new_tip, new_tail)
+        
+        #See if we need to rework our derived path
+        if self.world_path == [] or n_tip or n_tail:
+            self.smooth_path(context, ob = ob)
+        
+
+        
+        if len(parallels) == 0:
+            print('easy, now we check for other shit')
+            if len(t_junctions):
+                self.quad_width = 1/len(t_junctions) * sum([rel[5].quad_length for rel in t_junctions])
+                
+        elif len(parallels) == 1:
+            
+            rel = parallels[0]
+            self.parallel_snap(context, rel, ob, hard = False, new_nodes = False, new_quads = False)
+            
+        
+        elif len(parallels) == 2:
+            rel1 = parallels[0]
+            rel2 = parallels[1]
+            
+            if rel1[5] == rel2[5]:
+                
+                print('snapping parallel to both ends')
+                self.quad_length = rel[5].quad_length
+                self.create_vert_nodes(context, mode = 'QUAD_SIZE')
+                if abs(self.segments - rel[5].segments) == 1:
+                    print('contraction or expansion causes problems?')
+                    self.segments = rel[5].segments
+                    self.create_vert_nodes(context, mode = 'SEGMENTS')
+                    
+                self.parallel_snap(context, rel1, ob, hard = False, new_nodes = True, new_quads = True)
+                #no need to make new nodes
+                #but we do need to snap the other end...in case there is separation.
+                self.parallel_snap(context, rel2, ob, hard = False, new_nodes = False, new_quads = False)
+                    
+                #else:
+                    #self.parallel_snap(context, rel1, ob, hard = True, new_nodes = True, new_quads = True)
+                    #no need to make new nodes
+                    #but we do need to snap the other end...in case there is separation.
+                    #self.parallel_snap(context, rel2, ob, hard = True, new_nodes = False, new_quads = False)
+                
+            else:
+                self.parallel_snap(context, rel1, ob, hard = True, new_nodes = True, new_quads = True)
+                self.parallel_snap(context, rel2, ob, hard = False, new_nodes = False, new_quads = False)
+            
+        elif len(parallels) == 3:
+            print('they beter belong to the same path')
+            
+        elif len(parallels) == 4:
+            print('they beter belong to the same path')
+            
+        
+        
+        #we want to consider the simplest cases
+        #the tip and or tail has one snap relationship
+        
+        
+        #the next consideration is that the tip/tail
+        #may have two snap relationshiwps with the same line
+        #meaning we will need to choose between them
+        
+        #the next scenario is that a tip or tail may have
+        #multipl snap relations with multipl lines.  Eg
+        #a t junction with one line and a parallel relation
+        #ship with another. Meaning we will need to blend information
+        #from all the lines. Eg, a fill ine between two lines in all directions
+        #will have a two t junctions and 4 parallel relationships.
+        
+        
+        
+                    
     def intersect_other_paths(self,context, other_paths, separate_other = False):
         '''
         '''
@@ -767,7 +1079,7 @@ class PolySkecthLine(object):
             
     def create_vert_nodes(self,context, mode = 'QUAD_SIZE'):
         '''
-        mode enum in 'N_SEGMENTS','QUAD_SIZE'
+        mode enum in 'SEGMENTS','QUAD_SIZE'
         '''
         self.poly_nodes = []
         curve_len = contour_utilities.get_path_length(self.world_path)
@@ -809,6 +1121,10 @@ class PolySkecthLine(object):
         print('Generating a head and tail point')
         self.head = SketchEndPoint(context, self, 'HEAD')
         self.tail = SketchEndPoint(context, self, 'TAIL')
+        
+        
+        
+        #genearte_snapping poitns
             
     def generate_quads(self,ob):
         mx = ob.matrix_world
@@ -816,6 +1132,14 @@ class PolySkecthLine(object):
         
         self.extrudes_u = []
         self.extrudes_d = []
+        
+        self.snap_dict = {}
+        t_snap_u = []
+        t_snap_d = []
+        p_snap_u = []
+        p_snap_d = []
+        end_ps = [self.poly_nodes[0],self.poly_nodes[-1]]
+        
         
         #not necessary?  #already happened?
         #definitely not necesary if we cut the object
@@ -825,6 +1149,7 @@ class PolySkecthLine(object):
         for i, v in enumerate(self.poly_nodes):
             if i == 0:
                 v = self.poly_nodes[i+1] - self.poly_nodes[i]
+                
             
             elif i == len(self.poly_nodes) - 1:
                 v = self.poly_nodes[i] - self.poly_nodes[i-1]
@@ -838,13 +1163,45 @@ class PolySkecthLine(object):
             ext.normalize()
             
             self.extrudes_u.append(self.poly_nodes[i] + .5 * self.quad_width * ext)
-            self.extrudes_d.append(self.poly_nodes[i] - .5 * self.quad_width * ext)    
-            
+            self.extrudes_d.append(self.poly_nodes[i] - .5 * self.quad_width * ext)   
         
         self.snap_to_object(ob, raw = False, world = False, polys = False, quads = True)    
         self.visible_u = [True] * len(self.extrudes_u)
         self.visible_d = [True] * len(self.extrudes_d)
         print('make the quads')
+        
+        for i,v in enumerate(self.poly_nodes):
+            if i < len(self.poly_nodes) - 1:
+                t_snap_u.append(.5 * self.extrudes_u[i] + .5 * self.extrudes_u[i+1])
+                t_snap_d.append(.5 * self.extrudes_d[i] + .5 * self.extrudes_d[i+1])
+                
+            p_snap_u.append(2 * self.extrudes_u[i] - self.poly_nodes[i])
+            p_snap_d.append(2 * self.extrudes_d[i] - self.poly_nodes[i])
+        
+        
+        l_tip_up = self.extrudes_u[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
+        l_tip_dn = self.extrudes_d[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
+        l_tail_up = self.extrudes_u[-1] + .5 * (self.poly_nodes[-1] - self.poly_nodes[-2])
+        l_tail_dn = self.extrudes_d[-1] + .5 * (self.poly_nodes[-1] - self.poly_nodes[-2])
+        
+        self.snap_dict['P_UP'] = p_snap_u
+        self.snap_dict['P_DN'] = p_snap_d
+        self.snap_dict['T_UP'] = t_snap_u
+        self.snap_dict['T_DN'] = t_snap_d
+        self.snap_dict['L_TIP'] = [l_tip_up, l_tip_dn]
+        self.snap_dict['L_TAIL'] = [l_tail_up, l_tail_dn]
+        self.snap_dict['TIP'] = [self.poly_nodes[0]]
+        self.snap_dict['TAIL'] = [self.poly_nodes[-1]]
+        
+        self.test_verts = []
+        self.test_verts.extend(p_snap_u)
+        self.test_verts.extend(p_snap_d)
+        self.test_verts.extend(t_snap_u)
+        self.test_verts.extend(t_snap_d)
+        self.test_verts.extend([l_tip_up, l_tip_dn])
+        self.test_verts.extend([l_tail_up, l_tail_dn])
+        self.test_verts.extend(end_ps)
+        print('make the snap poitns')
         
         
     def update_visibility(self,context,ob):

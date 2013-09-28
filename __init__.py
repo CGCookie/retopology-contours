@@ -2570,16 +2570,16 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                         #find knots later
                         #sketch.find_knots()
                         
-
-                        
-                        for line in self.sketch_lines:
-                            snapped = sketch.snap_self_to_other_line(line)
-                            if snapped:
-                                sketch.snap_to_object(self.original_form)
-                        
-                        #make the path reasonable
+                        #TODO:  inefficient but needed.
+                        #snapping requires a smoothed path
+                        #to check parallel ness
+                        #consider other test
                         sketch.smooth_path(context, ob = self.original_form)
-                        
+                        #asses the new line's relationship to all the others
+                        for line in self.sketch_lines:
+                            sketch.snap_self_to_other_line(line)
+                            
+                        sketch.process_relations(context, self.original_form, self.sketch_lines)
                         
                         #start with just the new stroke
                         all_new = [sketch]
@@ -2614,8 +2614,14 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                         
                         for line in all_new:
                             #the target density will carry over in the new lines
-                            line.create_vert_nodes(context, mode = 'QUAD_SIZE')
-                            line.generate_quads(self.original_form)
+                            #hack for now
+                            if len(line.poly_nodes) == 0:
+                                line.create_vert_nodes(context, mode = 'QUAD_SIZE')
+                            
+                            if len(line.extrudes_d) == 0:
+                                line.generate_quads(self.original_form)
+                            
+                            
                             
                         for line in all_new:
                             if len(line.poly_nodes) < 2:
