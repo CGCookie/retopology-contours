@@ -1133,14 +1133,6 @@ class PolySkecthLine(object):
         self.extrudes_u = []
         self.extrudes_d = []
         
-        self.snap_dict = {}
-        t_snap_u = []
-        t_snap_d = []
-        p_snap_u = []
-        p_snap_d = []
-        end_ps = [self.poly_nodes[0],self.poly_nodes[-1]]
-        
-        
         #not necessary?  #already happened?
         #definitely not necesary if we cut the object
         self.snap_to_object(ob, raw = False, world = False, polys = True, quads = False)
@@ -1170,19 +1162,33 @@ class PolySkecthLine(object):
         self.visible_d = [True] * len(self.extrudes_d)
         print('make the quads')
         
-        for i,v in enumerate(self.poly_nodes):
+        
+        print('make the snap poitns')
+        
+        self.generate_snap_points()
+        
+    
+    def generate_snap_points(self):
+        
+        self.snap_dict = {}
+        t_snap_u = []
+        t_snap_d = []
+        p_snap_u = []
+        p_snap_d = []
+        end_ps = [self.poly_nodes[0],self.poly_nodes[-1]]
+        
+        l_tip_up = self.extrudes_u[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
+        l_tip_dn = self.extrudes_d[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
+        l_tail_up = self.extrudes_u[-1] + .5 * (self.poly_nodes[-1] - self.poly_nodes[-2])
+        l_tail_dn = self.extrudes_d[-1] + .5 * (self.poly_nodes[-1] - self.poly_nodes[-2])
+        
+        for i, v in enumerate(self.poly_nodes):
             if i < len(self.poly_nodes) - 1:
                 t_snap_u.append(.5 * self.extrudes_u[i] + .5 * self.extrudes_u[i+1])
                 t_snap_d.append(.5 * self.extrudes_d[i] + .5 * self.extrudes_d[i+1])
                 
             p_snap_u.append(2 * self.extrudes_u[i] - self.poly_nodes[i])
             p_snap_d.append(2 * self.extrudes_d[i] - self.poly_nodes[i])
-        
-        
-        l_tip_up = self.extrudes_u[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
-        l_tip_dn = self.extrudes_d[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
-        l_tail_up = self.extrudes_u[-1] + .5 * (self.poly_nodes[-1] - self.poly_nodes[-2])
-        l_tail_dn = self.extrudes_d[-1] + .5 * (self.poly_nodes[-1] - self.poly_nodes[-2])
         
         self.snap_dict['P_UP'] = p_snap_u
         self.snap_dict['P_DN'] = p_snap_d
@@ -1202,8 +1208,7 @@ class PolySkecthLine(object):
         self.test_verts.extend([l_tail_up, l_tail_dn])
         self.test_verts.extend(end_ps)
         print('make the snap poitns')
-        
-        
+            
     def update_visibility(self,context,ob):
         
         region = context.region  
