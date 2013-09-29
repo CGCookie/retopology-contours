@@ -578,13 +578,14 @@ class PolySkecthLine(object):
                             a = other_direc.dot(self_direc)
                             print('this is the validation test')
                             print(a)
+                            
                             if abs(a) < math.sin(math.pi / 6) and key in {'T_UP','T_DN'}:
-                                #relations.append(['TIP', key, v, i, tip.length, other])
+                                
                                 relations.append([endpoint, key, v, i, dist_vec.length, other])
                             
                             #TODO...make sure it crosses :-)    
-                            elif abs(a) > math.cos(math.pi / 6) and key in {'L_TIP','L_TAIL'}:
-                                #relations.append(['TIP', key, v, i, tip.length, other])
+                            elif a > math.cos(math.pi / 6) and key in {'L_TIP','L_TAIL'}:
+                                
                                 relations.append([endpoint, key, v, i, dist_vec.length, other])
                         else:
                             if i == 0 or i == len(vs) -1:
@@ -668,7 +669,156 @@ class PolySkecthLine(object):
             return False
         '''
     
-    
+    def t_snap(self,context,rel,ob):
+        '''
+        '''
+        if self.poly_nodes == []:
+            self.create_vert_nodes(context, mode = 'QUAD_SIZE')
+        if self.extrudes_d == []:
+            self.generate_quads(ob)
+        other = rel[5]
+        i = rel[3]
+        if rel[1] == 'T_UP':
+            
+            if rel[0] == 'TIP':
+                self.extrudes_u[0] = other.extrudes_u[i]
+                self.extrudes_d[0] = other.extrudes_u[i + 1]
+            else:
+                self.extrudes_u[-1] = other.extrudes_u[i + 1]
+                self.extrudes_d[-1] = other.extrudes_u[i]
+                
+            
+        elif rel[1] == 'T_DN':
+            if rel[0] == 'TIP':
+                self.extrudes_u[0] = other.extrudes_d[i+1]
+                self.extrudes_d[0] = other.extrudes_d[i]
+            else:
+                self.extrudes_u[-1] = other.extrudes_d[i]
+                self.extrudes_d[-1] = other.extrudes_d[i + 1]
+                
+    def l_snap(self, context, rel, ob):
+        print('l snap')
+        
+        #L verts go from up to down
+        #so if i = 1 its down to uo
+        #if i = 0 its up to down
+        
+        
+        #TIP, TIP, UP
+            #self.extrudes_u[0] = other.extrudes_u[0]
+            #self.extrudes_u[1] = other.extrudes_d[0]
+        
+        #TIP, TIP, DN
+            #self.extrudes_d[0] = other.extrudes_d[0]
+            #self.extrudes_d[1] = other.extrudes_u[0]
+        
+        #TAIL, TIP, DN
+            #self.extrudes_u[-1] = other.extrudes_d[0]
+            #self.extrudes_u[-2] = other.extrudes_u[0]
+            
+        #TAIL, TIP, UP
+            #self.extrudes_d[-1] = other.extrudes_u[0]
+            #self.extrudes_d[-2] = other.extrudes_d[0]
+        
+        #TIP, TAIL, UP
+            #self.extrudes_u[0] = other.extrudes_u[-1]
+            #self.extrudes_u[1] = other.extrudes_d[-1]
+            
+        #TIP, TAIL, DN
+            #self.extrudes_u[0] = other.extrudes_d[-1]
+            #self.extrudes_u[1] = other.extrudes_u[-1]
+
+        #TAIL, TAIL, UP
+            #self.extrudes_u[-1] = other.extrudes_u[-1]
+            #self.extrudes_u[-2] = other.extrudes_d[-1]
+        
+        #TAIL, TAIL, DN
+            #self.extrudes_d[-1] = other.extrudes_d[-1]
+            #self.extrudes_d[-2] = other.extrudes_u[-1]
+       
+        
+        other = rel[5]
+        
+        if rel[0] == 'TIP':
+            a = 0
+            b = 1
+            self_tail = False
+            
+        else:
+            a = -1
+            b = -2
+            self_tail = True
+            
+        
+        if rel[1] == 'L_TIP':
+            n = 0
+            other_tail = False
+        else:
+            n = -1
+            other_tail = True
+            
+        if rel[3] == 1:
+            other_up = False
+        else:
+            other_up = True
+            
+        
+        self_up = (self_tail == other_tail) == other_up
+        
+        print(self_tail, self_up, other_tail, other_up)
+        
+        if self_up:
+            
+            if other_tail:
+                if other_up:
+                    print('774')
+                    self.extrudes_u[a] = other.extrudes_u[n]
+                    self.extrudes_u[b] = other.extrudes_d[n]
+                else:
+                    print('778')
+                    self.extrudes_u[a] = other.extrudes_d[n]
+                    self.extrudes_u[b] = other.extrudes_u[n]
+                
+                
+            else:
+                if other_up:
+                    print('785')
+                    self.extrudes_u[a] = other.extrudes_u[n]
+                    self.extrudes_u[b] = other.extrudes_d[n]
+                else:
+                    print('789')
+                    self.extrudes_u[a] = other.extrudes_d[n]
+                    self.extrudes_u[b] = other.extrudes_u[n]
+                
+        
+        else:
+            if other_tail:
+                if other_up:
+                    print('797')
+                    self.extrudes_d[a] = other.extrudes_u[n]
+                    self.extrudes_d[b] = other.extrudes_d[n]
+                else:
+                    print('801')
+                    self.extrudes_d[a] = other.extrudes_d[n]
+                    self.extrudes_d[b] = other.extrudes_u[n]                
+                
+            else:
+                if other_up:
+                    print('807')
+                    self.extrudes_d[a] = other.extrudes_u[n]
+                    self.extrudes_d[b] = other.extrudes_d[n]
+                else:
+                    print('811')
+                    self.extrudes_d[a] = other.extrudes_d[n]
+                    self.extrudes_d[b] = other.extrudes_u[n]
+            
+
+            
+        
+        
+            
+        
+        
     def parallel_snap(self, context, rel, ob, hard = False, new_nodes = False, new_quads = False):
         '''
         sub routine for zipping parallelish quad paths together
@@ -679,6 +829,8 @@ class PolySkecthLine(object):
 
 
         if new_nodes or self.poly_nodes == []:
+            #unfortunately this is agnostic to number of segments
+            #and if we need n_segments to be fixed.
             self.quad_length =  rel[5].quad_length
             self.create_vert_nodes(context, mode = 'QUAD_SIZE')
         
@@ -773,6 +925,7 @@ class PolySkecthLine(object):
         #These have different priorities in different situations
         parallels = []
         t_junctions = []
+        l_junctions = []
         
         for rel in self.snap_relationships:
             if rel[1] in {'P_UP','P_DN'}:
@@ -780,6 +933,9 @@ class PolySkecthLine(object):
                 
             if rel[1] in {'T_UP', 'T_DN'}:
                 t_junctions.append(rel)
+                
+            if rel[1] in {'L_TIP', 'L_TAIL'}:
+                l_junctions.append(rel)
                 
         print('number of parallels is %i' % len(parallels))
         
@@ -815,6 +971,19 @@ class PolySkecthLine(object):
                     new_tail = new_tail + rel[2]
                 
         
+        if n_tip == 0:
+            for rel in l_junctions:
+                if rel[0] == 'TIP':
+                    n_tip += 1
+                    new_tip = new_tip + rel[2]
+                    
+        if n_tail == 0:
+            for rel in l_junctions:
+                if rel[0] == 'TAIL':
+                    n_tail += 1
+                    new_tail = new_tail + rel[2]
+                    
+                    
         if n_tip != 0:
             new_tip = 1/n_tip * (new_tip - self.raw_world[0])
         if n_tail != 0:
@@ -831,16 +1000,21 @@ class PolySkecthLine(object):
         
 
         
-        if len(parallels) == 0:
-            print('easy, now we check for other shit')
-            if len(t_junctions):
-                self.quad_width = 1/len(t_junctions) * sum([rel[5].quad_length for rel in t_junctions])
+        #we wang to check for t junctions, as quad width
+        #will determine snapping to parallel items as well.
+        #we will do the parallel snapping next, then come back and tidy up the ends
+        if len(t_junctions):
+            self.quad_width = 1/len(t_junctions) * sum([rel[5].quad_length for rel in t_junctions])
+       
+        if len(l_junctions) and not len(parallels):
+            self.quad_length = 1/len(l_junctions) * sum([rel[5].quad_width for rel in l_junctions])
                 
-        elif len(parallels) == 1:
+        if len(parallels) == 1:
             
             rel = parallels[0]
             self.parallel_snap(context, rel, ob, hard = False, new_nodes = False, new_quads = False)
             
+            self.generate_snap_points() 
         
         elif len(parallels) == 2:
             rel1 = parallels[0]
@@ -856,7 +1030,7 @@ class PolySkecthLine(object):
                     self.segments = rel[5].segments
                     self.create_vert_nodes(context, mode = 'SEGMENTS')
                     
-                self.parallel_snap(context, rel1, ob, hard = False, new_nodes = True, new_quads = True)
+                self.parallel_snap(context, rel1, ob, hard = True, new_nodes = True, new_quads = True)
                 #no need to make new nodes
                 #but we do need to snap the other end...in case there is separation.
                 self.parallel_snap(context, rel2, ob, hard = False, new_nodes = False, new_quads = False)
@@ -866,19 +1040,42 @@ class PolySkecthLine(object):
                     #no need to make new nodes
                     #but we do need to snap the other end...in case there is separation.
                     #self.parallel_snap(context, rel2, ob, hard = True, new_nodes = False, new_quads = False)
-                
+                self.generate_snap_points() 
             else:
                 self.parallel_snap(context, rel1, ob, hard = True, new_nodes = True, new_quads = True)
-                self.parallel_snap(context, rel2, ob, hard = False, new_nodes = False, new_quads = False)
+                self.parallel_snap(context, rel2, ob, hard = True, new_nodes = False, new_quads = False)
             
         elif len(parallels) == 3:
+            
             print('they beter belong to the same path')
             
         elif len(parallels) == 4:
             print('they beter belong to the same path')
+
+        if len(t_junctions):
+            if self.poly_nodes == []:
+                self.create_vert_nodes(context, mode = 'QUAD_SIZE')
+                
+            if self.extrudes_d == []:
+                self.generate_quads(ob)
             
-        
-        
+            for rel in t_junctions:    
+                self.t_snap(context, rel, ob)
+                
+            self.generate_snap_points()
+            
+        if len(l_junctions):
+            if self.poly_nodes == []:
+                self.create_vert_nodes(context, mode = 'QUAD_SIZE')
+                
+            if self.extrudes_d == []:
+                self.generate_quads(ob)
+            
+            for rel in l_junctions:    
+                self.l_snap(context, rel, ob)
+                
+            self.generate_snap_points() 
+            
         #we want to consider the simplest cases
         #the tip and or tail has one snap relationship
         
@@ -1175,6 +1372,7 @@ class PolySkecthLine(object):
         t_snap_d = []
         p_snap_u = []
         p_snap_d = []
+        print("how many poly nodes are there? %i" % len(self.poly_nodes))
         end_ps = [self.poly_nodes[0],self.poly_nodes[-1]]
         
         l_tip_up = self.extrudes_u[0] + .5 * (self.poly_nodes[0] - self.poly_nodes[1])
