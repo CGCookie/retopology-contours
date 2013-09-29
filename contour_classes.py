@@ -402,7 +402,7 @@ class PolySkecthLine(object):
 
             if rv3d.is_perspective:
                 #print('is perspe')
-                a = loc
+                a = loc - 3000*vec
                 b = loc + 3000*vec
             else:
                 #print('is not perspe')
@@ -875,25 +875,37 @@ class PolySkecthLine(object):
         if new_quads or self.extrudes_d == []:
             self.generate_quads(ob)
         
+        
+        up = False
         for pair in snap_ind_pairs:
-            print(pair)
+            #print(pair)
             if (rel[0] == 'TIP' and tail_other) or (rel[0] == 'TAIL' and not tail_other):
                 if rel[1] == 'P_UP':
-                    print('soft snapping self up to other up')
+                    #print('soft snapping self up to other up')
                     self.extrudes_u[pair[0]] = up_verts[pair[1]]
-                    
+                    up = True
                 elif rel[1] == 'P_DN':
-                    print('soft snapping self dn to other dn')
+                    #print('soft snapping self dn to other dn')
                     self.extrudes_d[pair[0]] = dn_verts[pair[1]]
-                    
+                    up = False
             else:
                 if rel[1] == 'P_UP':
-                    print('soft snapping self dn to other up')
+                    #print('soft snapping self dn to other up')
                     self.extrudes_d[pair[0]] = up_verts[pair[1]]
+                    up = False
                     
                 elif rel[1] == 'P_DN':
-                    print('soft snapping self up to other dn')
+                    #print('soft snapping self up to other dn')
                     self.extrudes_u[pair[0]] = dn_verts[pair[1]]
+                    up = True
+                    
+        if len(snap_ind_pairs) == len(self.extrudes_u)-2:
+            print('spacing opposite side smoothly')
+            #we snapped the whole path, let's even out the other side
+            if up:
+                self.extrudes_d = contour_utilities.space_evenly_on_path(self.extrudes_d, [[0,1],[1,2]], self.segments , shift = 0, debug = True)[0]
+            else:
+                self.extrudes_u = contour_utilities.space_evenly_on_path(self.extrudes_u, [[0,1],[1,2]], self.segments , shift = 0, debug = True)[0]
         
         
     def process_relations(self,context, ob, sketch_lines, hard = True):
@@ -1023,17 +1035,23 @@ class PolySkecthLine(object):
             if rel1[5] == rel2[5]:
                 
                 print('snapping parallel to both ends')
-                self.quad_length = rel[5].quad_length
+                self.quad_length = rel1[5].quad_length
                 self.create_vert_nodes(context, mode = 'QUAD_SIZE')
-                if abs(self.segments - rel[5].segments) == 1:
+                if abs(self.segments - rel1[5].segments) != 0 and  abs(self.segments - rel1[5].segments) < 3:
                     print('contraction or expansion causes problems?')
-                    self.segments = rel[5].segments
+                    print(self.segments)
+                    print(rel1[5].segments)
+                    self.segments = rel1[5].segments
                     self.create_vert_nodes(context, mode = 'SEGMENTS')
                     
-                self.parallel_snap(context, rel1, ob, hard = True, new_nodes = True, new_quads = True)
-                #no need to make new nodes
-                #but we do need to snap the other end...in case there is separation.
-                self.parallel_snap(context, rel2, ob, hard = False, new_nodes = False, new_quads = False)
+                    self.parallel_snap(context, rel1, ob, hard = True, new_nodes = False, new_quads = True)
+                
+                
+                else:
+                    self.parallel_snap(context, rel1, ob, hard = True, new_nodes = False, new_quads = True)
+                    #no need to make new nodes
+                    #but we do need to snap the other end...in case there is separation.
+                    self.parallel_snap(context, rel2, ob, hard = False, new_nodes = False, new_quads = False)
                     
                 #else:
                     #self.parallel_snap(context, rel1, ob, hard = True, new_nodes = True, new_quads = True)
