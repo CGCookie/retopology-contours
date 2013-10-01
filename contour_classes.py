@@ -885,7 +885,7 @@ class PolySkecthLine(object):
             #make sure we don't overshoot any mismathces in length
             if i < len(test_verts) - 1:
                 dist_v = self.poly_nodes[n] - test_verts[i]
-                if (dist_v.length < rel[5].quad_width/2 or dist_v.length < self.quad_width/2) and i != 0:
+                if (dist_v.length < rel[5].quad_width/2 or dist_v.length < self.quad_width/2): # and i != 0:
                     
                     
                     if hard:
@@ -923,13 +923,13 @@ class PolySkecthLine(object):
                     self.extrudes_u[pair[0]] = dn_verts[pair[1]]
                     up = True
                     
-        if len(snap_ind_pairs) == len(self.extrudes_u)-2:
-            print('spacing opposite side smoothly')
+        #if len(snap_ind_pairs) == len(self.extrudes_u)-2:
+        print('spacing opposite side smoothly')
             #we snapped the whole path, let's even out the other side
-            if up:
-                self.extrudes_d = contour_utilities.space_evenly_on_path(self.extrudes_d, [[0,1],[1,2]], self.segments , shift = 0, debug = True)[0]
-            else:
-                self.extrudes_u = contour_utilities.space_evenly_on_path(self.extrudes_u, [[0,1],[1,2]], self.segments , shift = 0, debug = True)[0]
+        if up:
+            self.extrudes_d = contour_utilities.space_evenly_on_path(self.extrudes_d, [[0,1],[1,2]], self.segments , shift = 0, debug = True)[0]
+        else:
+            self.extrudes_u = contour_utilities.space_evenly_on_path(self.extrudes_u, [[0,1],[1,2]], self.segments , shift = 0, debug = True)[0]
         
         
     def process_relations(self,context, ob, sketch_lines, hard = True):
@@ -1064,8 +1064,7 @@ class PolySkecthLine(object):
         if len(parallels) == 1:
             
             rel = parallels[0]
-            self.parallel_snap(context, rel, ob, hard = False, new_nodes = False, new_quads = False)
-            
+            self.parallel_snap(context, rel, ob, hard = False, new_nodes = True, new_quads = False)
             self.generate_snap_points() 
         
         elif len(parallels) == 2:
