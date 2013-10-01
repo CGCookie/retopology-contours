@@ -587,6 +587,11 @@ class PolySkecthLine(object):
                             elif a > math.cos(math.pi / 6) and key in {'L_TIP','L_TAIL'}:
                                 
                                 relations.append([endpoint, key, v, i, dist_vec.length, other])
+                                
+                            elif key in {'TIP', 'TAIL'}:
+                                print('Endpoint match')
+                                relations.append([endpoint, key, v, i, dist_vec.length, other])
+                                
                         else:
                             if i == 0 or i == len(vs) -1:
                                 
@@ -695,6 +700,25 @@ class PolySkecthLine(object):
             else:
                 self.extrudes_u[-1] = other.extrudes_d[i]
                 self.extrudes_d[-1] = other.extrudes_d[i + 1]
+                
+    
+    def e_snap(self,context,rel):
+        
+        if rel[0] == rel[1]:
+            if rel[0] == 'TIP':
+                self.extrudes_u[0] = rel[5].extrudes_d[0]
+                self.extrudes_d[0] = rel[5].extrudes_u[0]
+            else:
+                self.extrudes_u[-1] = rel[5].extrudes_d[-1]
+                self.extrudes_d[-1] = rel[5].extrudes_u[-1]
+        else:
+            if rel[0] == 'TIP':
+                self.extrudes_u[0] = rel[5].extrudes_u[-1]
+                self.extrudes_d[0] = rel[5].extrudes_d[-1]
+            else:
+                self.extrudes_u[-1] = rel[5].extrudes_u[0]
+                self.extrudes_d[-1] = rel[5].extrudes_d[0]
+                
                 
     def l_snap(self, context, rel, ob):
         print('l snap')
@@ -938,6 +962,7 @@ class PolySkecthLine(object):
         parallels = []
         t_junctions = []
         l_junctions = []
+        e_junctions = []
         
         for rel in self.snap_relationships:
             if rel[1] in {'P_UP','P_DN'}:
@@ -949,7 +974,10 @@ class PolySkecthLine(object):
             if rel[1] in {'L_TIP', 'L_TAIL'}:
                 l_junctions.append(rel)
                 
-        print('number of parallels is %i' % len(parallels))
+            if rel[1] in {'TIP','TAIL'}:
+                e_junctions.append(rel)
+                
+        
         
         
         #now we need to snap the tip and tail to where they need to be
@@ -994,7 +1022,19 @@ class PolySkecthLine(object):
                 if rel[0] == 'TAIL':
                     n_tail += 1
                     new_tail = new_tail + rel[2]
-                    
+
+        if n_tip == 0:
+            for rel in e_junctions:
+                if rel[0] == 'TIP':
+                    n_tip += 1
+                    new_tip = new_tip + rel[2]
+                                        
+        if n_tail == 0:
+            for rel in e_junctions:
+                if rel[0] == 'TAIL':
+                    n_tail += 1
+                    new_tail = new_tail + rel[2]
+
                     
         if n_tip != 0:
             new_tip = 1/n_tip * (new_tip - self.raw_world[0])
@@ -1093,7 +1133,18 @@ class PolySkecthLine(object):
                 self.l_snap(context, rel, ob)
                 
             self.generate_snap_points() 
-            
+        
+        if len(e_junctions):
+            if self.poly_nodes == []:
+                self.create_vert_nodes(context, mode = 'QUAD_SIZE')
+                
+            if self.extrudes_d == []:
+                self.generate_quads(ob)
+                
+            for rel in e_junctions:    
+                self.e_snap(context, rel)
+                
+            self.generate_snap_points()
         #we want to consider the simplest cases
         #the tip and or tail has one snap relationship
         

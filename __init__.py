@@ -54,7 +54,7 @@ import math
 import sys
 import time
 from mathutils import Vector
-from bpy_extras.view3d_utils import location_3d_to_region_2d
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine
 from mathutils.geometry import intersect_line_plane, intersect_point_line
@@ -968,7 +968,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 context.area.header_text_set(text = message)
                 
         elif event.type == 'MOUSEMOVE':
+            
                 
+                    
             if self.drag and self.drag_target:
             
                 if self.drag_target.desc == 'CUT_LINE' and self.widget_interaction:
@@ -2346,6 +2348,9 @@ def poly_sketch_draw_callback(self,context):
     if len(self.sketch_lines):    
         for line in self.sketch_lines:
             line.draw(context)
+            
+    if len(self.mouse_circle):
+        contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
 
 class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
     '''Sketch Toplogy on Forms with Contour Strokes'''
@@ -2508,7 +2513,39 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             return{'RUNNING_MODAL'}
                     
         elif event.type == 'MOUSEMOVE':
+            #preview circle
             
+            region = context.region  
+            rv3d = context.space_data.region_3d
+            vec = region_2d_to_vector_3d(region, rv3d, (event.mouse_region_x,event.mouse_region_y))
+            loc = region_2d_to_location_3d(region, rv3d, (event.mouse_region_x,event.mouse_region_y), vec)
+            if rv3d.is_perspective:
+                #print('is perspe')
+                a = loc - 3000*vec
+                b = loc + 3000*vec
+            else:
+                #print('is not perspe')
+                b = loc - 3000 * vec
+                a = loc + 3000 * vec
+
+            mx = self.original_form.matrix_world
+            imx = mx.inverted()
+            hit = self.original_form.ray_cast(imx*a, imx*b)
+            if hit[2] != -1:
+                print('raycast the mouse')
+                world_v = mx * hit[0]
+                r = self.original_form.dimensions.length * 1/settings.density_factor
+                world_r = world_v + r * rv3d.view_rotation * Vector((1,0,0))
+                screen_r = location_3d_to_region_2d(region,rv3d, world_r)
+                screen_r_vec = Vector((event.mouse_region_x,event.mouse_region_y)) - screen_r
+                radius = screen_r_vec.length/2
+                self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, radius, 20)
+                self.mouse_circle.append(self.mouse_circle[0])
+            else:
+                print('didnt raycast the mouse')
+                self.mouse_circle = []
+                
+                
             if self.drag and self.draw:
                 
                 self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))
@@ -2658,6 +2695,9 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                             #self.sketch_lines.remove(line)             
                         
                 
+                    else:
+                        #draw cache is too short, toss it.
+                        self.draw_cache = []
                 self.drag = False
                 
             return {'RUNNING_MODAL'}
@@ -3124,6 +3164,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #store points
         self.draw_cache = []
         self.post_update = False
+        
+        #mouse preview circle
+        self.mouse_circle = []
+        
         
         self.sketch_intersections = []
             
