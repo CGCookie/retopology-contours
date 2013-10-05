@@ -151,26 +151,26 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     show_edges = BoolProperty(
             name="Show Span Edges",
-            description = "Display the extracted mesh edges.  Usually only turned off for debugging",
+            description = "Display the extracted mesh edges. Usually only turned off for debugging",
             default=True,
             )
     
     show_cut_indices = BoolProperty(
             name="Show Cut Indices",
-            description = "Display the order the operator stores cuts.  Usually only turned on for debugging",
+            description = "Display the order the operator stores cuts. Usually only turned on for debugging",
             default=False,
             )
         
     
     show_ring_edges = BoolProperty(
             name="Show Ring Edges",
-            description = "Display the extracted mesh edges.  Usually only turned off for debugging",
+            description = "Display the extracted mesh edges. Usually only turned off for debugging",
             default=True,
             )
     
     draw_widget = BoolProperty(
             name="Draw Widget",
-            description = "Turn off to help make mockups or clean-up visualization ",
+            description = "Turn display of widget on or off",
             default=True,
             )
     
@@ -244,7 +244,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     live_update = BoolProperty(
             name="Live Update",
-            description = "Will live update the mesh preview when transforming cut lines.  Looks good, but can get slow on large meshes",
+            description = "Will live update the mesh preview when transforming cut lines. Looks good, but can get slow on large meshes",
             default=True,
             )
     
@@ -256,7 +256,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     use_perspective = BoolProperty(
             name="Use Perspective",
-            description = 'Will cause non parallel cuts from same view',
+            description = 'Make non parallel cuts project from the same view to improve expected outcome',
             default=True,
             )
     
@@ -323,7 +323,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     cyclic = BoolProperty(
             name = "Cyclic",
-            description = "Make Retopo Loops Cyclic",
+            description = "Make contour loops cyclic",
             default = False)
     
     recover = BoolProperty(
@@ -333,7 +333,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     recover_clip = IntProperty(
             name = "Recover Clip",
-            description = "Number of cuts to leave out, usually just 0 or 1",
+            description = "Number of cuts to leave out, usually set to 0 or 1",
             default=1,
             min = 0,
             max = 10,
@@ -341,7 +341,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     search_factor = FloatProperty(
             name = "Search Factor",
-            description = "percentage of object distance to search for new cuts",
+            description = "Percentage of object distance to search for new cuts",
             default=.2,
             min = 0,
             max = 1,
@@ -357,7 +357,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     merge_threshold = FloatProperty(
             name = "Intersect Factor",
-            description = "distance below which to snap strokes together",
+            description = "Distance below which to snap strokes together",
             default=1.,
             min = .000001,
             max = 1,
@@ -365,7 +365,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     density_factor = IntProperty(
             name = "Density Factor",
-            description = "Fraction of diagonal to start mesh density of poly sketch...bigger numbers = smaller quads",
+            description = "Fraction of diagonal to start mesh density of poly sketch. Bigger numbers = smaller quads",
             default=40,
             min = 1,
             max = 1000,
@@ -381,7 +381,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     smooth_factor = IntProperty(
             name = "Smooth Factor",
-            description = "Iterations to smooth drawn strokes",
+            description = "Number of iterations to smooth drawn strokes",
             default = 5,
             min = 1,
             max = 10,
@@ -570,10 +570,7 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
         layout.operator("cgcookie.retop_contour", text="Draw Contours")  
 
 class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
-    '''
-    Removes the temporary object and mesh data from the cache.
-    Do this if you have altered your original form in any way   
-    '''
+    '''Removes the temporary object and mesh data from the cache. Do this if you have altered your original form in any way'''
     bl_idname = "cgcookie.clear_cache"
     bl_label = "Clear Contour Cache" 
     
@@ -583,8 +580,6 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
         
         return {'FINISHED'}
         
-        
-
 
 def retopo_draw_callback(self,context):
     
@@ -661,7 +656,7 @@ def retopo_draw_callback(self,context):
     
 #Operator
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
-    '''Retopologize Forms with Contour Strokes'''
+    '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
     bl_idname = "cgcookie.retop_contour"
     bl_label = "Contour Retopologize"    
     
@@ -2353,9 +2348,9 @@ def poly_sketch_draw_callback(self,context):
         contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
 
 class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
-    '''Sketch Toplogy on Forms with Contour Strokes'''
+    '''Draw Polygon Strips on Surface for Retopology'''
     bl_idname = "cgcookie.retopo_poly_sketch"
-    bl_label = "Contour Poly Sketch"    
+    bl_label = "Draw Poly Strips"    
     
     @classmethod
     def poll(cls,context):
