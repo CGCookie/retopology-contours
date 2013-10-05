@@ -2493,10 +2493,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             
             if self.draw:
-                message = "Stick draw on"
+                message = "Draw Mode Active: draw lines with LMB to generate poly strips"
                 
             else:
-                message = "Experimental poly_sketch tap 'D' to draw"
+                message = "Poly Strips: press 'D' to draw"
             context.area.header_text_set(text = message)    
             #else:
                 #self.draw = False
