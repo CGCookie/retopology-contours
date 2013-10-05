@@ -542,9 +542,12 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
         cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
+        
+        row = box.row()
+        row.prop(cgc_contour, "vertex_count")
+        
         row = box.row()
         row.prop(cgc_contour, "cyclic")
-        row.prop(cgc_contour, "vertex_count")
         
         row = box.row()
         row.prop(cgc_contour, "recover")
