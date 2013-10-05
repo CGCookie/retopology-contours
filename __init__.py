@@ -567,7 +567,8 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
 
         layout.operator_context = 'INVOKE_DEFAULT'
 
-        layout.operator("cgcookie.retop_contour", text="Draw Contours")  
+        layout.operator("cgcookie.retop_contour")  
+        layout.operator("cgcookie.retopo_poly_sketch")
 
 class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
     '''Removes the temporary object and mesh data from the cache. Do this if you have altered your original form in any way'''
