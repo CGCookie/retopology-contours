@@ -537,7 +537,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         layout = self.layout
         box = layout.box()
         col = box.column()
-        col.operator("cgcookie.retop_contour", text="Draw Contours", icon='MESH_UVSPHERE')
+        col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
         col = box.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
@@ -552,7 +552,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         
         box = layout.box()
         row = box.row()
-        row.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
+        row.operator("cgcookie.retopo_poly_sketch", icon='MESH_UVSPHERE')
         
         row = box.row()
         row.prop(cgc_contour, "density_factor")
@@ -658,7 +658,7 @@ def retopo_draw_callback(self,context):
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
     bl_idname = "cgcookie.retop_contour"
-    bl_label = "Contour Retopologize"    
+    bl_label = "Draw Contours"
     
     @classmethod
     def poll(cls,context):
