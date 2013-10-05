@@ -538,20 +538,21 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         box = layout.box()
         col = box.column()
         col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
-        col = box.column()
-        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
         cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
         
         row = box.row()
         row.prop(cgc_contour, "vertex_count")
-        
+
         row = box.row()
         row.prop(cgc_contour, "cyclic")
         
         row = box.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
+
+        col = box.column()
+        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
         box = layout.box()
         row = box.row()
