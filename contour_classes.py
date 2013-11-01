@@ -35,7 +35,286 @@ import blf
 
 #from development.cgc-retopology import contour_utilities
 
+class ContourCutSeries(object):
+    def __init__(self, context, raw_points,
+                 segments = 10,
+                 cull_factor = 3,
+                 smooth_factor = 5,
+                 feature_factor = 5):
+        
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        
+        
+        self.desc = 'CUT SERIES'
+        self.cuts = []
+        
+        self.raw_screen = [] # raycast -> raw_world
+        self.raw_world = []  #smoothed -> world_path
+        self.world_path = []  #the data we use the most
+        self.knots = []  #feature points detected by RPD algo
+        
+        self.cut_points = [] #the evenly spaced points along the path
+        self.cut_point_normals = []  #free normal and face index values from snapping
+        self.cut_point_seeds = []
+        
 
+        
+        #toss a bunch of raw pixel data
+        for i, v in enumerate(raw_points):
+            if not math.fmod(i, cull_factor):
+                self.raw_screen.append(v)
+
+        ####PROCESSIG CONSTANTS###
+        self.segments = segments
+        self.cull_factor = cull_factor
+        self.smooth_factor = smooth_factor
+        self.feature_factor = feature_factor
+           
+    def ray_cast_path(self,context, ob):
+        
+        region = context.region  
+        rv3d = context.space_data.region_3d
+        self.raw_world = []
+        for v in self.raw_screen:
+            vec = region_2d_to_vector_3d(region, rv3d, v)
+            loc = region_2d_to_location_3d(region, rv3d, v, vec)
+
+            if rv3d.is_perspective:
+                #print('is perspe')
+                a = loc - 3000*vec
+                b = loc + 3000*vec
+            else:
+                #print('is not perspe')
+                b = loc - 3000 * vec
+                a = loc + 3000 * vec
+
+            mx = ob.matrix_world
+            imx = mx.inverted()
+            hit = ob.ray_cast(imx*a, imx*b)
+                
+            if hit[2] != -1:
+            #if previous_hit[2] != -1:
+                self.raw_world.append(mx * hit[0])
+                
+    def smooth_path(self,context, ob = None):
+        print('              ')
+
+        start_time = time.time()
+        print(self.raw_world[1])
+        #clear the world path if need be
+        self.world_path = []
+        
+        if ob:
+            mx = ob.matrix_world
+            imx = mx.inverted()
+            
+        if len(self.knots) > 2:
+            
+            #split the raw
+            segments = []
+            for i in range(0,len(self.knots) - 1):
+                segments.append([self.raw_world[m] for m in range(self.knots[i],self.knots[i+1])])
+                
+        else:
+            segments = [[v.copy() for v in self.raw_world]]
+        
+        for segment in segments:
+            for n in range(self.smooth_factor - 1):
+                contour_utilities.relax(segment)
+                
+                #resnap so we don't loose the surface
+                if ob:
+                    for i, vert in enumerate(segment):
+                        snap = ob.closest_point_on_mesh(imx * vert)
+                        segment[i] = mx * snap[0]
+            
+            self.world_path.extend(segment)
+        end_time = time.time()
+        print('smoothed and snapped %r in %f seconds' % (ob != None, end_time - start_time)) 
+        
+        #resnap everthing we can to get normals an stuff
+        #TODO do this the last time on the smooth factor duh
+        self.snap_to_object(ob)
+        
+    def snap_to_object(self,ob, raw = True, world = True, cuts = True):
+        
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        
+        print('made to snap...is this the problem or the solution?')
+        if raw and len(self.raw_world):
+            for i, vert in enumerate(self.raw_world):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.raw_world[i] = mx * snap[0]
+                
+                
+        if world and len(self.world_path):
+            #self.path_normals = []
+            #self.path_seeds = []
+            for i, vert in enumerate(self.world_path):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.world_path[i] = mx * snap[0]
+                #self.path_normals.append(mx.to_3x3() * snap[1])
+                #self.path_seeds.append(snap[2])
+                
+        if cuts and len(self.cut_points):
+            self.cut_point_normals = []
+            self.cut_point_seeds = []
+            for i, vert in enumerate(self.cut_points):
+                snap = ob.closest_point_on_mesh(imx * vert)
+                self.cut_points[i] = mx * snap[0]
+                self.cut_point_normals.append(mx.to_3x3() * snap[1])
+                self.cut_point_seeds.append(snap[2])
+                           
+    def find_knots(self):
+        '''
+        uses RPD method to simplify a curve using the diagonal bbox
+        of the drawn path and the feature factor, which is a property
+        of the cut path.
+        '''
+        print('find those knots')
+        box_diag = contour_utilities.diagonal_verts(self.raw_world)
+        error = 1/self.feature_factor * box_diag
+        
+        self.knots = contour_utilities.simplify_RDP(self.raw_world, error)
+        
+    def create_cut_nodes(self,context):
+        '''
+        Creates evenly spaced points along the cut path to generate
+        contour cuts on.
+        '''
+        self.cut_points = [] 
+        if self.segments <= 1:
+            print('not worth it')
+            self.cut_points = [self.world_path[0],self.world_path[-1]]
+            return
+        
+        path_length = contour_utilities.get_path_length(self.world_path)
+        cut_spacing = path_length/self.segments
+        
+        if len(self.knots) > 2:
+            segments = []
+            for i in range(0,len(self.knots) - 1):
+                segments.append(self.world_path[self.knots[i]:self.knots[i+1]+1])
+            
+                  
+        else:
+            segments = [self.world_path]
+            
+        
+        for i, segment in enumerate(segments):
+            segment_length = contour_utilities.get_path_length(segment)
+            n_segments = math.ceil(segment_length/cut_spacing)
+            vs = contour_utilities.space_evenly_on_path(segment, [[0,1],[1,2]], n_segments, 0, debug = False)[0]
+            if i > 0:
+                self.cut_points.extend(vs[1:len(vs)])
+            else:
+                self.cut_points.extend(vs[:len(vs)])
+        
+
+    
+    def cuts_on_path(self,context,ob,bme):
+        
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        gc = settings.geom_rgb
+        lc = settings.stroke_rgb
+        vc = settings.vert_rgb
+        hc = settings.handle_rgb
+                
+        g_color = (gc[0],gc[1],gc[2],1)
+        l_color = (lc[0],lc[1],lc[2],1)
+        v_color = (vc[0],vc[1],vc[2],1)
+        h_color = (hc[0],hc[1],hc[2],1)
+        
+        self.cuts = []
+        
+        if not len(self.cut_points) or len(self.cut_points) < 3:
+            print('no cut points or not enough')
+            return
+        
+        rv3d = context.space_data.region_3d
+        view_z = rv3d.view_rotation * Vector((0,0,1))
+        
+        
+        for i, loc in enumerate(self.cut_points):
+            
+            cut = ContourCutLine(0, 0, line_width = settings.line_thick, stroke_color = l_color, handle_color = h_color, geom_color = g_color, vert_color = v_color)
+            cut.seed_face_index = self.cut_point_seeds[i]
+            cut.plane_pt = loc
+            
+            if i == 0:
+                no1 = self.cut_points[i+1] - self.cut_points[i]
+                no2 = self.cut_points[i+2] - self.cut_points[i]
+            elif i == len(self.cut_points) -1:
+                no1 = self.cut_points[i] - self.cut_points[i-1]
+                no2 = self.cut_points[i] - self.cut_points[i-2]
+                
+            else:
+                no1 = self.cut_points[i] - self.cut_points[i-1]
+                no2 = self.cut_points[i+1] - self.cut_points[i]
+                
+            no1.normalize()
+            no2.normalize()
+            
+            no = .5 * no1 + .5 * no2
+            no.normalize()
+                        
+            cut.plane_no = no
+            cut.cut_object(context, ob, bme)
+            
+            self.cuts.append(cut)
+           
+    def add_cut(self,new_cut):
+        print('this is the code to insert a new cut')
+        
+    def push_mesh(self):
+        print('push mesh')
+        
+    def update_visibility(self):
+        print('updating visibility')
+        
+    def insert_new_cut(self,cut):
+        '''
+        attempts to find the best placement for a new cut
+        '''
+        
+    def align_cut(self):
+        '''
+        will assess a cut with neighbors and attempt to
+        align it
+        '''
+        print('align the cut')
+        
+    def sort_cuts(self):
+        '''
+        will attempt to infer some kind of order between previously unordered
+        cuts
+        '''
+        print('sort the cuts')
+        
+    
+    def connect_cuts_to_mesh(self):
+        '''
+        derives quad connectivity from loops which have been
+        sorted
+        '''
+        print('connect cuts to make mesh')
+        
+    def draw(self,context, path = True, nodes = True, rings = True, follows = True):
+        
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
+       
+        if path and len(self.world_path):
+            contour_utilities.draw_3d_points(context, self.world_path, (.5,.5,0,1), 2)
+       
+        if nodes and len(self.cut_points):
+            contour_utilities.draw_3d_points(context, self.cut_points, (0,1,.5,1), 2)
+         
+        if rings and len(self.cuts):
+            for cut in self.cuts:
+                cut.draw(context, settings, three_dimensional = True, interacting = False)
+           
+        
 class SketchEndPoint(object):
     def __init__(self,context, parent, end, color = (.1,.2,.8,1), size = 4, mouse_radius = 10):
         '''
@@ -1733,7 +2012,7 @@ class ContourCutLine(object):
                 contour_utilities.draw_points(context, self.verts_screen, self.vert_color, settings.raw_vert_size)
         
         #draw the simplified contour vertices and edges (rings)    
-        if self.verts !=[] and self.eds != []:
+        if self.verts_simple !=[] and self.eds_simple != []:
             if three_dimensional:
                 points = self.verts_simple.copy()
             else:

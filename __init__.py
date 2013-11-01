@@ -56,7 +56,7 @@ import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine
+from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
@@ -126,8 +126,6 @@ def clear_mesh_cache():
         old_obj = contour_mesh_cache['tmp']
         bpy.data.objects.remove(old_obj)
         del contour_mesh_cache['tmp']
-        
-
         
 class ContourToolsAddonPreferences(AddonPreferences):
     bl_idname = __name__
@@ -517,7 +515,6 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row = box.row()
             row.prop(self, "show_verts", text="Show Raw Vertices")
             row.prop(self, "raw_vert_size")
-
         
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
     '''Retopologize Forms with Contour Strokes'''
@@ -582,10 +579,7 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
         clear_mesh_cache()
         
         return {'FINISHED'}
-        
-        
-
-
+    
 def retopo_draw_callback(self,context):
     
     settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -636,6 +630,12 @@ def retopo_draw_callback(self,context):
     if self.cut_line_widget and settings.draw_widget:
         self.cut_line_widget.draw(context)
         
+    if len(self.draw_cache):
+        contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1,.5,1,.8), 2, "GL_LINE_SMOOTH")
+        
+    if len(self.cut_paths):
+        for path in self.cut_paths:
+            path.draw(context)
         #event value press
             #asses proximity for hovering
             #if no proximity:
@@ -692,6 +692,20 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #drag   defailt False
         #widget_manipulation default False
         #drawing  default False
+        
+        if event.type == 'D'and event.value == 'PRESS':
+            self.draw = self.draw == False     
+            
+            if self.draw:
+                message = "Sticky Draw: LMB + Drag to draw cut path.  D to turn off draw"
+                
+            else:
+                self.draw_cache = []
+                message = "Need to put some instructions here"
+                
+            context.area.header_text_set(text = message)
+            return {'RUNNING_MODAL'}
+        
         
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
             self.undo_action(context)
@@ -759,6 +773,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         if not self.hot_key and event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
             
             if context.mode == 'EDIT_MESH':
+                context.area.header_text_set()
                 back_to_edit = True
             else:
                 back_to_edit = False
@@ -969,7 +984,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
         elif event.type == 'MOUSEMOVE':
             
+            if self.drag and self.draw:
                 
+                self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))    
                     
             if self.drag and self.drag_target:
             
@@ -1312,6 +1329,29 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         elif event.type == 'LEFTMOUSE':
             
             if event.value == 'RELEASE':
+                if self.draw and len(self.draw_cache) > 10:
+                    
+                    path = ContourCutSeries(context, self.draw_cache,
+                                                cull_factor = settings.cull_factor, 
+                                                smooth_factor = settings.smooth_factor,
+                                                feature_factor = settings.feature_factor)
+                    
+                    
+                    path.ray_cast_path(context, self.original_form)
+                    path.find_knots()
+                    path.smooth_path(context, ob = self.original_form)
+                    path.create_cut_nodes(context)
+                    path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
+                    path.cuts_on_path(context, self.original_form, self.bme)
+                    
+                    
+                    self.cut_paths.append(path)
+                    
+                    self.drag = False
+                    self.draw_cache = []
+                    
+                    return {'RUNNING_MODAL'}
+                    
                 if self.drag and self.drag_target:
                     
                     #user just finished using the widget
@@ -1416,7 +1456,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     
                     #No active cut line under mouse -> make a new one
                     #we don't carer about ctrl
-                    elif not self.hover_target:
+                    elif not self.hover_target and not self.draw:
                         self.drag = True
                         
                         #clear selection (perhaps self.selected.select = False, self.selected = None)
@@ -1440,6 +1480,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         #UNDO CODE
                         #the undo for creation will be in the mouse release
                     
+                    else:
+                        self.drag = True
+                    
                     return {'RUNNING_MODAL'}
                 
                 elif self.hot_key and self.selected: #self.hotkey exists.
@@ -1459,6 +1502,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.connect_valid_cuts_to_make_mesh()
                     return {'RUNNING_MODAL'}
+                
+
                   
             return {'RUNNING_MODAL'}
         return {'RUNNING_MODAL'}
@@ -2295,6 +2340,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.cut_line_widget = None
         self.widget_interaction = False
         self.hot_key = None
+        self.draw = False
         
         #at the begniinging of a drag, we want to keep track
         #of where things started out
@@ -2305,6 +2351,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #This is a cache for any cut line whose connectivity
         #has not been established.
         self.cut_lines = []
+        
+        #these will be collections
+        self.cut_paths = []
+        self.draw_cache = []
+        
         
         #this is a list of valid, ordered cuts.
         self.valid_cuts = []
