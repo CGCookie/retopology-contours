@@ -1440,7 +1440,11 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
     
     eg...if the 10th of path 1 intersectts with the 5th edge of path 2
     
-    return intersect_vert,  [10,5]
+    return [[intersection verst],[inds],[inds]]
+    
+    Special cases are not handled well.  Eg..dont instersect two
+    clover leaf paths!
+
     '''
     
     intersections = []
