@@ -693,6 +693,20 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #widget_manipulation default False
         #drawing  default False
         
+        if event.type == 'Q' and len(self.cut_paths) and event.value == 'PRESS':
+            for path in self.cut_paths:
+                path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
+                
+        if event.type == 'W' and len(self.cut_paths) and event.value == 'PRESS':
+            for path in self.cut_paths:
+                path.average_normals(context, self.original_form, self.bme)
+        
+        if event.type == 'P' and len(self.cut_paths) and event.value == 'PRESS':
+            for path in self.cut_paths:
+                path.cuts_on_path(context, self.original_form, self.bme)
+                
+     
+                
         if event.type == 'D'and event.value == 'PRESS':
             self.draw = self.draw == False     
             
@@ -1385,9 +1399,17 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             new_cut.simplify_cross(self.segments)
                             new_cut.update_com()
                             new_cut.update_screen_coords(context)
+                            
+                            
                             new_cut.head = None
                             new_cut.tail = None
                             
+                            
+                            if self.cut_paths != []:
+                                for path in self.cut_paths:
+                                    path.insert_new_cut(new_cut)
+                                    
+                                    
                             #TODO...delete this and see what happens
                             if self.new:
                                 self.new = False

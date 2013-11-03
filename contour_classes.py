@@ -258,12 +258,101 @@ class ContourCutSeries(object):
             
             no = .5 * no1 + .5 * no2
             no.normalize()
-                        
-            cut.plane_no = no
-            cut.cut_object(context, ob, bme)
             
+            #make the cut in the view plane
+            perp_vec = no.cross(view_z)
+            final_no = view_z.cross(perp_vec)
+            final_no.normalize()
+                       
+            cut.plane_no = final_no
+            cut.cut_object(context, ob, bme)
+            cut.simplify_cross(self.segments)
+            cut.update_com()
             self.cuts.append(cut)
-           
+    
+    
+    def smooth_normals_com(self,context,ob,bme,iterations = 5):
+        
+        com_path = []
+        normals = []
+        
+        for cut in self.cuts:
+            if not cut.plane_com:
+                cut.update_com()
+            com_path.append(cut.plane_com)
+        
+        for i, com in enumerate(com_path):
+            if i == 0:
+                no = com_path[i+1] - com
+                
+            else:
+                no = com - com_path[i-1]
+                
+            no.normalize()
+            normals.append(no)
+        
+        for n in range(0,iterations):
+            for i, no in enumerate(normals):
+                
+                if i == 0:
+                    print('keep end')
+                    #new_no = .75 * normals[i] + .25 * normals[i+1]
+                    new_no = normals[i]
+                elif i == len(normals) - 1:
+                    #new_no = .75 * normals[i] + .25 * normals[i-1]
+                    new_no = normals[i]
+                else:
+                    new_no = 1/3 * (normals[i+1] +  normals[i] + normals[i-1])
+                    
+                new_no.normalize()
+                
+                normals[i] = new_no
+                    
+        
+        for i, cut in enumerate(self.cuts):
+            cut.plane_no = normals[i]
+            cut.cut_object(context, ob,  bme)
+            cut.simplify_cross(self.segments)
+            cut.update_com()
+            
+    
+    def average_normals(self,context,ob,bme):
+        
+
+        avg_normal = Vector((0,0,0))
+        for i, loc in enumerate(self.cut_points):
+            
+            if i == 0:
+                no1 = self.cut_points[i+1] - self.cut_points[i]
+                no2 = self.cut_points[i+2] - self.cut_points[i]
+            elif i == len(self.cut_points) -1:
+                no1 = self.cut_points[i] - self.cut_points[i-1]
+                no2 = self.cut_points[i] - self.cut_points[i-2]
+                
+            else:
+                no1 = self.cut_points[i] - self.cut_points[i-1]
+                no2 = self.cut_points[i+1] - self.cut_points[i]
+                
+            no1.normalize()
+            no2.normalize()
+            
+            no = .5 * no1 + .5 * no2
+            no.normalize()
+            
+            avg_normal = avg_normal + no
+            
+        
+        avg_normal = 1/len(self.cut_points) * avg_normal
+        avg_normal.normalize()
+               
+        
+        for i, cut in enumerate(self.cuts):
+            cut.plane_no = avg_normal
+            cut.cut_object(context, ob,  bme)
+            cut.simplify_cross(self.segments)
+            cut.update_com()
+        
+                  
     def add_cut(self,new_cut):
         print('this is the code to insert a new cut')
         
@@ -273,10 +362,51 @@ class ContourCutSeries(object):
     def update_visibility(self):
         print('updating visibility')
         
-    def insert_new_cut(self,cut):
+    def insert_new_cut(self,new_cut):
         '''
         attempts to find the best placement for a new cut
+        the cut should have a simple vert list
+        and the cut should have a plane pt and COM
         '''
+        
+        #Assume the cuts in the series are in order
+        for i in range(0,len(self.cuts) -1):
+ 
+            A = self.cuts[i].plane_com
+            B = self.cuts[i+1].plane_com
+            
+            print(B-A)
+            
+            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
+            
+            test1 = self.cuts[i].plane_no.dot(C-A) > 0
+            test2 = self.cuts[i+1].plane_no.dot(C-B) < 0
+            if C and test1 and test2:
+                print('the line hit the plane')
+                valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
+                if valid:
+                    print('found an intersection at the %i loop' % i)
+                    
+                    
+                    if new_cut.plane_no.dot(B-A) < 0:
+                        print('normal reversal to fit path')
+                        new_cut.plane_no = -1 * new_cut.plane_no
+                        
+                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                    if spin < 0:
+                        new_cut.verts_simple.reverse()
+                        new_cut.verts.reverse()
+                        print('loop reversal to fit into new path')
+                        
+                    self.cuts.insert(i, new_cut)
+                    return True
+                
+    
+    def remove_cut(self,cut):
+        '''
+        removes a cut from the sequence
+        '''
+        
         
     def align_cut(self):
         '''
@@ -807,8 +937,8 @@ class PolySkecthLine(object):
             for i, vert in enumerate(self.extrudes_u):
                 snap = ob.closest_point_on_mesh(imx * vert)
                 self.extrudes_u[i] = mx * snap[0]
-                
-       
+        
+           
     def snap_self_to_other_line(self,other):
         
         
