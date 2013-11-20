@@ -387,10 +387,10 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     feature_factor = IntProperty(
             name = "Smooth Factor",
-            description = "Fraction of sketch bounding box to be considered feature. Smaller = More Detail",
+            description = "Fraction of sketch bounding box to be considered feature. Bigger = More Detail",
             default = 4,
             min = 1,
-            max = 10,
+            max = 20,
             )
     
     sketch_color1 = FloatVectorProperty(name="sketch Color", description="Vert Color", min=0, max=1, default=(1,1,0), subtype="COLOR")
@@ -590,9 +590,11 @@ def retopo_draw_callback(self,context):
     g_color = settings.geom_rgb
     v_color = settings.vert_rgb
 
-    if self.post_update:
-        for cut_line in self.cut_lines:
-            cut_line.update_screen_coords(context)
+    if (self.post_update or self.navigating) and context.space_data.use_occlude_geometry:
+        for path in self.cut_paths:
+            path.update_visibility(context, self.original_form)
+            for cut_line in path.cuts:
+                cut_line.update_visibility(context, self.original_form)
                     
         self.post_update = False
         
@@ -693,6 +695,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #widget_manipulation default False
         #drawing  default False
         
+        
+        #Random keys for testing
         if event.type == 'Q' and len(self.cut_paths) and event.value == 'PRESS':
             for path in self.cut_paths:
                 path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
@@ -705,7 +709,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             for path in self.cut_paths:
                 path.cuts_on_path(context, self.original_form, self.bme)
                 
-     
+        if event.type == 'M' and len(self.cut_paths) and event.value == 'PRESS':
+            for path in self.cut_paths:
+                path.interpolate_endpoints(context, self.original_form, self.bme)
+        
+        
+        
                 
         if event.type == 'D'and event.value == 'PRESS':
             self.draw = self.draw == False     
@@ -721,15 +730,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             return {'RUNNING_MODAL'}
         
         
-        if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
-            self.undo_action(context)
+        #TODO: Undo
+        #if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
+            #self.undo_action(context)
         
         if event.type in {'G','R','K'} and event.value == 'PRESS' and not self.hot_key and self.selected:
             
             self.hot_key = event.type
             
             #UNDO CODE
-            self.create_undo_entry('TRANSFORM', self.selected)
+            #self.create_undo_entry('TRANSFORM', self.selected)
             
             if event.type == 'G' and self.selected:
                 self.widget_interaction = True
@@ -1002,7 +1012,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))    
                     
-            if self.drag and self.drag_target:
+            if self.drag and self.drag_target and not self.draw:
             
                 if self.drag_target.desc == 'CUT_LINE' and self.widget_interaction:
                     
@@ -1042,56 +1052,63 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             #else detect proximity to items around
             else:
                 #identify hover target for highlighting
-                if self.cut_lines != []:
+                if self.cut_paths != []:
+                    
                     new_target = False
                     target_at_all = False
                     prospective_targets = []
-                    for c_cut in self.cut_lines:
-                        c_cut.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1) 
-                        h_target = c_cut.active_element(context,event.mouse_region_x,event.mouse_region_y)
-                        if h_target:
-                            target_at_all = True
-                            new_target = h_target != self.hover_target
-                            if new_target:
-                                prospective_targets.append(h_target)
-                                self.hover_target = h_target
-                                if self.hover_target.desc == 'CUT_LINE':
-                                    
-                                    if self.valid_cuts and len(self.valid_cuts) and self.hover_target in self.valid_cuts:
-                                        ind = self.valid_cuts.index(self.hover_target)
+                    
+                    for path in self.cut_paths:
+                        for c_cut in path.cuts:
+                            if not c_cut.select:
+                                c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1) 
+                            
+                            h_target = c_cut.active_element(context,event.mouse_region_x,event.mouse_region_y)
+                            if h_target:
+                                c_cut.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+                                target_at_all = True
+                                new_target = h_target != self.hover_target
+                                if new_target:
+                                    prospective_targets.append(h_target)
+                                    self.hover_target = h_target
+                                    if self.hover_target.desc == 'CUT_LINE':
+                                        
+                                        
+                                        ind = path.cuts.index(self.hover_target)
                                         ahead = ind + 1
                                         behind = ind - 1
                                     
-                                        if ahead < len(self.cut_lines):
-                                            a_line = self.valid_cuts[ahead]
+                                        if ahead < len(path.cuts):
+                                            a_line = path.cuts[ahead]
                                         else:
                                             a_line = None
                                     
                                         if behind > - 1:
-                                            b_line = self.valid_cuts[behind]
+                                            b_line = path.cuts[behind]
                                         else:
                                             b_line = None
-                                            
-                                    else:
-                                        a_line = None
-                                        b_line = None
+                                                
+
+                                        if self.hover_target.select:    
+                                            self.cut_line_widget = CutLineManipulatorWidget(context, 
+                                                                                            settings, 
+                                                                                            self.hover_target, 
+                                                                                            event.mouse_region_x,
+                                                                                            event.mouse_region_y,
+                                                                                            cut_line_a = a_line, 
+                                                                                            cut_line_b = b_line)
+                                            self.cut_line_widget.derive_screen(context)
                                         
-                                    self.cut_line_widget = CutLineManipulatorWidget(context, 
-                                                                                    settings, 
-                                                                                    self.hover_target, 
-                                                                                    event.mouse_region_x,
-                                                                                    event.mouse_region_y,
-                                                                                    cut_line_a = a_line, 
-                                                                                    cut_line_b = b_line)
-                                    self.cut_line_widget.derive_screen(context)
+                                        else:
+                                            self.cut_line_widget = None
                                     
-                            else:
-                                if self.cut_line_widget:
-                                    self.cut_line_widget.x = event.mouse_region_x
-                                    self.cut_line_widget.y = event.mouse_region_y
-                                    self.cut_line_widget.derive_screen(context)
-                        elif not c_cut.select:
-                            c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)          
+                                else:
+                                    if self.cut_line_widget:
+                                        self.cut_line_widget.x = event.mouse_region_x
+                                        self.cut_line_widget.y = event.mouse_region_y
+                                        self.cut_line_widget.derive_screen(context)
+                            #elif not c_cut.select:
+                                #c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)          
                     if not target_at_all:
                         self.hover_target = None
                         self.cut_line_widget = None
@@ -1138,9 +1155,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
             else:
                 self.navigating = False
+            
+            self.post_update = True
                 
-            for cut_line in self.cut_lines:
-                cut_line.update_screen_coords(context)
+            for path in self.cut_paths:
+                path.update_visibility(context, self.original_form)
+                for cut in path.cuts:
+                    cut.update_visibility(context, self.original_form)
                 
             return {'PASS_THROUGH'}
         
@@ -1151,7 +1172,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if self.hover_target and event.type == 'RIGHTMOUSE':
                 
                 #UNDO CODE
-                self.create_undo_entry('DELETE', self.hover_target)
+                #self.create_undo_entry('DELETE', self.hover_target)
                 
                 if self.hover_target in self.valid_cuts:
                     self.valid_cuts.remove(self.hover_target)
@@ -1160,11 +1181,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 self.widget_interaction = False
                 self.cut_line_widget = None
                 self.selected = None
+                
             
             elif self.selected and event.type == 'X':
                 
                 #UNDO CODE
-                self.create_undo_entry('DELETE', self.selected)
+                #self.create_undo_entry('DELETE', self.selected)
                 
                 if self.selected in self.valid_cuts:
                     self.valid_cuts.remove(self.selected)
@@ -1191,7 +1213,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             self.cut_line_widget.cancel_transform()
             
             #the widget puts the item back so we can pop an undo stack
-            contour_undo_cache.pop()
+            #contour_undo_cache.pop()
             
             self.selected.cut_object(context, self.original_form, self.bme)
             self.selected.simplify_cross(self.segments)
@@ -1207,13 +1229,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if self.selected and self.selected.desc == 'CUT_LINE':
                 
                 #UNDO CODE
-                if len(contour_undo_cache) > 0:
+                #if len(contour_undo_cache) > 0:
                     #make sure we aren't stacking a ton of shift undos
-                    if contour_undo_cache[-1]['action'] != 'SHIFT' and contour_undo_cache[-1]['cut'] != self.cut_lines.index(self.selected):
-                        self.create_undo_entry('SHIFT', self.selected)
+                    #if contour_undo_cache[-1]['action'] != 'SHIFT' and contour_undo_cache[-1]['cut'] != self.cut_lines.index(self.selected):
+                        #self.create_undo_entry('SHIFT', self.selected)
                         
-                else:
-                    self.create_undo_entry('SHIFT', self.selected)
+                #else:
+                    #self.create_undo_entry('SHIFT', self.selected)
                 
                 
                 print('shift before: %f', self.selected.shift)
@@ -1245,13 +1267,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if (event.type == 'WHEELUPMOUSE' and event.ctrl) or (event.type == 'NUMPAD_PLUS' and event.value == 'PRESS'):
                 
                 #UNDO CODE
-                if len(contour_undo_cache) > 0:
+                #if len(contour_undo_cache) > 0:
                     #make sure we aren't stacking a ton of segment undos
-                    if contour_undo_cache[-1]['action'] != 'SEGMENT':
-                        self.create_undo_entry('SEGMENT', None)
+                    #if contour_undo_cache[-1]['action'] != 'SEGMENT':
+                        #self.create_undo_entry('SEGMENT', None)
                         
-                else:
-                    self.create_undo_entry('SEGMENT', None)
+                #else:
+                    #self.create_undo_entry('SEGMENT', None)
                 
 
                 if not self.sel_verts: #used to be elif
@@ -1289,13 +1311,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             elif (event.type == 'WHEELDOWNMOUSE' and event.ctrl) or (event.type == 'NUMPAD_MINUS' and event.value == 'PRESS'):
                 
                 #UNDO CODE
-                if len(contour_undo_cache) > 0:
+                #if len(contour_undo_cache) > 0:
                     #make sure we aren't stacking a ton of segment undos
-                    if contour_undo_cache[-1]['action'] != 'SEGMENT':
-                        self.create_undo_entry('SEGMENT', None)
+                    #if contour_undo_cache[-1]['action'] != 'SEGMENT':
+                        #self.create_undo_entry('SEGMENT', None)
                         
-                else:
-                    self.create_undo_entry('SEGMENT', None)
+                #else:
+                    #self.create_undo_entry('SEGMENT', None)
                 
                 if not self.sel_verts and self.segments >= 4:
                     self.segments -= 1
@@ -1357,8 +1379,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     path.create_cut_nodes(context)
                     path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
                     path.cuts_on_path(context, self.original_form, self.bme)
-                    
-                    
+                    path.connect_cuts_to_make_mesh(self.original_form)
+                    path.update_visibility(context, self.original_form)
                     self.cut_paths.append(path)
                     
                     self.drag = False
@@ -1407,7 +1429,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             
                             if self.cut_paths != []:
                                 for path in self.cut_paths:
-                                    path.insert_new_cut(new_cut)
+                                    if path.insert_new_cut(context, self.original_form, self.bme, new_cut):
+                                        #the cut belongs to the series now
+                                        self.cut_lines.remove(new_cut)
                                     
                                     
                             #TODO...delete this and see what happens
@@ -1422,7 +1446,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 self.align_cut(new_cut, mode = 'BETWEEN')
                                 
                                 #UNDO CODE
-                                self.create_undo_entry('CREATE', new_cut)
+                                #self.create_undo_entry('CREATE', new_cut)
                         
                                 self.connect_valid_cuts_to_make_mesh()
                         else:
@@ -1449,7 +1473,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         
                         #we drag until we release unless we are just selecting
                         #this initiates 
-                        if not event.ctrl:
+                        if self.hover_target.select:
                             self.drag = True
                             self.drag_target = self.hover_target
                             
@@ -1457,7 +1481,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             #TODO if we have other objects available to use
                             self.widget_interaction = True
                             
-                            self.create_undo_entry('TRANSFORM', self.drag_target)
+                            #self.create_undo_entry('TRANSFORM', self.drag_target)
                             
                         #we are just selecting    
                         else:
@@ -1472,9 +1496,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                         self.hover_target.select = True
                         self.selected = self.hover_target    
-                        for cut in self.cut_lines:
-                            if cut != self.hover_target:
-                                cut.select = False
+                        for path in self.cut_paths:
+                            path.select = False
+                            for cut in path.cuts:
+                                if cut != self.hover_target:
+                                    cut.select = False
+                                else:
+                                    path.select = True
+                                    self.selected_path = path
     
                     #No active cut line under mouse -> make a new one
                     #we don't carer about ctrl
@@ -1498,6 +1527,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.drag_target = self.cut_lines[-1].tail
                         self.new = True
                         self.selected = self.cut_lines[-1]
+                        self.cut_lines[-1].select = True
                         
                         #UNDO CODE
                         #the undo for creation will be in the mouse release
@@ -2353,8 +2383,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.drag_target = None
         #what is the mouse over top of currently
         self.hover_target = None
-        #keep track of selected cut_line (perhaps
+        #keep track of selected cut_line and path
         self.selected = None
+        self.selected_path = None
         
         #Keep reference to a cutline widget
         #an keep track of whether or not we are
