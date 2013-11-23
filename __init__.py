@@ -319,6 +319,15 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max = 250,
             )
     
+    cut_count = IntProperty(
+            name = "Vertex Count",
+            description = "The Number of Cuts Per Guide Stroke",
+            default=10,
+            min = 3,
+            max = 100,
+            )
+    
+    
     cyclic = BoolProperty(
             name = "Cyclic",
             description = "Make Retopo Loops Cyclic",
@@ -1374,6 +1383,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     
                     path.ray_cast_path(context, self.original_form)
+                    if self.existing_loops != []:
+                        for eloop in self.existing_loops:
+                            used = path.snap_end_to_existing(eloop)
+                            if used:
+                                break
+                            
                     path.find_knots()
                     path.smooth_path(context, ob = self.original_form)
                     path.create_cut_nodes(context)
@@ -2163,6 +2178,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #TODO Settings harmon CODE REVIEW
         self.settings = settings
         
+        #default segments (spans)
+        self.segments = settings.vertex_count
+        
+        self.guid_cuts = settings.cut_count
+        
+        
         #if edit mode
         if context.mode == 'EDIT_MESH':
             
@@ -2194,37 +2215,25 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             #count and collect the selected edges if any
             ed_inds = [ed.index for ed in self.dest_bme.edges if ed.select]
             
+            self.existing_loops = []
             if len(ed_inds):
                 vert_loops = contour_utilities.edge_loops_from_bmedges(self.dest_bme, ed_inds)
-                if len(vert_loops) > 1:
-                    self.report({'ERROR'}, 'single edge loop must be selected')
-                    #TODO: clean up things and free the bmesh
-                    return {'CANCELLED'}
                 
-                else:
-                    best_loop = vert_loops[0]
-                    if best_loop[-1] != best_loop[0]: #typically this means not cyclcic unless there is a tail []_
-                        if len(list(set(best_loop))) == len(best_loop): #verify no tail
-                            self.sel_edges = [ed for ed in self.dest_bme.edges if ed.select]
+                print('there are %i edge loops selected' % len(vert_loops))
+                for loop in vert_loops:
+                    
+                    if loop[-1] != loop[0] and len(list(set(loop))) != len(loop):
+                        self.report({'WARNING'},'Edge loop selection has extra parts!  Excluding this loop')
                         
-                        else:
-                            self.report({'ERROR'}, 'Edge loop selection has extra parts')
-                            #TODO: clean up things and free the bmesh
-                            return {'CANCELLED'}
                     else:
-                        self.sel_edges = [ed for ed in self.dest_bme.edges if ed.select]
-            else:
-                self.sel_edges = None
+                        lverts = [self.dest_bme.verts[i] for i in loop]
+                        
+                        self.existing_loops.append(ExistingVertList(lverts, 
+                                                     loop, 
+                                                     self.destination_ob.matrix_world,
+                                                     key_type = 'INDS'))
                 
-            if self.sel_edges and len(self.sel_edges):
-                self.sel_verts = [vert for vert in self.dest_bme.verts if vert.select]
-                self.segments = len(self.sel_edges)
-                self.existing_cut = ExistingVertList(self.sel_verts, self.sel_edges,self.destination_ob.matrix_world)
-            else:
-                self.existing_cut = None
-                self.sel_verts = None
-                self.segments = settings.vertex_count
-            
+
         elif context.mode == 'OBJECT':
             
             #make the irrelevant variables None
@@ -2260,8 +2269,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             self.dest_bme = bmesh.new()
             self.dest_bme.from_mesh(self.dest_me)
             
-            #default segments (spans)
-            self.segments = settings.vertex_count
+
         
         #get the info about the original form
         #and convert it to a bmesh for fast connectivity info

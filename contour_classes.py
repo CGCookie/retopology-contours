@@ -37,7 +37,7 @@ import blf
 
 class ContourCutSeries(object):
     def __init__(self, context, raw_points,
-                 segments = 5,
+                 segments = 15,
                  ring_segments = 10,
                  cull_factor = 3,
                  smooth_factor = 5,
@@ -177,7 +177,47 @@ class ContourCutSeries(object):
                 self.cut_points[i] = mx * snap[0]
                 self.cut_point_normals.append(mx.to_3x3() * snap[1])
                 self.cut_point_seeds.append(snap[2])
-                           
+    
+    def snap_end_to_existing(self,existing_loop):
+        
+        #TODO make sure
+        loop_length = contour_utilities.get_path_length(existing_loop.verts_simple)
+        thresh = 3 * loop_length/len(existing_loop.verts_simple)
+        
+        snap_tip = None
+        snap_tail = None
+        
+        for v in existing_loop.verts_simple:
+            tip_v = v - self.raw_world[0]
+            tail_v = v - self.raw_world[-1]
+            
+            if tip_v.length < thresh:
+                snap_tip = existing_loop.verts_simple.index(v)
+                thresh = tip_v.length
+                
+            if tail_v.length < thresh:
+                snap_tail = existing_loop.verts_simple.index(v)
+                thresh = tail_v.length
+                
+        
+        if snap_tip:
+            self.existing_head = existing_loop
+            print('snap tip to existing')
+            v0 = existing_loop.verts_simple[snap_tip]
+        else:
+            v0 = self.raw_world[0]
+            
+        if snap_tail:
+            self.existing_tail = existing_loop
+            print('snap tail to exising')
+            v1 = existing_loop.verts_simple[snap_tail]
+        else:
+            v1 = self.raw_world[-1]
+        
+        if snap_tip or snap_tail:
+            self.ring_segments = len(existing_loop.verts_simple)   
+            self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, v0, v1)
+                                 
     def find_knots(self):
         '''
         uses RPD method to simplify a curve using the diagonal bbox
@@ -248,6 +288,12 @@ class ContourCutSeries(object):
         
         for i, loc in enumerate(self.cut_points):
             
+            if i == 0 and self.existing_head:
+                continue
+            
+            if i == len(self.cut_points) -1 and self.existing_tail:
+                continue
+            
             cut = ContourCutLine(0, 0, line_width = settings.line_thick, stroke_color = l_color, handle_color = h_color, geom_color = g_color, vert_color = v_color)
             cut.seed_face_index = self.cut_point_seeds[i]
             cut.plane_pt = loc
@@ -281,8 +327,15 @@ class ContourCutSeries(object):
             cut.update_com()
             cut.generic_3_axis_from_normal()
             self.cuts.append(cut)
+
             if i > 0:
                 self.align_cut(cut, mode='BEHIND', fine_grain='TRUE')
+                
+            if self.existing_head:
+                self.existing_head.align_to_other(self.cuts[0])
+                
+            if self.existing_tail:
+                self.existing_tail.align_to_other(self.cuts[-1])
        
     def smooth_normals_com(self,context,ob,bme,iterations = 5):
         
@@ -527,7 +580,6 @@ class ContourCutSeries(object):
             
             self.follow_vis = visibility_list
             
-        
     def insert_new_cut(self,context, ob, bme, new_cut):
         '''
         attempts to find the best placement for a new cut
@@ -745,14 +797,14 @@ class ContourCutSeries(object):
            
         if self.follow_lines != [] and settings.show_edges:
             if not context.space_data.use_occlude_geometry:
-                print('DRAW W/O occlusion')
+                
                 for follow in self.follow_lines:
                     contour_utilities.draw_polyline_from_3dpoints(context, follow, 
                                                           (self.cuts[0].geom_color[0], self.cuts[0].geom_color[1], self.cuts[0].geom_color[2], 1), 
                                                           settings.line_thick,"GL_LINE_STIPPLE")
 
             else:
-                print('DRAW W/ occlusion')
+                
                 for i, line in enumerate(self.follow_lines):
                     for n in range(0,len(line)-1):
                         if self.follow_vis[i][n] and self.follow_vis[i][n+1]:
@@ -825,32 +877,50 @@ class ContourControlPoint(object):
             self.world_position = region_2d_to_location_3d(region, rv3d, (self.x, self.y),self.world_position)
 
 class ExistingVertList(object):
-    def __init__(self, verts, edges, mx):
+    def __init__(self, verts, keys, mx, key_type = 'EDGES'):
+        '''
+        verts - list of bmesh verts, not nesessarily in order
+        
+        keys - BME edges which are used to order the verts OR
+             -Vert indices, which specify the orde. Eg, a list of
+               incides genearted from "edge loops from edges"
+               
+        mx - world matrix of object bmesh belongs to.  all this happens in world
+        
+        key_type - enum in {'EDGES', 'INDS'}
+        
+        '''
+        
+        
         self.desc = 'EXISTING_VERT_LIST'
-        
-        edge_keys = [[ed.verts[0].index, ed.verts[1].index] for ed in edges]
-        remaining_keys = [i for i in range(1,len(edge_keys))]
-        
         vert_inds_unsorted = [vert.index for vert in verts]
-        vert_inds_sorted = [edge_keys[0][0], edge_keys[0][1]]
+        if key_type == 'EDGES':
+            edge_keys = [[ed.verts[0].index, ed.verts[1].index] for ed in keys]
+            remaining_keys = [i for i in range(1,len(edge_keys))]
+            vert_inds_sorted = [edge_keys[0][0], edge_keys[0][1]]
         
-        iterations = 0
-        max_iters = math.factorial(len(remaining_keys))
-        while len(remaining_keys) > 0 and iterations < max_iters:
-            print(remaining_keys)
-            iterations += 1
-            for key_index in remaining_keys:
-                l = len(vert_inds_sorted) -1
-                key_set = set(edge_keys[key_index])
-                last_v = {vert_inds_sorted[l]}
-                if  key_set & last_v:
-                    vert_inds_sorted.append(int(list(key_set - last_v)[0]))
-                    remaining_keys.remove(key_index)
-                    break
+            iterations = 0
+            max_iters = math.factorial(len(remaining_keys))
+            while len(remaining_keys) > 0 and iterations < max_iters:
+                print(remaining_keys)
+                iterations += 1
+                for key_index in remaining_keys:
+                    l = len(vert_inds_sorted) -1
+                    key_set = set(edge_keys[key_index])
+                    last_v = {vert_inds_sorted[l]}
+                    if  key_set & last_v:
+                        vert_inds_sorted.append(int(list(key_set - last_v)[0]))
+                        remaining_keys.remove(key_index)
+                        break
+                    
+        elif key_type == 'INDS':
+            
+            vert_inds_sorted = keys
         
         if vert_inds_sorted[0] == vert_inds_sorted[-1]:
             cyclic = True
-            vert_inds_sorted.pop()
+            vert_inds_sorted.pop() #clean out that last vert!
+            
         else:
             cyclic = False
             
@@ -987,7 +1057,6 @@ class ExistingVertList(object):
                 print('reversing path 2')
                 self.verts_simple.reverse()
                       
-
 class PolySkecthLine(object):
     
     def __init__(self, context, raw_points,
@@ -3168,8 +3237,6 @@ class ContourCutLine(object):
         else:
             #print('returning None')
             return None
-
-
 
 class CutLineManipulatorWidget(object):
     def __init__(self,context, settings, cut_line,x,y,cut_line_a = None, cut_line_b = None, hotkey = False):

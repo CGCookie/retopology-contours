@@ -1560,9 +1560,6 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
             
             if intersect:
                 #make sure the intersection is within the segment
-                
-                
-                
                 inter_1 = intersect[0]
                 verif1 = intersect_point_line(inter_1, v1,v2)
                 
