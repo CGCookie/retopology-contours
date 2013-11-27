@@ -703,7 +703,6 @@ def cross_section(bme, mx, point, normal, debug = True):
     else:
         return None
     
-
 def cross_edge(A,B,pt,no):
     '''
     wrapper of intersect_line_plane that limits intersection
@@ -767,7 +766,6 @@ def cross_edge(A,B,pt,no):
     
     return ret_val
 
-#adapted from opendentalcad then to pie menus now here
 def outside_loop_2d(loop):
     '''
     args:
@@ -786,7 +784,27 @@ def outside_loop_2d(loop):
     bound = (1.1*maxx, 1.1*maxy)
     return bound
 
+def bound_box(verts):
+    '''
+    takes a list of vectors of any dimension
+    returns a list of (min,max) pairs
+    '''
+    if len(verts) < 4:
+        return verts
+    
+    dim = len(verts[0])
+    
+    bounds = []
+    for i in range(0,dim):
+        components = [v[i] for v in verts]
+        low = min(components)
+        high = max(components)
+        
+        bounds.append((low,high))
+        
+    return bounds
 #adapted from opendentalcad then to pie menus now here
+
 def point_inside_loop2d(loop, point):
     '''
     args:
@@ -824,8 +842,6 @@ def point_inside_loop2d(loop, point):
         inside = True
     
     return inside
-
-
 
 def generic_axes_from_plane_normal(p_pt, no):
     '''
@@ -881,7 +897,7 @@ def generic_axes_from_plane_normal(p_pt, no):
     
     return (X_prime, Y_prime)
 
-def point_inside_loop_almost3D(pt, verts, no, p_pt = None, threshold = .01, debug = False):
+def point_inside_loop_almost3D(pt, verts, no, p_pt = None, threshold = .01, debug = False, bbox = False):
     '''
     http://blenderartists.org/forum/showthread.php?259085-Brainstorming-for-Virtual-Buttons&highlight=point+inside+loop
     args:
@@ -925,12 +941,22 @@ def point_inside_loop_almost3D(pt, verts, no, p_pt = None, threshold = .01, debu
         vx = v_trans.dot(X_prime)
         vy = v_trans.dot(Y_prime)
         verts_prime.append(Vector((vx, vy)))
-                           
+    
+    bounds = bound_box(verts_prime)
+    
+    bound_loop = [Vector((bounds[0][0],bounds[1][0])),
+                  Vector((bounds[0][1],bounds[1][0])),
+                  Vector((bounds[0][1],bounds[1][1])),
+                  Vector((bounds[0][0],bounds[1][1]))]                       
     #transform the test point into the new plane x,y space
     pt_trans = pt - p_pt
     pt_prime = Vector((pt_trans.dot(X_prime), pt_trans.dot(Y_prime)))
-                      
-    pt_in_loop = point_inside_loop2d(verts_prime, pt_prime)
+    
+    if bbox:
+        print('intersected the bbox')
+        pt_in_loop = point_inside_loop2d(bound_loop, pt_prime)
+    else:                  
+        pt_in_loop = point_inside_loop2d(verts_prime, pt_prime)
     
     return pt_in_loop
 
@@ -985,8 +1011,7 @@ def face_cycle(face, pt, no, prev_eds, verts):#, connection):
                 verts.append(result[1])  #store the "intersection"
                     
                 return co_point
-            
-                
+                           
 def vert_cycle(vert, pt, no, prev_eds, verts):#, connection):
     '''
     args:
@@ -1192,7 +1217,6 @@ def find_doubles(seq):
     # turn the set into a list (as requested)
     return list(seen_twice)
 
-
 def alignment_quality_perpendicular(verts_1, verts_2, eds_1, eds_2):
     '''
     Calculates a quality measure of the alignment of edge loops.
@@ -1241,9 +1265,6 @@ def alignment_quality_perpendicular(verts_1, verts_2, eds_1, eds_2):
     
     #average the two directions    
     ideal_direction = no_1.lerp(no_1,.5)
-
-
-    
     
 def point_in_tri(P, A, B, C):
     '''
@@ -1269,7 +1290,6 @@ def point_in_tri(P, A, B, C):
     
     #Check if point is in triangle
     return (u >= 0) & (v >= 0) & (u + v < 1)
-
 
 def com_mid_ray_test(new_cut, established_cut, obj, search_factor = .5):
     '''
@@ -1319,8 +1339,7 @@ def com_mid_ray_test(new_cut, established_cut, obj, search_factor = .5):
         return True
     else:
         return False
-    
-    
+        
 def com_line_cross_test(com1, com2, pt, no, factor = 2):
     '''
     test used to make sure a cut is reasoably between
@@ -1345,8 +1364,7 @@ def com_line_cross_test(com1, com2, pt, no, factor = 2):
         
         if in_between and test_length < invalid_length:
             return True
-
-    
+  
 def discrete_curl(verts, z): #Adapted from Open Dental CAD by Patrick Moore
     '''
     calculates the curl relative to the direction given.

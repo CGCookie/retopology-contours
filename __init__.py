@@ -647,30 +647,7 @@ def retopo_draw_callback(self,context):
     if len(self.cut_paths):
         for path in self.cut_paths:
             path.draw(context)
-        #event value press
-            #asses proximity for hovering
-            #if no proximity:
-                #add new cutline 
-                #w/ head at mouse position
-                #view direction
-                #v3d = context.space_data
-                #region = v3d.region_3d        
-                #view = region.view_rotation * Vector((0,0,1)) 
-                #self.cutlines.append(ContourCutLine(mouse.x, mouse.y, view)
-                #cutline.tail as drag target
-            
-            #if we are hoving over something of interest
-                #drag target = hover object    
-            
-            #self.drag = True  #toggle the drag
-    
-        #event value release
-            #confirm location of drag target
-            #self.drag_target.x = event.mouse_x
-            #self.drag_target.y = event.mouse_y
-            #self.drag = False
-    
-#Operator
+        
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     '''Retopologize Forms with Contour Strokes'''
     bl_idname = "cgcookie.retop_contour"
@@ -1447,7 +1424,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     if path.insert_new_cut(context, self.original_form, self.bme, new_cut):
                                         #the cut belongs to the series now
                                         self.cut_lines.remove(new_cut)
-                                    
+                                        path.connect_cuts_to_make_mesh(self.original_form)
                                     
                             #TODO...delete this and see what happens
                             if self.new:
