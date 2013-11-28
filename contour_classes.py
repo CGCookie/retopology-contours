@@ -589,96 +589,101 @@ class ContourCutSeries(object):
         
         inserted = False
         
-        if self.world_path != []:
+        
+        if self.world_path != [] and len(self.world_path) > 3:
             thresh = 1/2 * contour_utilities.get_path_length(self.world_path)/len(self.world_path)
-            
+        
+        
             [vert, ind1, ind2] = contour_utilities.intersect_paths(new_cut.verts, self.world_path, cyclic1 = True, cyclic2 = False, threshold = thresh)
-            
-            print([vert, ind1, ind2])
-            
+        
+            print('added a new point to the world path')
+        
             if vert != [] and len(vert) == 1:
                 self.world_path.insert(ind2[0], vert[0])
+        
+        else:
+            #TODO: Fix this for the 1 loop situation
+            thresh = 10
+        #Assume the cuts in the series are in order
+        
+        #Check in between all the cuts
+        for i in range(0,len(self.cuts) -1):
+ 
+            A = self.cuts[i].plane_com
+            B = self.cuts[i+1].plane_com
             
-            #Assume the cuts in the series are in order
+            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
             
-            #Check in between all the cuts
-            for i in range(0,len(self.cuts) -1):
-     
-                A = self.cuts[i].plane_com
-                B = self.cuts[i+1].plane_com
+            test1 = self.cuts[i].plane_no.dot(C-A) > 0
+            test2 = self.cuts[i+1].plane_no.dot(C-B) < 0
+            
+            if C and test1 and test2:
+                valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
+                if valid:
+                    print('found an intersection at the %i loop' % i)
+                    
+                    
+                    if new_cut.plane_no.dot(B-A) < 0:
+                        print('normal reversal to fit path')
+                        new_cut.plane_no = -1 * new_cut.plane_no
+                        
+                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                    if spin < 0:
+                        new_cut.verts_simple.reverse()
+                        new_cut.verts.reverse()
+                        print('loop reversal to fit into new path')
+                        
+                    self.cuts.insert(i+1, new_cut)
+                    new_cut.simplify_cross(self.ring_segments)
+                    self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
+                    
+                    inserted = True
+                
+            #Check the enpoints
+            #TODO: Unless there is an existing vert chain
+            fraction = 5 * contour_utilities.get_path_length(self.world_path) /  (len(self.cuts) - 1)
+            
+            if not inserted:
+                
+                # B -> A is pointed backward out the tip of the line
+                A = self.cuts[0].plane_com
+                B = self.cuts[1].plane_com
                 
                 C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
                 
-                test1 = self.cuts[i].plane_no.dot(C-A) > 0
-                test2 = self.cuts[i+1].plane_no.dot(C-B) < 0
                 
-                if C and test1 and test2:
+                if C:
+                    #this verifies the cut is "upstream"
+                    test1 = self.cuts[0].plane_no.dot(C-A) < 0
+                    test2 = (C - A).length < fraction
+                    
+                    #this doesn't work for shapes that the COM isn't inside the loop!!
+                    #Will cehck bounding plane!!
+                    
                     valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
-                    if valid:
-                        print('found an intersection at the %i loop' % i)
-                        
-                        
+                    if valid and test1 and test2:
+                        print('inserted the new cut at the beginning')
+                    
+                    
                         if new_cut.plane_no.dot(B-A) < 0:
                             print('normal reversal to fit path')
                             new_cut.plane_no = -1 * new_cut.plane_no
-                            
+                        
                         spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
                         if spin < 0:
                             new_cut.verts_simple.reverse()
                             new_cut.verts.reverse()
                             print('loop reversal to fit into new path')
-                            
-                        self.cuts.insert(i+1, new_cut)
+                        
+                        self.cuts.insert(0, new_cut)
                         new_cut.simplify_cross(self.ring_segments)
-                        self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
-                        
+                        self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
+                        n = contour_utilities.nearest_point(self.world_path[0], new_cut.verts)
+                        self.world_path.insert(0, new_cut.verts[n])
+                        self.raw_world.insert(0, new_cut.verts[n])
+                        self.cut_points.insert(0, new_cut.verts[n])
+                        self.snap_to_object(ob, raw = False, world = False, cuts = True)
                         inserted = True
-                    
-                #Check the enpoints
-                #TODO: Unless there is an existing vert chain
-                fraction = 5 * contour_utilities.get_path_length(self.world_path) /  (len(self.cuts) - 1)
-                
-                if not inserted:
-                    
-                    # B -> A is pointed backward out the tip of the line
-                    A = self.cuts[0].plane_com
-                    B = self.cuts[1].plane_com
-                    
-                    C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
-                    
-                    
-                    if C:
-                        #this verifies the cut is "upstream"
-                        test1 = self.cuts[0].plane_no.dot(C-A) < 0
-                        test2 = (C - A).length < fraction
-                        
-                        #this doesn't work for shapes that the COM isn't inside the loop!!
-                        #Will cehck bounding plane!!
-                        
-                        valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
-                        if valid and test1 and test2:
-                            print('inserted the new cut at the beginning')
-                        
-                        
-                            if new_cut.plane_no.dot(B-A) < 0:
-                                print('normal reversal to fit path')
-                                new_cut.plane_no = -1 * new_cut.plane_no
-                            
-                            spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
-                            if spin < 0:
-                                new_cut.verts_simple.reverse()
-                                new_cut.verts.reverse()
-                                print('loop reversal to fit into new path')
-                            
-                            self.cuts.insert(0, new_cut)
-                            new_cut.simplify_cross(self.ring_segments)
-                            self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
-                            n = contour_utilities.nearest_point(self.world_path[0], new_cut.verts)
-                            self.world_path.insert(0, new_cut.verts[n])
-                            self.raw_world.insert(0, new_cut.verts[n])
-                            self.cut_points.insert(0, new_cut.verts[n])
-                            self.snap_to_object(ob, raw = False, world = False, cuts = True)
-                            inserted = True
                         
                 if not inserted:
         
