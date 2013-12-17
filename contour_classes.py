@@ -466,10 +466,10 @@ class ContourCutSeries(object):
             return
         
         imx = ob.matrix_world.inverted()
-        n_rings = len(self.cuts)
+        
+        n_rings = len(self.cuts) + 1 * if self.existing_head + 1 * if self.existing_tail
         n_lines = len(self.cuts[0].verts_simple)
-        
-        
+                
         #work out the connectivity edges
         for i, cut_line in enumerate(self.cuts):
             for v in cut_line.verts_simple:
@@ -518,8 +518,6 @@ class ContourCutSeries(object):
         self.verts = total_verts
         self.faces = total_faces
         self.edges = total_edges
-        
-        #self.write_to_cache('CUT_LINES')
         
     def update_visibility(self, context, ob):    
         region = context.region  
@@ -800,7 +798,15 @@ class ContourCutSeries(object):
         '''
         print('sort the cuts')
         
+    def push_data_into_bmesh(self,context, reto_ob, reto_bme, orignal_form):
         
+        orig_mx = orignal_form.matrix_world
+        reto_mx = reto_ob.matrix_world
+        reto_imx = reto_mx.inverted()
+        
+        
+        
+            
     def draw(self,context, path = True, nodes = True, rings = True, follows = True):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -965,8 +971,7 @@ class ExistingVertList(object):
         
         if contour_utilities.discrete_curl(self.verts_simple, self.plane_no) < 0:
             self.plane_no = -1 * self.plane_no
-        
-            
+                    
     def connectivity_analysis(self,other):
         
         
@@ -990,8 +995,7 @@ class ExistingVertList(object):
         ideal_to_com = 1/len(self.verts_simple) * ideal_to_com
         
         return ideal_to_com
-        
-        
+               
     def align_to_other(self,other, auto_align = True):
         
         '''
