@@ -467,7 +467,12 @@ class ContourCutSeries(object):
         
         imx = ob.matrix_world.inverted()
         
-        n_rings = len(self.cuts) + 1 * if self.existing_head + 1 * if self.existing_tail
+        n_rings = len(self.cuts)
+        if self.existing_head != None:
+            n_rings += 1
+        if self.existing_tail != None:
+            n_rings += 1
+            
         n_lines = len(self.cuts[0].verts_simple)
                 
         #work out the connectivity edges
