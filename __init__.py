@@ -521,6 +521,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
         
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
     '''Retopologize Forms with Contour Strokes'''
+    bl_category = "Retopology"
     bl_label = "Contour Retopolgy"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
