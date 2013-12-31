@@ -31,6 +31,7 @@ import contour_utilities
 from bpy_extras.view3d_utils import location_3d_to_region_2d
 from bpy_extras.view3d_utils import region_2d_to_vector_3d
 from bpy_extras.view3d_utils import region_2d_to_location_3d
+import bmesh
 import blf
 
 #from development.cgc-retopology import contour_utilities
@@ -803,15 +804,34 @@ class ContourCutSeries(object):
         '''
         print('sort the cuts')
         
-    def push_data_into_bmesh(self,context, reto_ob, reto_bme, orignal_form):
+    def push_data_into_bmesh(self,context, reto_ob, reto_bme, orignal_form, original_me):
+        
+        #TODO: Bridging on bmesh level!  Hooray
         
         orig_mx = orignal_form.matrix_world
         reto_mx = reto_ob.matrix_world
         reto_imx = reto_mx.inverted()
         
+        bmverts = []
         
+        for i, vert in enumerate(self.verts):
+                new_vert = reto_bme.verts.new(tuple(reto_imx * (orig_mx * vert)))
+                bmverts.append(new_vert)
         
+        # Initialize the index values of this sequence
+        reto_bme.verts.index_update() 
+        
+        bmfaces = []
+        for face in self.faces:
+
+            #actual BMVerts not indices I think?
+            new_face = tuple([bmverts[i] for i in face])
+            bmfaces.append(reto_bme.faces.new(new_face))
             
+        
+        bmesh.update_edit_mesh(original_me, tessface=False, destructive=True)
+        
+        
     def draw(self,context, path = True, nodes = True, rings = True, follows = True):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences

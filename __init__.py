@@ -699,6 +699,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             for path in self.cut_paths:
                 path.interpolate_endpoints(context, self.original_form, self.bme)
         
+        if event.type == 'E' and len(self.cut_paths) and event.value == 'PRESS':
+            for path in self.cut_paths:
+                path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
+                self.cut_paths.remove(path)
         
         
                 
