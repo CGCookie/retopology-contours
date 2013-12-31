@@ -1555,6 +1555,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #print('modal ret val')
         #print(ret_val)
         #return ret_val
+    
     def write_to_cache(self,tool_type):
         global contour_cache
         
@@ -1647,8 +1648,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     cut.update_screen_coords(context)
                     
                 self.connect_valid_cuts_to_make_mesh()
-                    
-            
+                        
     def create_undo_entry(self, action, cut):
     
         available_actions = {'CREATE','DELETE','TRANSFORM','SHIFT','ALIGN','SEGMENT'}
@@ -1758,9 +1758,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     cut_line.update_screen_coords(context)
                 
                 self.connect_valid_cuts_to_make_mesh()
-            
-            
-            
+                    
     def insert_new_cut(self,new_cut, search_rad = 1/8):
         print('beta testing')
         
@@ -1828,8 +1826,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
         print(self.cut_lines)
         print(self.valid_cuts)
-                            
-            
+                                      
     def align_cut(self, cut, mode = 'BETWEEN', fine_grain = True):
         
         if len(self.valid_cuts) < 2:
@@ -2075,9 +2072,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
             del cuts_copy
             self.valid_cuts = valid_cuts
-            
-                
-    
+             
     def connect_valid_cuts_to_make_mesh(self):
         total_verts = []
         total_edges = []
@@ -2155,18 +2150,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #TODO Settings harmon CODE REVIEW
         self.settings = settings
         
-        #default segments (spans)
+        #default verts in a loop (spans)
         self.segments = settings.vertex_count
-        
-        self.guid_cuts = settings.cut_count
-        
+        #default number of loops in a segment
+        self.guide_cuts = settings.cut_count
         
         #if edit mode
         if context.mode == 'EDIT_MESH':
             
-            #the active object will be the retopo object
-            #whose geometry we will be augmenting
-            self.destination_ob = context.object
+            #retopo mesh is the active object
+            self.destination_ob = context.object  #TODO:  Clarify destination_ob as retopo_on consistent with design doc
             
             #get the destination mesh data
             self.dest_me = self.destination_ob.data
@@ -2178,7 +2171,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             #or we wil pull the mesh cache
             target = [ob for ob in context.selected_objects if ob.name != context.object.name][0]
             
+            #this is a simple set of recorded properties meant to help detect
+            #if the mesh we are using is the same as the one in the cache.
             validation = object_validation(target)
+            
             if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
                 use_cache = True
                 print('willing and able to use the cache!')
@@ -2228,7 +2224,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             else:
                 use_cache = False
-                self.original_form  = target
+                self.original_form  = target #TODO:  Clarify original_form as reference_form consistent with design doc
             
             #no temp bmesh needed in object mode
             #we will create a new obeject
@@ -2338,9 +2334,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         message = "Segments: %i" % self.segments
         context.area.header_text_set(text = message)
             
-        #temporary variable for testing
-        self.ring_shift = 0
-            
         #here is where we will cache verts edges and faces
         #unti lthe user confirms and we output a real mesh.
         self.verts = []
@@ -2353,9 +2346,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             self.destination_ob.show_x_ray = True
             
             
-        #These are all variables/values used in the user interaction
-        #and drawing
-        
+        ####MODE, UI, DRAWING, and MODAL variables###
         
         #is the user moving an existing entity or a new one.
         self.new = False 
@@ -2369,22 +2360,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #what is the mouse over top of currently
         self.hover_target = None
         #keep track of selected cut_line and path
-        self.selected = None
-        self.selected_path = None
+        self.selected = None   #TODO: Change this to selected_loop
+        self.selected_path = None   #TODO: change this to selected_segment
         
-        #Keep reference to a cutline widget
-        #an keep track of whether or not we are
-        #interacting with a widget.
-        self.cut_line_widget = None
-        self.widget_interaction = False
-        self.hot_key = None
-        self.draw = False
         
-        #at the begniinging of a drag, we want to keep track
-        #of where things started out
-        self.initial_location_head = None
-        self.initial_location_tail = None
-        self.initial_location_mouse = None
+        self.cut_line_widget = None  #An object of Class "CutLineManipulator" or None
+        self.widget_interaction = False  #Being in the state of interacting with a widget o
+        self.hot_key = None  #Keep track of which hotkey was pressed
+        self.draw = False  #Being in the state of drawing a guide stroke
+        
         
         #This is a cache for any cut line whose connectivity
         #has not been established.
@@ -2396,11 +2380,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         
         #this is a list of valid, ordered cuts.
+        #TODO: Depricated now that cut order is handled on the segment level
         self.valid_cuts = []
     
-        #this iw a collection of verts used for open GL drawing the spans
+        #this is a collection of verts used for open GL drawing the spans
+        #TODO: Depricated now that cut order is handled on the segment level
         self.follow_lines = []
-        
         
         self.header_message = 'LMB: Select Stroke, RMB / X: Delete Sroke, , G: Translate, R: Rotate, A / Ctrl+A / Shift+A: Align, S: Cursor to Stroke, C: View to Cursor'
         context.area.header_text_set(self.header_message)
@@ -2413,10 +2398,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         
         return {'RUNNING_MODAL'}
-    
-    def execute(self,context):
-        for line in self.cut_lines:
-            print(line.view_dir)
 
 
 def poly_sketch_draw_callback(self,context):
