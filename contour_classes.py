@@ -36,10 +36,10 @@ import blf
 
 #from development.cgc-retopology import contour_utilities
 
-class ContourCutSeries(object):
+class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, SegmentCuts, SegmentCutSeries?
     def __init__(self, context, raw_points,
-                 segments = 15,
-                 ring_segments = 10,
+                 segments = 15,  #TODO:  Rename for nomenclature consistency
+                 ring_segments = 10, #TDOD: nomenclature consistency
                  cull_factor = 3,
                  smooth_factor = 5,
                  feature_factor = 5):
@@ -469,6 +469,8 @@ class ContourCutSeries(object):
         imx = ob.matrix_world.inverted()
         
         n_rings = len(self.cuts)
+        
+        
         if self.existing_head != None:
             n_rings += 1
         if self.existing_tail != None:
@@ -587,13 +589,99 @@ class ContourCutSeries(object):
     def insert_new_cut(self,context, ob, bme, new_cut):
         '''
         attempts to find the best placement for a new cut
-        the cut should have a simple vert list
-        and the cut should have a plane pt and COM
+        the cut should have already calced verts_simple, 
+        plane_pt and plane_com.
+        
+        in the event that there are no existing cuts in the
+        segment (eg, a new segment is created by making a single
+        cut), it will simply add the cut in
+        
+        if there is only one cut, a simple distance threshold
+        check is completed. For now, that distnace is 4x the
+        bounding box diag of the existing cut in the segment
         '''
         
         inserted = False
         
+        if len(self.cuts) == 0:
+            self.cuts.append(new_cut)
+            self.world_path.append(new_cut.verts_simple[0])
+            if self.ring_segments != len(new_cut.verts_simple): #TODO: Nomenclature consistency
+                self.ring_segments = len(new_cut.verts_simple)
+                
+            self.segments = 1
+            
+            inserted = True
+            return inserted
         
+        
+        if len(self.cuts) == 1:
+            
+            #How do we decide how close it shoud be?
+            #for now 4x the bounding box diag of the first cut
+            #the smaller the outline,the less distance
+            #perhaps a visualized circle would be nice?
+            #should this be a setting?  Should we just pick one and go with it
+            
+            bounds = contour_utilities.bound_box(self.cuts[0].verts_simple)
+            
+            diag = 0
+            for min_max in bounds:
+                l = min_max[1] - min_max[0]
+                diag += l * l
+                
+            diag = diag ** .5 / len(bounds)
+            print("the diagonal box is %f" % diag)
+            
+            thresh = 4 * diag  #TODO: Come to a decision on how to determine distance
+            
+            vec_between = new_cut.plane_com - self.cuts[0].plane_com
+            
+            if vec_between.length < thresh:
+                print('the new_cut is close enough, for now this is all that is required')
+                
+                self.segments += 1
+                self.cuts.append(new_cut)
+                
+                #establish path direction
+                direction = self.cuts[1].plane_com - self.cuts[0].plane_com
+                
+                #the original cut has no knowlege of the intended
+                #cut path
+                if self.cuts[0].plane_no.dot(direction) < 0:
+                    print('normal reversal to fit path')
+                    self.cuts[0].plane_no = -1 * new_cut.plane_no
+                        
+                    spin = contour_utilities.discrete_curl(self.cuts[0].verts_simple, self.cuts[0].plane_no)
+                    if spin < 0:
+                        self.cuts[0].verts_simple.reverse()
+                        self.cuts[0].verts.reverse()
+                        print('origianl loop reversal to fit established path direction')
+                
+                #neither does the new cut.
+                if new_cut.plane_no.dot(direction) < 0:
+                    print('normal reversal to fit path')
+                    new_cut.plane_no = -1 * new_cut.plane_no
+                        
+                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                    if spin < 0:
+                        new_cut.verts_simple.reverse()
+                        new_cut.verts.reverse()
+                        print('loop reversal to fit into new path')
+                        
+                #align the cut
+                self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
+                
+                #the world path is constructed by the 0th vert
+                #in each ring.
+                self.world_path.append(new_cut.verts_simple[0])
+                inserted = True
+                return inserted
+            
+            
+        #This is just an attempt to add in a world path
+        #point to gain information about the backbone
+        #of the path.
         if self.world_path != [] and len(self.world_path) > 3:
             thresh = 1/2 * contour_utilities.get_path_length(self.world_path)/len(self.world_path)
         
@@ -606,10 +694,12 @@ class ContourCutSeries(object):
                 self.world_path.insert(ind2[0], vert[0])
         
         else:
+            print('did not add a new point to the world path')
             #TODO: Fix this for the 1 loop situation
             thresh = 10
-        #Assume the cuts in the series are in order
         
+        
+        #Assume the cuts in the series are in order
         #Check in between all the cuts
         for i in range(0,len(self.cuts) -1):
  
@@ -644,7 +734,7 @@ class ContourCutSeries(object):
                     inserted = True
                 
             #Check the enpoints
-            #TODO: Unless there is an existing vert chain
+            #TODO: Unless there is an existing vert loop endpoint
             fraction = 5 * contour_utilities.get_path_length(self.world_path) /  (len(self.cuts) - 1)
             
             if not inserted:
@@ -662,7 +752,7 @@ class ContourCutSeries(object):
                     test2 = (C - A).length < fraction
                     
                     #this doesn't work for shapes that the COM isn't inside the loop!!
-                    #Will cehck bounding plane!!
+                    #Will check the bounding plane!!
                     
                     valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
                     if valid and test1 and test2:
@@ -678,11 +768,14 @@ class ContourCutSeries(object):
                             new_cut.verts_simple.reverse()
                             new_cut.verts.reverse()
                             print('loop reversal to fit into new path')
+                            
                         
                         self.cuts.insert(0, new_cut)
                         new_cut.simplify_cross(self.ring_segments)
                         self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
                         n = contour_utilities.nearest_point(self.world_path[0], new_cut.verts)
+                        
+                        #add the closes point on the cut to the world path to extend it as well
                         self.world_path.insert(0, new_cut.verts[n])
                         self.raw_world.insert(0, new_cut.verts[n])
                         self.cut_points.insert(0, new_cut.verts[n])
@@ -830,8 +923,7 @@ class ContourCutSeries(object):
             
         
         bmesh.update_edit_mesh(original_me, tessface=False, destructive=True)
-        
-        
+            
     def draw(self,context, path = True, nodes = True, rings = True, follows = True):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -944,7 +1036,10 @@ class ExistingVertList(object):
         
         
         self.desc = 'EXISTING_VERT_LIST'
-        vert_inds_unsorted = [vert.index for vert in verts]
+        
+        #will need this later for bridging
+        self.vert_inds_unsorted = [vert.index for vert in verts]
+        
         if key_type == 'EDGES':
             edge_keys = [[ed.verts[0].index, ed.verts[1].index] for ed in keys]
             remaining_keys = [i for i in range(1,len(edge_keys))]
@@ -981,7 +1076,7 @@ class ExistingVertList(object):
             
         self.verts_simple = []
         for i in vert_inds_sorted:
-            v = verts[vert_inds_unsorted.index(i)]
+            v = verts[self.vert_inds_unsorted.index(i)]
             self.verts_simple.append(mx * v.co)
          
         self.plane_no = None
@@ -1068,6 +1163,7 @@ class ExistingVertList(object):
             
             if curl_1 * curl_2 < 0:
                 self.verts_simple.reverse()
+                self.vert_inds_unsorted.reverse()
                 
 
             edge_len_dict = {}
@@ -1093,6 +1189,7 @@ class ExistingVertList(object):
                 print("rough shifting verts by %i segments" % final_shift)
                 self.int_shift = final_shift
                 self.verts_simple = contour_utilities.list_shift(self.verts_simple, final_shift)
+                self.vert_inds_unsorted = contour_utilities.list_shift(self.vert_inds_unsorted, final_shift)
                 print('post rough shift alignment % f' % self.connectivity_analysis(other))    
                 
         
@@ -1105,6 +1202,7 @@ class ExistingVertList(object):
             if Vtotal_1.dot(Vtotal_2) < 0:
                 print('reversing path 2')
                 self.verts_simple.reverse()
+                self.vert_inds_unsorted.reverse()
                       
 class PolySkecthLine(object):
     
@@ -2646,7 +2744,8 @@ class ContourCutLine(object):
         if False not in self.verts_simple_visible:
                 contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
                 contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
-                if 0 in self.eds[-1]:
+                
+                if self.edges != [] and 0 in self.edges[-1]:
                     contour_utilities.draw_polyline_from_3dpoints(context, 
                                                                   [self.verts_simple[-1],self.verts_simple[0]], 
                                                                   self.geom_color,  
@@ -2661,7 +2760,7 @@ class ContourCutLine(object):
                     if i < len(self.verts_simple) - 1 and self.verts_simple_visible[i+1]:
                         contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], self.geom_color, settings.line_thick, 'GL_LINE_STIPPLE')
         
-            if 0 in self.eds[-1] and self.verts_simple_visible[0] and self.verts_simple_visible[-1]:
+            if self.edges != [] and 0 in self.edges[-1] and self.verts_simple_visible[0] and self.verts_simple_visible[-1]:
                     contour_utilities.draw_polyline_from_3dpoints(context, 
                                                                   [self.verts_simple[-1],self.verts_simple[0]], 
                                                                   self.geom_color,  
@@ -2834,15 +2933,14 @@ class ContourCutLine(object):
             cross = contour_utilities.cross_section_seed(bme, mx, pt, pno, indx, debug = True)   
             if cross:
                 self.verts = [mx*v for v in cross[0]]
-                self.eds = cross[1]
-                
+                self.edges = cross[1]   
         else:
             self.verts = []
-            self.eds = []
+            self.edges = []
         
     def simplify_cross(self,segments):
-        if self.verts !=[] and self.eds != []:
-            [self.verts_simple, self.eds_simple] = contour_utilities.space_evenly_on_path(self.verts, self.eds, segments, self.shift)
+        if self.verts !=[] and self.edges != []:
+            [self.verts_simple, self.eds_simple] = contour_utilities.space_evenly_on_path(self.verts, self.edges, segments, self.shift)
             
             if self.int_shift:
                 self.verts_simple = contour_utilities.list_shift(self.verts_simple, self.int_shift)

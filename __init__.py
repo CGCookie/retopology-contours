@@ -1429,7 +1429,18 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                         #the cut belongs to the series now
                                         self.cut_lines.remove(new_cut)
                                         path.connect_cuts_to_make_mesh(self.original_form)
-                                    
+                                        
+                            if self.cut_paths == [] or new_cut in self.cut_lines:
+                                #create a blank segment
+                                path = ContourCutSeries(context, [],
+                                                cull_factor = settings.cull_factor, 
+                                                smooth_factor = settings.smooth_factor,
+                                                feature_factor = settings.feature_factor)
+                                path.insert_new_cut(context, self.original_form, self.bme, new_cut)
+                                self.cut_paths.append(path)
+                                print('made a new path from the new single cut')
+                            
+                            
                             #TODO...delete this and see what happens
                             if self.new:
                                 self.new = False
