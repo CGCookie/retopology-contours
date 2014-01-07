@@ -467,9 +467,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             return
         
         imx = ob.matrix_world.inverted()
-        
         n_rings = len(self.cuts)
-        
         
         if self.existing_head != None:
             n_rings += 1
@@ -477,7 +475,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             n_rings += 1
             
         n_lines = len(self.cuts[0].verts_simple)
-                
+        
+        if self.existing_head != None:
+            for v in self.existing_head.verts_simple:
+                total_verts.append(imx * v)
+                    
         #work out the connectivity edges
         for i, cut_line in enumerate(self.cuts):
             for v in cut_line.verts_simple:
@@ -489,7 +491,12 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 #make connections between loops
                 for j in range(0,n_lines):
                     total_edges.append((i*n_lines + j, (i+1)*n_lines + j))
-        
+
+        if self.existing_tail != None:
+            for v in self.existing_tail.verts_simple:
+                total_verts.append(imx * v)
+                
+                
         cyclic = 0 in self.cuts[0].eds_simple[-1]
         
         #work out the connectivity faces:
