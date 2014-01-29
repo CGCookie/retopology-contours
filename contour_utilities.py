@@ -1808,7 +1808,131 @@ def align_edge_loops(verts_1, verts_2, eds_1, eds_2):
     return verts_2
     
 
+def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop, max_tests = 10000, debug = True):
+    '''
+    Takes a mesh and associated world matrix of the object and returns a cross secion in local
+    space which stops when it intersects the plane defined by pt_stop, normal_stop
+    
+    Args:
+        bme: Blender BMesh
+        mx:   World matrix of the object to be cut(type Mathutils.Matrix)
+        point: any point on the cut plane in world coords (type Mathutils.Vector)
+        normal:  cut plane normal direction in world(type Mathutisl.Vector)
+        seed: face index, typically achieved by raycast.
+            a known face which intersects the cutplane.
+        pt_stop:  point on the plane defined to stop cutting.  World Coords
+                (type Mathutils.Vector)
+        normal_stop: normal direction of the plane defined to stop cutting
+    '''
+    
+    times = []
+    times.append(time.time())
+    
+    imx = mx.inverted()
+    pt = imx * point
+    pt_stop_local = imx * pt_stop
+    no = imx.to_3x3() * normal
+    normal_stop_local =  imx.to_3x3() * normal_stop
 
+    verts = {}
+    
+    seeds = []
+    prev_eds = []
+    
+    #the simplest expected result is that we find 2 edges
+    for ed in bme.faces[seed].edges:         
+        prev_eds.append(ed.index)
+        
+        A = ed.verts[0].co
+        B = ed.verts[1].co
+        result = cross_edge(A, B, pt, no)
+        
+        if result[0] != 'CROSS':
+            print('got an anomoly')
+            print(result[0])
+            
+        #here we are only tesing the good cases
+        if result[0] == 'CROSS':
+            #create a list to hold the verst we find from this seed
+            #start with the a point....go toward b
+            #TODO: CODE REVIEW...this looks like stupid code.
+            potential_faces = [face for face in ed.link_faces if face.index != seed]
+            if len(potential_faces):
+                f = potential_faces[0]
+                
+                
+                #we will keep track of our growing vert chains
+                #based on the face they start with
+                direct = result[1] - pt
+                dir_to_plane = pt_stop_local - pt
+                direct.normalize()
+                dir_to_plane.normalize()
+                
+                right_direction = direct.dot(dir_to_plane) > 0
+                
+                #make sure we are pointed at the end point
+                #granted, if the surface is really loopy this
+
+                
+                print(right_direction)
+                
+                if right_direction:
+                    seeds.append(f)
+                    verts[f.index] = [pt, result[1]]
+                  
+    total_tests = 0
+    for initial_element in seeds: #this will go both ways if they dont meet up.
+        element_tests = 0
+        element = initial_element
+        stop_test = None
+        while element and total_tests < max_tests and not stop_test:
+            total_tests += 1
+            element_tests += 1
+
+            if type(element) == bmesh.types.BMFace:
+                element = face_cycle(element, pt, no, prev_eds, verts[initial_element.index])
+                 
+            elif type(element) == bmesh.types.BMVert:
+                print('do we ever use the vert cycle?')
+                element = vert_cycle(element, pt, no, prev_eds, verts[initial_element.index])
+                
+            if element:
+                A = verts[initial_element.index][-2]
+                B = verts[initial_element.index][-1]
+                stop_test = cross_edge(A, B, pt_stop_local, normal_stop_local)[0]
+            else:
+                print('found the end')
+                
+        if stop_test:
+            print('intersected the plane')
+            break
+                    
+        if total_tests-2 > max_tests:
+            print('maxed out tests')
+                   
+        print('completed %i tests in this seed search' % element_tests)
+                        
+    
+    #this iterates the keys in verts
+    #i have kept the keys consistent for
+    #verts
+    if len(verts):
+        
+        chains = [verts[key] for key in verts if len(verts[key]) >= 2]
+        if len(chains):
+            sizes = [len(chain) for chain in chains]
+            print(sizes)
+            best = min(sizes)
+            ind = sizes.index(best)
+        
+            return chains[ind]
+        else:
+            print('failure no chains > 2 verts')
+            return []
+                    
+    else:
+        print('failed to find a cut that hit the plane...perhaps we dont intersect that plane')
+        return []
 
 def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed_index_b, max_tests = 10000, debug = True):
     '''
@@ -1936,7 +2060,7 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
     #verts
     if len(verts):
         
-        print('picking the shortes path by elements')
+        print('picking the shortest path by elements')
         print('later we will return both paths to allow')
         print('sorting by path length or by proximity to view')
         

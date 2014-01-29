@@ -935,7 +935,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
        
-        if path and len(self.world_path):
+        if path and self.world_path != []:
             contour_utilities.draw_3d_points(context, self.world_path, (1,.5,0,1), 3)
        
         if nodes and len(self.cut_points):
@@ -3393,7 +3393,7 @@ class ContourCutLine(object):
             return None
 
 class CutLineManipulatorWidget(object):
-    def __init__(self,context, settings, cut_line,x,y,cut_line_a = None, cut_line_b = None, hotkey = False):
+    def __init__(self,context, settings, ob, bme, cut_line,x,y,cut_line_a = None, cut_line_b = None, hotkey = False):
         
         self.desc = 'WIDGET'
         self.cut_line = cut_line
@@ -3407,19 +3407,37 @@ class CutLineManipulatorWidget(object):
         self.transform = False
         self.transform_mode = None
         
+        
+        #We will need this plane to establish a contour
+        #along the surface
+        pt = self.cut_line.verts_simple[0]
+        surface_no = cut_line.verts_simple[0] - cut_line.plane_com
+        cut_no = surface_no.cross(cut_line.plane_no)
+        snap = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cut_line.verts_simple[0])
+        seed = snap[2]
+        
+            
         if cut_line_a:
             self.a = cut_line_a.plane_com
             self.a_no = cut_line_a.plane_no
+            self.a_vert = cut_line_a.verts_simple[0]
+            self.path_to_a = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, cut_line_a.verts_simple[0], cut_line_a.plane_no)        
+            self.path_a_3d = [ob.matrix_world * v for v in self.path_to_a]
         else:
             self.a = None
             self.a_no = None
+            self.path_to_a = []
         
         if cut_line_b:
             self.b = cut_line_b.plane_com
             self.b_no = cut_line_b.plane_no
+            self.b_vert = cut_line_b.verts_simple[0]
+            self.path_to_b = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, cut_line_b.verts_simple[0], cut_line_b.plane_no)
+            self.path_b_3d = [ob.matrix_world * v for v in self.path_to_a]
         else:
             self.b = None
             self.b_no = None
+            self.path_to_b = []
             
         self.color = (settings.widget_color[0], settings.widget_color[1],settings.widget_color[2],1)
         self.color2 = (settings.widget_color2[0], settings.widget_color2[1],settings.widget_color2[2],1)
@@ -3437,7 +3455,6 @@ class CutLineManipulatorWidget(object):
         
         self.arc_radius = .5 * (self.radius + self.inner_radius)
         self.screen_no = None
-
         self.angle = 0
         
         #intitial conditions for "undo"
@@ -3466,9 +3483,7 @@ class CutLineManipulatorWidget(object):
         
         self.arc_arrow_1 = []
         self.arc_arrow_2 = []
-        
-
-        
+                
     def user_interaction(self, context, mouse_x,mouse_y):
         '''
         analyse mouse coords x,y
@@ -3477,18 +3492,17 @@ class CutLineManipulatorWidget(object):
         
         mouse_vec = Vector((mouse_x,mouse_y))
         
-        
         #In hotkey mode G, this will be spawned at the mouse
         #essentially being the initial mouse
         widget_screen = Vector((self.x,self.y))
         mouse_wrt_widget = mouse_vec - widget_screen
         com_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.initial_com)
         
-        
         region = context.region
         rv3d = context.space_data.region_3d
         world_mouse = region_2d_to_location_3d(region, rv3d, (mouse_x, mouse_y), self.initial_com)
         world_widget = region_2d_to_location_3d(region, rv3d, (self.x, self.y), self.initial_com)
+        
         
         if not self.transform and not self.hotkey:
             #this represents a switch...since by definition we were not transforming to begin with
@@ -3512,9 +3526,7 @@ class CutLineManipulatorWidget(object):
                 
                 else:
                     self.transform_mode = 'ROTATE_VIEW_PERPENDICULAR'
-                    
 
-                #print(loc_angle)
                 print(self.transform_mode)
                 
             return {'DO_NOTHING'}  #this tells it whether to recalc things
@@ -3527,25 +3539,19 @@ class CutLineManipulatorWidget(object):
                 self.transform = False
                 self.transform_mode = None
                 
-                
-                
                 return {'RECUT'}
-                
-            
+
             else:
                 
                 if self.transform_mode == 'EDGE_SLIDE':
                     
                     world_vec = world_mouse - world_widget
                     screen_dist = mouse_wrt_widget.length - self.inner_radius
-                    
-                    print(screen_dist)
-                    
+
                     if self.hotkey:
                         factor =  1
                     else:
                         factor = screen_dist/mouse_wrt_widget.length
-                    
                     
                     if self.a:
                         a_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.a)
@@ -3553,11 +3559,14 @@ class CutLineManipulatorWidget(object):
                         vec_a_screen_norm = vec_a_screen.normalized()
                         
                         vec_a = self.a - self.initial_com
-                        vec_a_dir = vec_a.normalized()
+                        vec_a2 = self.a_vert - self.cut_line.verts_simple[0]
                         
+                        vec_a_dir = vec_a.normalized()
                         
                         if mouse_wrt_widget.dot(vec_a_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_a_screen_norm) < vec_a_screen.length:
                             translate = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length * vec_a
+                            translate_2 = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length * vec_a2
+                            
                             
                             if self.a_no.dot(self.initial_plane_no) < 0:
                                 v = -1 * self.a_no
@@ -3580,8 +3589,7 @@ class CutLineManipulatorWidget(object):
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
                             return {'REHIT','RECUT'}
-                        
-                        
+                    
                     if self.b:
                         b_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.b)
                         vec_b_screen = b_screen - com_screen
@@ -3589,7 +3597,6 @@ class CutLineManipulatorWidget(object):
                         
                         vec_b = self.b - self.initial_com
                         vec_b_dir = vec_b.normalized()
-                        
                         
                         if mouse_wrt_widget.dot(vec_b_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_b_screen_norm) < vec_b_screen.length:
                             translate = factor * mouse_wrt_widget.dot(vec_b_screen_norm)/vec_b_screen.length * vec_b
@@ -3609,7 +3616,6 @@ class CutLineManipulatorWidget(object):
                             self.cut_line.vec_y = quat * self.vec_y.copy()
                             return {'REHIT','RECUT'}
                             
-                        
                         elif not self.a and world_vec.dot(vec_b_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
@@ -3621,7 +3627,6 @@ class CutLineManipulatorWidget(object):
                     
                     return {'DO_NOTHING'}
 
-                    
                 if self.transform_mode == 'NORMAL_TRANSLATE':
                     print('translating')
                     #the pixel distance used to scale the translation
@@ -3682,9 +3687,7 @@ class CutLineManipulatorWidget(object):
                         cos = math.cos(rot_angle/2)
                         #quat = Quaternion((cos, sin*world_x[0], sin*world_x[1], sin*world_x[2]))
                         quat = Quaternion((cos, sin*axis_1[0], sin*axis_1[1], sin*axis_1[2]))
-
-
-                    
+                                            
                     else:
                         rot_angle = screen_angle - self.angle + math.pi #+ .5 * math.pi  #Mystery
                         rot_angle = math.fmod(rot_angle + 4 * math.pi, 2 * math.pi)  #correct for any negatives
@@ -3803,17 +3806,19 @@ class CutLineManipulatorWidget(object):
         self.cut_line.vec_x = self.vec_x
         self.cut_line.vec_y = self.vec_y
         self.cut_line.seed_face_index = self.initial_seed
-                
-                  
+                              
     def draw(self, context):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
+            if self.path_to_a != []:
+                contour_utilities.draw_3d_points(context, self.path_a_3d, self.color5, 8)
         if self.b:
             contour_utilities.draw_3d_points(context, [self.b], self.color3, 5)
-            
+            if self.path_to_b != []:
+                contour_utilities.draw_3d_points(context, self.path_b_3d, self.color5, 8)
             
         if not self.transform and not self.hotkey:
             #draw wedges

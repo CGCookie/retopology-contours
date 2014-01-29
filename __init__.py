@@ -752,20 +752,24 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     a_line = None
                     b_line = None
                     
-                self.cut_line_widget = CutLineManipulatorWidget(context, settings, self.selected,
-                                                                 event.mouse_region_x,event.mouse_region_y,
-                                                                 cut_line_a = a_line, cut_line_b = b_line,
-                                                                 hotkey = 'G')
+                self.cut_line_widget = CutLineManipulatorWidget(context, settings, 
+                                                                self.original_form, self.bme,
+                                                                self.selected,
+                                                                event.mouse_region_x,event.mouse_region_y,
+                                                                cut_line_a = a_line, cut_line_b = b_line,
+                                                                hotkey = 'G')
                 self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
                 self.cut_line_widget.derive_screen(context)
                 
             elif event.type == 'R' and self.selected:
                 
                 screen_loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.selected.plane_com)
-                self.cut_line_widget = CutLineManipulatorWidget(context, settings, self.selected,
-                                                                 screen_loc[0], screen_loc[1],
-                                                                 cut_line_a = None, cut_line_b = None,
-                                                                 hotkey = 'R')
+                self.cut_line_widget = CutLineManipulatorWidget(context, settings,
+                                                                self.original_form, self.bme,
+                                                                self.selected,
+                                                                screen_loc[0], screen_loc[1],
+                                                                cut_line_a = None, cut_line_b = None,
+                                                                hotkey = 'R')
                 self.cut_line_widget.initial_x = event.mouse_region_x
                 self.cut_line_widget.initial_y = event.mouse_region_y
                 self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
@@ -1081,7 +1085,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
 
                                         if self.hover_target.select:    
                                             self.cut_line_widget = CutLineManipulatorWidget(context, 
-                                                                                            settings, 
+                                                                                            settings,
+                                                                                            self.original_form, self.bme,
                                                                                             self.hover_target, 
                                                                                             event.mouse_region_x,
                                                                                             event.mouse_region_y,
