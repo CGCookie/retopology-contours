@@ -406,8 +406,13 @@ def draw_3d_points(context, points, color, size):
     bgl.glColor4f(*color)
     bgl.glPointSize(size)
     bgl.glBegin(bgl.GL_POINTS)
-    for coord in points_2d:  
-        bgl.glVertex2f(*coord)  
+    for coord in points_2d:
+        #TODO:  Debug this problem....perhaps loc_3d is returning points off of the screen.
+        if coord:
+            bgl.glVertex2f(*coord)  
+        else:
+            print('how the f did nones get in here')
+            print(coord)
     
     bgl.glEnd()   
     return
@@ -1899,13 +1904,15 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
             if element:
                 A = verts[initial_element.index][-2]
                 B = verts[initial_element.index][-1]
-                stop_test = cross_edge(A, B, pt_stop_local, normal_stop_local)[0]
-            else:
-                print('found the end')
-                
+                cross = cross_edge(A, B, pt_stop_local, normal_stop_local)
+                stop_test = cross[0]
+                if stop_test:
+                    verts[initial_element.index].pop()
+                    verts[initial_element.index].append(cross[1])
+            
         if stop_test:
-            print('intersected the plane')
             break
+        
                     
         if total_tests-2 > max_tests:
             print('maxed out tests')

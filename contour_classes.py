@@ -934,8 +934,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     def draw(self,context, path = True, nodes = True, rings = True, follows = True):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
-       
-        if path and self.world_path != []:
+
+        #TODO:  Debug if None in self.world path.  How could this happen?       
+        if path and self.world_path != [] and None not in self.world_path:
+            
             contour_utilities.draw_3d_points(context, self.world_path, (1,.5,0,1), 3)
        
         if nodes and len(self.cut_points):
@@ -3111,10 +3113,9 @@ class ContourCutLine(object):
             connector = v - other.verts_simple[i]  #continue convention of final - initial :: self - other
             connector.normalize()
             align = connector.dot(delta_com_vect)
-            #this shouldnt happen but it appears to be...shrug
+
+            #TODO: Debug statement here 
             if align < 0:
-                print('damn reverse!')
-                print(align)
                 align *= -1    
             ideal_to_com += align
         
@@ -3433,7 +3434,7 @@ class CutLineManipulatorWidget(object):
             self.b_no = cut_line_b.plane_no
             self.b_vert = cut_line_b.verts_simple[0]
             self.path_to_b = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, cut_line_b.verts_simple[0], cut_line_b.plane_no)
-            self.path_b_3d = [ob.matrix_world * v for v in self.path_to_a]
+            self.path_b_3d = [ob.matrix_world * v for v in self.path_to_b]
         else:
             self.b = None
             self.b_no = None
@@ -3814,11 +3815,11 @@ class CutLineManipulatorWidget(object):
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
             if self.path_to_a != []:
-                contour_utilities.draw_3d_points(context, self.path_a_3d, self.color5, 8)
+                contour_utilities.draw_3d_points(context, self.path_a_3d, self.color5, 3)
         if self.b:
             contour_utilities.draw_3d_points(context, [self.b], self.color3, 5)
             if self.path_to_b != []:
-                contour_utilities.draw_3d_points(context, self.path_b_3d, self.color5, 8)
+                contour_utilities.draw_3d_points(context, self.path_b_3d, self.color5, 3)
             
         if not self.transform and not self.hotkey:
             #draw wedges
