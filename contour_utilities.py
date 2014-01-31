@@ -2272,3 +2272,40 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         return (verts, eds)
     else:
         return None
+    
+def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
+    '''
+    Inds the intersection of a vert chain with a plane
+    for cyclic vert paths duplicate end vert..
+    may add cyclic  test later.
+    mode will determine if only the first intersection is returned
+    or all the intersections of a path with a plane.
+    
+    args:
+        verts:  list of vectors type mathutils.Vector
+        pt: plane pt
+        no: plane normal for intersection
+        mode:  enum in 'FIRST', 'ALL'
+        
+    return:
+        a list of intersections of None
+    '''
+    
+    #TODO:  input quality checks for variables
+    
+    intersects = []
+    n = len(verts)
+    
+    for i in range(0,n-1):
+        cross = cross_edge(verts[i], verts[i+1], pt, no)
+        
+        if cross[0]:
+            intersects.append(cross[1])
+            
+            if mode == 'FIRST':
+                break
+            
+    if len(intersects) == 0:
+        intersects = None
+        
+    return intersects

@@ -38,7 +38,7 @@ import blf
 
 class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, SegmentCuts, SegmentCutSeries?
     def __init__(self, context, raw_points,
-                 segments = 15,  #TODO:  Rename for nomenclature consistency
+                 segments = 5,  #TODO:  Rename for nomenclature consistency
                  ring_segments = 10, #TDOD: nomenclature consistency
                  cull_factor = 3,
                  smooth_factor = 5,
@@ -3408,7 +3408,7 @@ class CutLineManipulatorWidget(object):
         self.transform = False
         self.transform_mode = None
         
-        
+        self.ob = ob
         #We will need this plane to establish a contour
         #along the surface
         pt = self.cut_line.verts_simple[0]
@@ -3566,9 +3566,8 @@ class CutLineManipulatorWidget(object):
                         
                         if mouse_wrt_widget.dot(vec_a_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_a_screen_norm) < vec_a_screen.length:
                             translate = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length * vec_a
-                            translate_2 = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length * vec_a2
                             
-                            
+
                             if self.a_no.dot(self.initial_plane_no) < 0:
                                 v = -1 * self.a_no
                             else:
@@ -3578,13 +3577,22 @@ class CutLineManipulatorWidget(object):
                             quat = contour_utilities.rot_between_vecs(self.initial_plane_no, v, factor = scale)
                             inter_no = quat * self.initial_plane_no
                             
-                            self.cut_line.plane_com = self.initial_com + translate
+                            
+                            
+                            new_com = self.initial_com + translate
+                            self.cut_line.plane_com = new_com
                             self.cut_line.plane_no = inter_no
                             
                             self.cut_line.vec_x = quat * self.vec_x.copy()
                             self.cut_line.vec_y = quat * self.vec_y.copy()
                             
-                            return {'REHIT','RECUT'}
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_a_3d, new_com, inter_no, mode = 'FIRST')[0]
+                            snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                            self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                            self.cut_line.seed_face_index = snap[2]
+                            print('DID WE DO IT RIGHT?')
+                            
+                            return {'RECUT'}
                         
                         elif not self.b and world_vec.dot(vec_a_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
@@ -3611,11 +3619,19 @@ class CutLineManipulatorWidget(object):
                             quat = contour_utilities.rot_between_vecs(self.initial_plane_no, v, factor = scale)
                             inter_no = quat * self.initial_plane_no
                             
-                            self.cut_line.plane_com = self.initial_com + translate
+                            new_com = self.initial_com + translate
+                            self.cut_line.plane_com = new_com
                             self.cut_line.plane_no = inter_no
                             self.cut_line.vec_x = quat * self.vec_x.copy()
                             self.cut_line.vec_y = quat * self.vec_y.copy()
-                            return {'REHIT','RECUT'}
+                            
+                            #TODO:  what if we don't get a proposed point?
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_b_3d, new_com, inter_no, mode = 'FIRST')[0]
+                            snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                            self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                            self.cut_line.seed_face_index = snap[2]
+                            print('DID WE DO IT B RIGHT?')
+                            return {'RECUT'}
                             
                         elif not self.a and world_vec.dot(vec_b_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
