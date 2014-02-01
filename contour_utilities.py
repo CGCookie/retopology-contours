@@ -48,6 +48,17 @@ def callback_cleanup(self, context):
         #context.region.callback_remove(self._handle)
     #return None
 
+def bgl_col(rgb, alpha):
+    '''
+    takes a Vector of len 3 (eg, a color setting)
+    returns a 4 item tuple (r,g,b,a) for use with 
+    bgl drawing.
+    '''
+    #TODO Test variables for acceptability
+    color = (rgb[0], rgb[1], rgb[2], alpha)
+    
+    return color
+
 def draw_points(context, points, color, size):
     '''
     draw a bunch of dots
@@ -146,7 +157,6 @@ def perp_vector_point_line(pt1, pt2, ptn):
     
     return alt_vect
 
-
 def altitude(point1, point2, pointn):
     edge1 = point2 - point1
     edge2 = pointn - point1
@@ -221,8 +231,6 @@ def simplify_RDP(splineVerts, error, method = 1):
     print('finished simplification with method %i in %f seconds' % (method, time.time() - start))
     return newVerts
 
-        
-
 def relax(verts, factor = .75, in_place = True):
     '''
     verts is a list of Vectors
@@ -256,9 +264,7 @@ def relax(verts, factor = .75, in_place = True):
             new_verts[i] += deltas[i]     
         
         return new_verts
-        
-    
-    
+           
 def pi_slice(x,y,r1,r2,thta1,thta2,res,t_fan = False):
     '''
     args: 
@@ -327,8 +333,7 @@ def arrow_primitive(x,y,ang,tail_l, head_l, head_w, tail_w):
         arrow[i] = T + rmatrix * loc
         
     return arrow
-    
-    
+       
 def arc_arrow(x,y,r1,thta1,thta2,res, arrow_size, arrow_angle, ccw = True):
     '''
     args: 
@@ -389,10 +394,6 @@ def simple_circle(x,y,r,res):
            
     return(points)     
     
-
-    
-
-
 def draw_3d_points(context, points, color, size):
     '''
     draw a bunch of dots
@@ -448,7 +449,6 @@ def draw_polyline_from_points(context, points, color, thickness, LINE_TYPE):
       
     return
 
-
 def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE):
     '''
     a simple way to draw a line
@@ -480,7 +480,6 @@ def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE)
       
     return
     
-
 def get_path_length(verts):
     '''
     sum up the length of a string of vertices
@@ -494,8 +493,7 @@ def get_path_length(verts):
         l_tot += d.length
         
     return l_tot
-
-    
+   
 def get_com(verts):
     '''
     args:
@@ -511,7 +509,6 @@ def get_com(verts):
 
     return COM
 
-
 def approx_radius(verts, COM):
     '''
     avg distance
@@ -525,7 +522,6 @@ def approx_radius(verts, COM):
     app_rad = 1/l * app_rad
     
     return app_rad    
-
 
 def verts_bbox(verts):
     xs = [v[0] for v in verts]
@@ -546,8 +542,7 @@ def diagonal_verts(verts):
     
     return diag
 
-# calculate a best-fit plane to the given vertices
-#modified from LoopTools addon
+
 #TODO: CREDIT
 #TODO: LINK
 def calculate_best_plane(locs):
@@ -1448,8 +1443,6 @@ def rot_between_vecs(v1,v2, factor = 1):
     
     return quat
 
-    
-
 def circ(point1, point2, point3):
     '''find the x,y and radius for the circle through the 3 points'''
     ax = point1[0]
@@ -1497,7 +1490,6 @@ def findpoint(eq1, eq2, point1, point2):
     mid2y = eq2[2]*math.sin((thetaybeg2+thetayend2)/2)+eq2[1]
     return [(mid2x+mid1x)/2, (mid2y+mid1y)/2]
 
-
 def interp_curve(curve, iterations):
     ''' Ordered list of points, the first and last affect the shape
     of the curve but are not connected though drawn'''
@@ -1518,9 +1510,7 @@ def interp_curve(curve, iterations):
             point[1] = int(round(point[1]))
         for m in range(0, len(newpoints)):
             new_curve.insert(2*m+2, newpoints[m])
-            
-            
-              
+                          
 def nearest_point(test_vert, vert_list):
     '''
     find the closest point to a test vert from a
@@ -1625,9 +1615,7 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
         intersections.pop(ind)
         
     return intersections, inds_1, inds_2
-            
-            
-            
+                        
 def  fit_path_to_endpoints(path,v0,v1):
     '''
     will rescale/rotate/tranlsate a path to fit between v0 and v1
@@ -1659,10 +1647,8 @@ def  fit_path_to_endpoints(path,v0,v1):
         
     return new_path
     
-
-
 def pole_detector(bme):
-    
+
     pole_inds = []
     
     for vert in bme.verts:
@@ -1670,8 +1656,7 @@ def pole_detector(bme):
             pole_inds.append(vert.index)
             
     return pole_inds
-        
-    
+            
 def mix_path(path1,path2,pct = .5):
     '''
     will produce a blended path between path1 and 2 by
@@ -1692,8 +1677,7 @@ def mix_path(path1,path2,pct = .5):
         new_path[i] = v + pct * (path2[i] - v)
         
     return new_path
-        
-        
+               
 def align_edge_loops(verts_1, verts_2, eds_1, eds_2):
     '''
     Modifies vert order and edge indices to  provide best
@@ -1807,12 +1791,9 @@ def align_edge_loops(verts_1, verts_2, eds_1, eds_2):
     if final_shift != 0:
         print("shifting verst by %i" % final_shift)
         verts_2 = list_shift(verts_2, final_shift)
-    
-    
-            
+                  
     return verts_2
     
-
 def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop, max_tests = 10000, debug = True):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
@@ -2087,8 +2068,6 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         print('failed to find connection in either direction...perhaps points arent coplanar')
         return []
             
-            
-
 def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
@@ -2288,7 +2267,7 @@ def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
         mode:  enum in 'FIRST', 'ALL'
         
     return:
-        a list of intersections of None
+        a list of intersections or None
     '''
     
     #TODO:  input quality checks for variables
