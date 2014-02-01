@@ -56,6 +56,7 @@ import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities
+import contour_modals
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
@@ -79,7 +80,6 @@ def object_validation(ob):
     valid = [ob.name, len(ob.data.vertices), len(ob.data.edges), len(ob.data.polygons), len(ob.modifiers)]
     
     return valid
-
 
 def write_mesh_cache(orig_ob,tmp_ob, bme):
     
@@ -669,912 +669,262 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         else:
             return False
     
+    
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
-        #there are several "states" of user interaction that will modify
-        #how the program responds to different keys and events
+        #Loop and Guide Mode
+        #'WAITING'
+        #'NAVIGATING'
         
-        #hotey  default False
-        #drag   defailt False
-        #widget_manipulation default False
-        #drawing  default False
+        #Loop Mode
+        #'WIDGET TRANSFORM'
+        #'CUTTING'
+        #'HOTKEY TRANSFORM'
         
-        
-        #Random keys for testing
-        if event.type == 'Q' and len(self.cut_paths) and event.value == 'PRESS':
-            for path in self.cut_paths:
-                path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
-                
-        if event.type == 'W' and len(self.cut_paths) and event.value == 'PRESS':
-            for path in self.cut_paths:
-                path.average_normals(context, self.original_form, self.bme)
-        
-        if event.type == 'P' and len(self.cut_paths) and event.value == 'PRESS':
-            for path in self.cut_paths:
-                path.cuts_on_path(context, self.original_form, self.bme)
-                
-        if event.type == 'M' and len(self.cut_paths) and event.value == 'PRESS':
-            for path in self.cut_paths:
-                path.interpolate_endpoints(context, self.original_form, self.bme)
-        
-        if event.type == 'E' and len(self.cut_paths) and event.value == 'PRESS':
-            for path in self.cut_paths:
-                path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
-                self.cut_paths.remove(path)
+        #Guide Mode
+        #'DRAWING'
         
         
-                
-        if event.type == 'D'and event.value == 'PRESS':
-            self.draw = self.draw == False     
+        
+        if self.mode == 'LOOP':
             
-            if self.draw:
-                message = "Sticky Draw: LMB + Drag to draw cut path.  D to turn off draw"
-                
-            else:
-                self.draw_cache = []
-                message = "Need to put some instructions here"
-                
-            context.area.header_text_set(text = message)
-            return {'RUNNING_MODAL'}
-        
-        
-        #TODO: Undo
-        #if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
-            #self.undo_action(context)
-        
-        if event.type in {'G','R','K'} and event.value == 'PRESS' and not self.hot_key and self.selected:
+            if self.state == 'NAVIGATING':
+                #NAVIGATION KEYS. Release:
+                    #self.state = 'WAITING'
+                    
+                return {'PASS_THROUGH'}
             
-            self.hot_key = event.type
             
-            #UNDO CODE
-            #self.create_undo_entry('TRANSFORM', self.selected)
-            
-            if event.type == 'G' and self.selected:
-                self.widget_interaction = True
-                if self.valid_cuts and len(self.valid_cuts) and self.selected in self.valid_cuts:
-                    ind = self.valid_cuts.index(self.selected)
-                    ahead = ind + 1
-                    behind = ind - 1
+            if self.state == 'WAITING':
                 
-                    if ahead < len(self.cut_lines):
-                        a_line = self.valid_cuts[ahead]
-                    else:
-                        a_line = None
+                #ESCAPE, RIGHTMOUSE press,
+                    #return ['CANCELLED'}
                 
-                    if behind > - 1:
-                        b_line = self.valid_cuts[behind]
-                    else:
-                        b_line = None
+                #ENTER
+                    #put mesh data into bmesh
+                    #clean up stuff
+                    #return {'FINISHED'}
+                
+                #TAB
+                    #self.mode = 'GUIDE'
+                    #self.selected = None
+                    #self.selected_segment remains the same
+                    
+                #MOUSEMOVE
+                    #self.hover
+                        #highlight important item
                         
-                else:
-                    a_line = None
-                    b_line = None
+                    #self.snap
+                        #highlight important item
+                
+                #C
+                    #center cursor
+                    #return {'RUNNING MODAL'}
+                
+                #NAVIGATION KEYS
+                    #post update
+                    #self.nagivating = True
+                    #return {'PASS_THROUGH'}
+                
+                #if selected:
+                    #G -> HOTKEY
+                    #R -> HOTKEY
+                    #X, DEL -> DELETE
+                    #S -> CURSOR TO SELECTED
+                    #LEFT ARROW -? SHIFT
+                    #RIGHT ARROW -> SHIFT
+                    #SCROLL UP/DWN + CTRL -> ring_verts
                     
-                self.cut_line_widget = CutLineManipulatorWidget(context, settings, 
-                                                                self.original_form, self.bme,
-                                                                self.selected,
-                                                                event.mouse_region_x,event.mouse_region_y,
-                                                                cut_line_a = a_line, cut_line_b = b_line,
-                                                                hotkey = 'G')
-                self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
-                self.cut_line_widget.derive_screen(context)
-                
-            elif event.type == 'R' and self.selected:
-                
-                screen_loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.selected.plane_com)
-                self.cut_line_widget = CutLineManipulatorWidget(context, settings,
-                                                                self.original_form, self.bme,
-                                                                self.selected,
-                                                                screen_loc[0], screen_loc[1],
-                                                                cut_line_a = None, cut_line_b = None,
-                                                                hotkey = 'R')
-                self.cut_line_widget.initial_x = event.mouse_region_x
-                self.cut_line_widget.initial_y = event.mouse_region_y
-                self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
-                self.cut_line_widget.derive_screen(context)
-            
-            
-            #elif event.type == 'K' and self.selected:
-                
-                #self.selected.adjust_cut_to_object_surface(self.original_form)
-                #self.selected.generic_3_axis_from_normal()
-                #self.selected.hit_object(context, self.original_form, method = '3_AXIS_COM')
-                #self.selected.cut_object(context, self.original_form, self.bme)
-                #self.selected.simplify_cross(self.segments)
-                #self.selected.update_com()
-                #self.align_cut(self.selected, 'BETWEEN')         
-                #self.selected.update_screen_coords(context)
-                #self.connect_valid_cuts_to_make_mesh()
-                
-        if not self.hot_key and event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
-            
-            if context.mode == 'EDIT_MESH':
-                context.area.header_text_set()
-                back_to_edit = True
-            else:
-                back_to_edit = False
-                
-            bm = self.dest_bme
-                
-            #the world_matrix of the orignal form
-            orig_mx = self.original_form.matrix_world
-    
-            #the world matrix of the destination (retopo) mesh
-            reto_mx = self.destination_ob.matrix_world
-            reto_imx = reto_mx.inverted()
-            
-            #make list of bmverts     
-            bmverts = []
-            bridge = False
-            a = 0
-            if self.sel_verts and self.sel_edges and len(self.sel_verts):
-                print('we must bridge')
-                bridge =True
-                a = len(self.sel_verts)
-                if not context.tool_settings.mesh_select_mode[0]:
-                    context.tool_settings.mesh_select_mode[0] = True
-                    restore_vert_mode = True
-                else:
-                    restore_vert_mode = False
-                    
-            for i, vert in enumerate(self.verts):
-                new_vert = bm.verts.new(tuple(reto_imx * (orig_mx * vert)))
-                bmverts.append(new_vert)
-                
-                #because of the way the verts are ordered
-                #the first loop will be verts [0:a-1]
-                if bridge and i < a:  
-                    new_vert.select = True
-            
-            # Initialize the index values of this sequence
-            self.dest_bme.verts.index_update()
-
-            #this is tricky, I'm hoping that because my vert list is
-            #actually composed of BMVerts that this will add in mesh data
-            #smoothly with no problems.
-            
-            
-            if len(self.valid_cuts) == 1 and self.existing_cut and len(self.faces) == 0:
-                
-                #gather a few
-                n_lines = len(self.valid_cuts[0].verts_simple)
-                cyclic = 0 in self.valid_cuts[0].eds_simple[-1]
-                n_rings = 2
-                
-                #group our new verts and selected verts together
-                bmverts.extend(self.sel_verts)
-                print('there are this many bmverts now')
-                print(len(bmverts))
-                bridge = False #we do the bridging manually
-                total_faces = []
-                for j in range(0,n_rings - 1): #there are only 2 rings...but i left it here for readability
-                    for i in range(0,n_lines-1):
-                        ind0 = j * n_lines + i
-                        ind1 = j * n_lines + (i + 1)
-                        ind2 = (j + 1) * n_lines + (i + 1)
-                        ind3 = (j + 1) * n_lines + i
-                        total_faces.append((ind0,ind1,ind2,ind3))
-                
-                    if cyclic:
-                        ind0 = (j + 1) * n_lines - 1
-                        ind1 = j * n_lines + int(math.fmod((j+1)*n_lines, n_lines))
-                        ind2 = ind0 + 1
-                        ind3 = ind0 + n_lines
-                        total_faces.append((ind0,ind1,ind2,ind3))
-            
-                self.faces = total_faces
-            
-            bmfaces = []
-            for face in self.faces:
-
-                #actual BMVerts not indices I think?
-                new_face = tuple([bmverts[i] for i in face])
-                bmfaces.append(bm.faces.new(new_face))
-            
-            
-            # Finish up, write the modified bmesh back to the mesh
-            
-            #if editmode...we have to do it this way
-            if context.mode == 'EDIT_MESH':
-                bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
-            
-            #if object mode....we do it like this
-            else:
-                #write the data into the object
-                bm.to_mesh(self.dest_me)
-            
-                #remember we created a new object
-                #moving this to the invoke?
-                context.scene.objects.link(self.destination_ob)
-                
-                self.destination_ob.select = True
-                context.scene.objects.active = self.destination_ob
-                
-                if context.space_data.local_view:
-                    view_loc = context.space_data.region_3d.view_location.copy()
-                    view_rot = context.space_data.region_3d.view_rotation.copy()
-                    view_dist = context.space_data.region_3d.view_distance
-                    bpy.ops.view3d.localview()
-                    bpy.ops.view3d.localview()
-                    #context.space_data.region_3d.view_matrix = mx_copy
-                    context.space_data.region_3d.view_location = view_loc
-                    context.space_data.region_3d.view_rotation = view_rot
-                    context.space_data.region_3d.view_distance = view_dist
-                    context.space_data.region_3d.update()
-                    
-            self.destination_ob.update_tag()
-            context.scene.update()
-            
-            context.area.header_text_set()
-            contour_utilities.callback_cleanup(self,context)
-            bm.free()
-            
-            #used to free the bmesh, now it stays in cache
-            #self.dest_bme.free()
-            #self.bme.free()
-            #if self.tmp_ob:
-                #context.scene.objects.unlink(self.tmp_ob)
-                #me = self.tmp_ob.data
-                #self.tmp_ob.user_clear()
-                #bpy.data.objects.remove(self.tmp_ob)
-                #bpy.data.meshes.remove(me)
-            if back_to_edit:
-                #not sure why this is necessary?
-                #TODO:  make this bmesh data manipulation instead of bpy.ops
-                bpy.ops.object.editmode_toggle()
-                bpy.ops.object.editmode_toggle()
-                if self.sel_verts and len(self.sel_verts):
-                    bpy.ops.mesh.bridge_edge_loops(type='SINGLE', 
-                                                   use_merge=False, 
-                                                   merge_factor=0.5, 
-                                                   number_cuts=0, 
-                                                   interpolation='PATH', 
-                                                   smoothness=1, 
-                                                   profile_shape_factor=0, 
-                                                   profile_shape='SMOOTH')
-                    
-                    bpy.ops.mesh.select_all(action='DESELECT')
-                    if restore_vert_mode:
-                        context.tool_settings.mesh_select_mode[0] = False
-            return{'FINISHED'}
-        
-        elif event.type == 'S' and event.value == 'PRESS':
-            if self.selected and self.selected in self.cut_lines:
-                context.scene.cursor_location = self.selected.plane_com
-                action = 'Snap cursor to selected loop'
-                message = "%s: %s" % (event.type, action)
-                context.area.header_text_set(text = message)
-        
-        elif event.type == 'C' and event.value == 'PRESS':
-            bpy.ops.view3d.view_center_cursor()
-            action = 'Center cursor'
-            message = "%s: %s" % (event.type, action)
-            context.area.header_text_set(text = message)
-            
-        elif event.type == 'A' and event.value == 'PRESS':
-            #verify the correct circumstance
-            
-            #strings to build report message
-            if event.ctrl:
-                ctrl_str = 'Ctrl + '
-            else:
-                ctrl_str = ''
-                
-            if event.shift:
-                shift_str = 'Shift + '
-            else:
-                shift_str = ''
-                
-            if len(self.valid_cuts) and self.selected and self.selected.desc == 'CUT_LINE' and not self.widget_interaction:
-                
-                #UNDO CODE
-                self.create_undo_entry('ALIGN', self.selected)
-            
-                if not event.ctrl and not event.shift:
-                    action = 'Align to neighbors'
-                    act = 'BETWEEN'
-                    print('between')
+                    #if hover == selected:
+                        #LEFTCLICK -> WIDGET
                         
-                #align ahead    
-                elif event.ctrl and not event.shift:
-                    
-                    action = 'Align to next cut'
-                    act = 'FORWARD'
-                    print('FORWARD')
-                    
-                #align behind    
-                elif event.shift and not event.ctrl:
-                    action = 'Align to previous cut'
-                    act = 'BACKWARD'
-                    print('BACKWARD')
-
-                print('ALIGNING CUT LINE 786 with hotkey A')
-                self.align_cut(self.selected, mode = act, fine_grain = True)
-                self.selected.simplify_cross(self.segments)
-                
-                self.selected.update_screen_coords(context)
-                self.connect_valid_cuts_to_make_mesh()
-                
-                message = ctrl_str + shift_str + event.type + ' :  ' + action
-                context.area.header_text_set(text = message)
-                
-        elif event.type == 'MOUSEMOVE':
-            
-            if self.drag and self.draw:
-                
-                self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))    
-                    
-            if self.drag and self.drag_target and not self.draw:
-            
-                if self.drag_target.desc == 'CUT_LINE' and self.widget_interaction:
-                    
-                    #[new_com, new_no, new_tan]
-                    recalc_vals = self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
-
-                    if settings.live_update:     
-                            self.drag_target.hit_object(context, self.original_form, method = '3_AXIS_COM')
-                            self.drag_target.cut_object(context, self.original_form, self.bme)
-                            self.hover_target.simplify_cross(self.segments)
-                            if 'REHIT' in recalc_vals:
-                                print('updating the com')
-                                self.hover_target.update_com()
-                                
-                            self.hover_target.update_screen_coords(context)
-                            
-                    message = "Widget interaction: " + str(self.cut_line_widget.transform_mode)
-                    context.area.header_text_set(text = message)
-
-                elif self.drag_target.desc == 'CONTROL_POINT':
-                    self.drag_target.x = event.mouse_region_x
-                    self.drag_target.y = event.mouse_region_y
-                    self.drag_target.screen_to_world(context)
-            
-            elif self.hot_key and self.selected: 
-                recalc_vals = self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
-                if settings.live_update:     
-                    self.selected.hit_object(context, self.original_form, method = '3_AXIS_COM')
-                    self.selected.cut_object(context, self.original_form, self.bme)
-                    self.selected.simplify_cross(self.segments)
-                    if 'REHIT' in recalc_vals:
-                        self.selected.update_com()
+                #LEFTCLICK:
+                    #if hover:
+                        #select
                         
-                    self.selected.update_screen_coords(context)
+                    #else:
+                        #NewCut
+                        #self.state = 'CUTTING'
+                        #header message set
+                return {'RUNNING_MODAL'}
+                        
+            elif self.state == 'CUTTING':
+                
+                #MOUSEMOVE
+                
+                #LEFTMOUSE Release
+                    #new cut
+                    #new guide?
+                    #assess snap/extend/join
+                    
+                    #self.selected
+                    #self.state == 'WAITING'
+                    
+                return {'RUNNING_MODAL'}
+            
+            
+            elif self.state == 'HOTKEY_TRANSFORM':
+                
+                #MOUSEMOVE
+                    #widget.user_interaction
+                    
+                #LEFTMOUSE event.value == 'PRESS':#RET, ENTER
+                    #confirm transform
+                    #recut, align, visibility?, and update the segment
+                    #self.state = 'WAITING'
+                
+                #ESC, RMB:
+                    #widget.cancel_transform()
+                    #self.state = 'WAITING'
+                
+                return {'RUNNING_MODAL'}
+            
+            elif self.state == 'WIDGET_TRANSFORM':
+                
+                #MOUSEMOVE
+                
+                #LEFTMOUSE event.value == 'RELEASE'
+                    #Do all the necessary recutting, aligning, path stuff
+                    #self.state = 'WAITING'
+                    
+                return {'RUNNING_MODAL'}
+                
+                
+            return{'RUNNING_MODAL'}
         
+        if self.mode == 'GUIDE':
+            
+            if self.state == 'WAITING':
+                #TAB:
+                    #self.mode = 'LOOP'
+                
+                
+                #C
+                    #center cursor
+                    
+                #N
+                    #self.force_new = True
+                    #self.selected_path = None
+                    #self.snap_target = None
+                    
+                #MOUSEMOVE
+                    #assess hovering
+                        #highlight appropriate things
+                    
+                    #if not force new
+                        #asses pixel proximity for snapping
+                        #self.snap_target ==
+                        #highlight/draw appropriate things
+                    
+                #LEFT CLICK:
+                    #if hover:
+                        #selected_path
+                    #else:
+                        #self.state = 'DRAWING'
+                        
+                #if selected:
+                    
+                    
+                    #X, DEL::
+                        #delete the path
+                        #selcted_path = None
+                        #self.state = 'WAITING'
+                    
+                    #LEFT ARROW, RIGHT ARROW:
+                        #shift entire segment
+                    
+                    #SCROLL UP/DWN + CTRL, + or - key
+                        #if not selected_path.lock:
+                            #path.segments
+                            #distribute cut points
+                            #make new cuts
+                            #alignment
+                            #etc
+                        #else:
+                            #let the user know the path is locked
+                            #header message set
                    
-            #else detect proximity to items around
-            else:
-                #identify hover target for highlighting
-                if self.cut_paths != []:
+                    #S -> Smoothing:
+                        #SHIFT:
+                            #path.smooth_normals
+                        
+                        #CTRL:
+                            #path.average_normals
+                        
+                        #ALT:
+                            #path.interpolate_endpoints
                     
-                    new_target = False
-                    target_at_all = False
-                    prospective_targets = []
+                    return{'RUNNING_MODAL'}
+                        
+            if self.state == 'DRAWING':
+                
+                #MOUSEMOVE
+                    #append verts
                     
-                    for path in self.cut_paths:
-                        for c_cut in path.cuts:
-                            if not c_cut.select:
-                                c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1) 
-                            
-                            h_target = c_cut.active_element(context,event.mouse_region_x,event.mouse_region_y)
-                            if h_target:
-                                c_cut.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
-                                target_at_all = True
-                                new_target = h_target != self.hover_target
-                                if new_target:
-                                    prospective_targets.append(h_target)
-                                    self.hover_target = h_target
-                                    if self.hover_target.desc == 'CUT_LINE':
-                                        
-                                        
-                                        ind = path.cuts.index(self.hover_target)
-                                        ahead = ind + 1
-                                        behind = ind - 1
-                                    
-                                        if ahead < len(path.cuts):
-                                            a_line = path.cuts[ahead]
-                                        else:
-                                            a_line = None
-                                    
-                                        if behind > - 1:
-                                            b_line = path.cuts[behind]
-                                        else:
-                                            b_line = None
-                                                
-
-                                        if self.hover_target.select:    
-                                            self.cut_line_widget = CutLineManipulatorWidget(context, 
-                                                                                            settings,
-                                                                                            self.original_form, self.bme,
-                                                                                            self.hover_target, 
-                                                                                            event.mouse_region_x,
-                                                                                            event.mouse_region_y,
-                                                                                            cut_line_a = a_line, 
-                                                                                            cut_line_b = b_line)
-                                            self.cut_line_widget.derive_screen(context)
-                                        
-                                        else:
-                                            self.cut_line_widget = None
-                                    
-                                else:
-                                    if self.cut_line_widget:
-                                        self.cut_line_widget.x = event.mouse_region_x
-                                        self.cut_line_widget.y = event.mouse_region_y
-                                        self.cut_line_widget.derive_screen(context)
-                            #elif not c_cut.select:
-                                #c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)          
-                    if not target_at_all:
-                        self.hover_target = None
-                        self.cut_line_widget = None
-                        context.area.header_text_set(self.header_message)
-                                
-            if self.navigating:
-                for cut in self.cut_lines:
-                    cut.update_screen_coords(context)
+                #LEFTMOUSE RELSEASE:
+                    #raycast the draw points
+                    #make a new path
+                    #cuts
+                    #etc
+                    #etc
                     
-            return {'RUNNING_MODAL'}
-        
-        #escape
-        elif event.type== 'ESC' and not self.hot_key and event.value == 'PRESS':
-            #TODO:  Delete the destination ob in case we dont need it
-            #need to carefully implement this so people dont delete their wok
-            
-            #clean up callbacks to prevent crash
-            context.area.header_text_set()
-            contour_utilities.callback_cleanup(self,context)
-            
-            #don't free it anymore, let the clear cache do that
-            #self.bme.free()
-            #if self.tmp_ob:
-                #context.scene.objects.unlink(self.tmp_ob)
-                #me = self.tmp_ob.data
-                #self.tmp_ob.user_clear()
-                #bpy.data.objects.remove(self.tmp_ob)
-                #bpy.data.meshes.remove(me)
-            return {'CANCELLED'}  
-        
-        elif event.type in {'MIDDLEMOUSE', 
-                            'NUMPAD_2', 
-                            'NUMPAD_4', 
-                            'NUMPAD_6', 
-                            'NUMPAD_8', 
-                            'NUMPAD_1', 
-                            'NUMPAD_3', 
-                            'NUMPAD_5', 
-                            'NUMPAD_7', 
-                            'NUMPAD_9'}:
-
-            if event.value == 'PRESS':
-                self.navigating = True
+                    #self.selected_path
+                    #update visibility
+                    #etc, etc, etc
+                    
+                    #self.state == 'WAITING'
                 
-            else:
-                self.navigating = False
+                return{'RUNNING_MODAL'}
+                
+                
+            return{'RUNNING_MODAL'}
             
-            self.post_update = True
-                
-            for path in self.cut_paths:
-                path.update_visibility(context, self.original_form)
-                for cut in path.cuts:
-                    cut.update_visibility(context, self.original_form)
-                
-            return {'PASS_THROUGH'}
+            
+            
+            #nothing is selected
+                #analyze mouse movement for hovering
+            
+            
+            #hover = True
+            
+            #hover = False
+            
+            #left click to start a new cut
+            
+            #left click to interact with widget
+            
+            #x to delete segment
+            
+            #g or r to hotkey
+            
+            #c center cursor
+            
+            #s cursor to loop
+            
+            # <- and -> to shift
+            
+            #A to align
+                #A - align between
+                #ctrl A - align ahead
+                #shift A - align previus
+             
+            #enter guide mode
+            
+            
+  
         
         
-        elif event.type == 'RIGHTMOUSE' and event.value == 'PRESS' and self.hover_target and not self.hot_key or \
-             event.type == 'X' and event.value == 'PRESS' and self.selected and not self.hot_key:
-            
-            if self.hover_target and event.type == 'RIGHTMOUSE':
-                
-                #UNDO CODE
-                #self.create_undo_entry('DELETE', self.hover_target)
-                
-                if self.hover_target in self.valid_cuts:
-                    self.valid_cuts.remove(self.hover_target)
-                self.cut_lines.remove(self.hover_target)
-                self.hover_target = None
-                self.widget_interaction = False
-                self.cut_line_widget = None
-                self.selected = None
-                
-            
-            elif self.selected and event.type == 'X':
-                
-                #UNDO CODE
-                #self.create_undo_entry('DELETE', self.selected)
-                
-                if self.selected in self.valid_cuts:
-                    self.valid_cuts.remove(self.selected)
-                    
-                self.cut_lines.remove(self.selected)
-                self.hover_target = None
-                self.widget_interaction = False
-                self.cut_line_widget = None
-                self.selected = None
-
-            
-                  
-            self.connect_valid_cuts_to_make_mesh()
-            
-            action = 'Delete selected loop'
-            message = "%s: %s" % (event.type, action)
-            context.area.header_text_set(text = message)  
-            return {'RUNNING_MODAL'}
-            
-    
-
-        elif  event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and self.hot_key:
-            
-            self.cut_line_widget.cancel_transform()
-            
-            #the widget puts the item back so we can pop an undo stack
-            #contour_undo_cache.pop()
-            
-            self.selected.cut_object(context, self.original_form, self.bme)
-            self.selected.simplify_cross(self.segments)
-            self.selected.update_com()
-            self.selected.update_screen_coords(context)
-            
-            self.hot_key = False
-            self.cut_line_widget = None
-            self.widget_interaction = False
-            
-
-        if event.type in {'LEFT_ARROW','RIGHT_ARROW'} and event.value == 'PRESS':
-            if self.selected and self.selected.desc == 'CUT_LINE':
-                
-                #UNDO CODE
-                #if len(contour_undo_cache) > 0:
-                    #make sure we aren't stacking a ton of shift undos
-                    #if contour_undo_cache[-1]['action'] != 'SHIFT' and contour_undo_cache[-1]['cut'] != self.cut_lines.index(self.selected):
-                        #self.create_undo_entry('SHIFT', self.selected)
-                        
-                #else:
-                    #self.create_undo_entry('SHIFT', self.selected)
-                
-                
-                print('shift before: %f', self.selected.shift)
-                if event.type == 'LEFT_ARROW':
-                    
-                    self.selected.shift -= .05
-                    action = 'Decrease'
-                    if self.selected.shift < -1:
-                        self.selected.shift = -1   
-                
-                if event.type == 'RIGHT_ARROW':
-                    action = 'Increase'
-                    self.selected.shift += .05
-                    if self.selected.shift > 1:
-                        self.selected.shift = 1
-                
-                print('shift after: %f', self.selected.shift)
-                self.selected.simplify_cross(self.segments)
-                self.align_cut(self.selected, mode = 'BETWEEN', fine_grain = False)
-                self.selected.update_screen_coords(context)
-                self.connect_valid_cuts_to_make_mesh()
-                message = "%s: %s shift to %f" % (event.type, action, self.selected.shift)
-                context.area.header_text_set(text = message)
-
+        #cutting
+        #navigating
+        #hovering
+        #transforming
+        #serlecting
         
         
-        if event.type in {'WHEELDOWNMOUSE','WHEELUPMOUSE','NUMPAD_PLUS','NUMPAD_MINUS'}:
-            
-            if (event.type == 'WHEELUPMOUSE' and event.ctrl) or (event.type == 'NUMPAD_PLUS' and event.value == 'PRESS'):
-                
-                #UNDO CODE
-                #if len(contour_undo_cache) > 0:
-                    #make sure we aren't stacking a ton of segment undos
-                    #if contour_undo_cache[-1]['action'] != 'SEGMENT':
-                        #self.create_undo_entry('SEGMENT', None)
-                        
-                #else:
-                    #self.create_undo_entry('SEGMENT', None)
-                
-
-                if not self.sel_verts: #used to be elif
-                    self.segments += 1
-
-                
-                    for cut_line in self.cut_lines:
-                        if not cut_line.verts:
-                            print('recutting this line because it has no freaking verts?')
-                            hit = cut_line.hit_object(context, self.original_form)
-                            if hit:
-                                cut_line.cut_object(context, self.original_form, self.bme)
-                                cut_line.simplify_cross(self.segments)
-                                cut_line.update_com()
-                                cut_line.update_screen_coords(context)
-                            else:
-                                self.cut_lines.remove(cut_line)
-    
-                        else:
-                            new_bulk_shift = round((cut_line.int_shift + cut_line.shift) * self.segments/(self.segments - 1))
-                            new_fine_shift = self.segments/(self.segments - 1) * (cut_line.shift + cut_line.int_shift) - new_bulk_shift
-                            print('bulk shift:  %i and fine shift:  %f' % (new_bulk_shift, new_fine_shift))
-                            cut_line.int_shift = new_bulk_shift
-                            cut_line.shift = new_fine_shift
-                            
-                            cut_line.simplify_cross(self.segments)
-                            cut_line.update_screen_coords(context)
-                
-                message = "%s: Set segments to %i" % (event.type, self.segments)
-                context.area.header_text_set(text = message)
-                
-                self.connect_valid_cuts_to_make_mesh()
-                return {'RUNNING_MODAL'}
-            
-            elif (event.type == 'WHEELDOWNMOUSE' and event.ctrl) or (event.type == 'NUMPAD_MINUS' and event.value == 'PRESS'):
-                
-                #UNDO CODE
-                #if len(contour_undo_cache) > 0:
-                    #make sure we aren't stacking a ton of segment undos
-                    #if contour_undo_cache[-1]['action'] != 'SEGMENT':
-                        #self.create_undo_entry('SEGMENT', None)
-                        
-                #else:
-                    #self.create_undo_entry('SEGMENT', None)
-                
-                if not self.sel_verts and self.segments >= 4:
-                    self.segments -= 1
-                    
-                    for cut_line in self.cut_lines:
-                        if not cut_line.verts:
-                            hit = cut_line.hit_object(context, self.original_form)
-                            if hit:
-                                cut_line.cut_object(context, self.original_form, self.bme)
-                                cut_line.simplify_cross(self.segments)
-                                cut_line.update_com()
-                                cut_line.update_screen_coords(context)
-                            else:
-                                self.cut_lines.remove(cut_line)
-                            
-                        else:
-                            new_bulk_shift = round((cut_line.int_shift + cut_line.shift) * self.segments/(self.segments + 1))
-                            new_fine_shift = self.segments/(self.segments + 1) * (cut_line.shift + cut_line.int_shift) - new_bulk_shift
-                            print('bulk shift:  %i and fine shift:  %f' % (new_bulk_shift, new_fine_shift))
-                            cut_line.int_shift = new_bulk_shift
-                            cut_line.shift = new_fine_shift
-                            cut_line.simplify_cross(self.segments)
-                            cut_line.update_screen_coords(context)
-                    
-                #else:  #redundant, 
-                    #self.segments = len(self.sel_edges)
         
-                #message = "Segments: %i" % self.segments
-                message = "%s: Set segments to %i" % (event.type, self.segments)
-                context.area.header_text_set(text = message)
-                
-                self.connect_valid_cuts_to_make_mesh()
-                
-                return {'RUNNING_MODAL'}
-            
-            
-            else:
-                #hack because the zoom happens after
-                #the event is passed through
-                self.post_update = True
-    
-                return{'PASS_THROUGH'}  
         
-        #event click
-        elif event.type == 'LEFTMOUSE':
-            
-            if event.value == 'RELEASE':
-                if self.draw and len(self.draw_cache) > 10:
-                    
-                    path = ContourCutSeries(context, self.draw_cache,
-                                                cull_factor = settings.cull_factor, 
-                                                smooth_factor = settings.smooth_factor,
-                                                feature_factor = settings.feature_factor)
-                    
-                    
-                    path.ray_cast_path(context, self.original_form)
-                    if self.existing_loops != []:
-                        for eloop in self.existing_loops:
-                            used = path.snap_end_to_existing(eloop)
-                            if used:
-                                break
-                            
-                    path.find_knots()
-                    path.smooth_path(context, ob = self.original_form)
-                    path.create_cut_nodes(context)
-                    path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
-                    path.cuts_on_path(context, self.original_form, self.bme)
-                    path.connect_cuts_to_make_mesh(self.original_form)
-                    path.update_visibility(context, self.original_form)
-                    self.cut_paths.append(path)
-                    
-                    self.drag = False
-                    self.draw_cache = []
-                    
-                    return {'RUNNING_MODAL'}
-                    
-                if self.drag and self.drag_target:
-                    
-                    #user just finished using the widget
-                    if self.drag_target.desc == 'CUT_LINE' and self.widget_interaction:
-                        if not settings.live_update:
-                            self.drag_target.hit_object(context, self.original_form, method = '3_AXIS_COM')
-                            self.drag_target.cut_object(context, self.original_form, self.bme)
-                            self.hover_target.simplify_cross(self.segments)    
-                            self.hover_target.update_com()        
-                            self.hover_target.update_screen_coords(context)
-                           
-                        if self.cut_line_widget.transform:
-                            self.align_cut(self.drag_target, mode = 'BETWEEN')
-                        
-                        self.connect_valid_cuts_to_make_mesh()
-
-                        
-                    #a new cut is made and this is the release of the handle
-                    #the handle is the drag_target    
-                    elif self.drag_target.desc != 'CUT_LINE' and not self.widget_interaction:
-                        self.drag_target.x = event.mouse_region_x
-                        self.drag_target.y = event.mouse_region_y
-                        new_cut = self.drag_target.parent
-                        
-                        #hit the mesh for the first time
-                        hit = new_cut.hit_object(context, self.original_form, method = 'VIEW')
-                        
-                        if hit:
-                            
-                            new_cut.cut_object(context, self.original_form, self.bme)
-                            new_cut.simplify_cross(self.segments)
-                            new_cut.update_com()
-                            new_cut.update_screen_coords(context)
-                            
-                            
-                            new_cut.head = None
-                            new_cut.tail = None
-                            
-                            
-                            if self.cut_paths != []:
-                                for path in self.cut_paths:
-                                    if path.insert_new_cut(context, self.original_form, self.bme, new_cut):
-                                        #the cut belongs to the series now
-                                        self.cut_lines.remove(new_cut)
-                                        path.connect_cuts_to_make_mesh(self.original_form)
-                                        
-                            if self.cut_paths == [] or new_cut in self.cut_lines:
-                                #create a blank segment
-                                path = ContourCutSeries(context, [],
-                                                cull_factor = settings.cull_factor, 
-                                                smooth_factor = settings.smooth_factor,
-                                                feature_factor = settings.feature_factor)
-                                path.insert_new_cut(context, self.original_form, self.bme, new_cut)
-                                self.cut_paths.append(path)
-                                print('made a new path from the new single cut')
-                            
-                            
-                            #TODO...delete this and see what happens
-                            if self.new:
-                                self.new = False
-                            
-                            #try to insert the new cut into the existing cut chain    
-                            #self.insert_new_cut(new_cut, self.settings.search_factor)
-                            
-                            self.sort_cuts()
-                            if new_cut in self.valid_cuts:
-                                self.align_cut(new_cut, mode = 'BETWEEN')
-                                
-                                #UNDO CODE
-                                #self.create_undo_entry('CREATE', new_cut)
-                        
-                                self.connect_valid_cuts_to_make_mesh()
-                        else:
-                            self.cut_lines.remove(new_cut)
-                            self.drag_target = None
-                            if self.new:
-                                self.new = False
-
-                
-                #clear the drag and hover
-                self.drag = False
-                self.hover_target = None
-                if self.widget_interaction:
-                    self.widget_interaction = False
-    
-                return {'RUNNING_MODAL'}
-        
-            if event.value == 'PRESS':
-                
-                if not self.hot_key:
-                    
-                    #make sure we have something under there
-                    if self.hover_target:
-                        
-                        #we drag until we release unless we are just selecting
-                        #this initiates 
-                        if self.hover_target.select:
-                            self.drag = True
-                            self.drag_target = self.hover_target
-                            
-                            ###Implied that we are on a cut_line here
-                            #TODO if we have other objects available to use
-                            self.widget_interaction = True
-                            
-                            #self.create_undo_entry('TRANSFORM', self.drag_target)
-                            
-                        #we are just selecting    
-                        else:
-                            self.drag = False
-                            self.drag_target = None
-                            self.widget_interaction = False
-                            
-                            #perhaps this is neeed to crush the widget?
-                            if self.cut_line_widget:
-                                del self.cut_line_widget
-                                self.cut_line_widget = None
-                    
-                        self.hover_target.select = True
-                        self.selected = self.hover_target    
-                        for path in self.cut_paths:
-                            path.select = False
-                            for cut in path.cuts:
-                                if cut != self.hover_target:
-                                    cut.select = False
-                                else:
-                                    path.select = True
-                                    self.selected_path = path
-    
-                    #No active cut line under mouse -> make a new one
-                    #we don't carer about ctrl
-                    elif not self.hover_target and not self.draw:
-                        self.drag = True
-                        
-                        #clear selection (perhaps self.selected.select = False, self.selected = None)
-                        for cut in self.cut_lines:
-                            cut.select = False
-                            
-                        s_color = (settings.stroke_rgb[0],settings.stroke_rgb[1],settings.stroke_rgb[2],1)
-                        h_color = (settings.handle_rgb[0],settings.handle_rgb[1],settings.handle_rgb[2],1)
-                        g_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
-                        v_color = (settings.vert_rgb[0],settings.vert_rgb[1],settings.vert_rgb[2],1)
-    
-                        self.cut_lines.append(ContourCutLine(event.mouse_region_x, event.mouse_region_y,# view,
-                                                             stroke_color = s_color,
-                                                             handle_color = h_color,
-                                                             geom_color = g_color,
-                                                             vert_color = v_color))
-                        self.drag_target = self.cut_lines[-1].tail
-                        self.new = True
-                        self.selected = self.cut_lines[-1]
-                        self.cut_lines[-1].select = True
-                        
-                        #UNDO CODE
-                        #the undo for creation will be in the mouse release
-                    
-                    else:
-                        self.drag = True
-                    
-                    return {'RUNNING_MODAL'}
-                
-                elif self.hot_key and self.selected: #self.hotkey exists.
-                    
-                    self.selected.hit_object(context, self.original_form, method = '3_AXIS_COM')
-                    self.selected.cut_object(context, self.original_form, self.bme)
-                    self.selected.simplify_cross(self.segments)
-                            
-                    self.selected.update_com()
-                    self.align_cut(self.selected, mode='BETWEEN', fine_grain = True)      
-                    self.selected.update_screen_coords(context)
-                            
-                            
-                    self.hot_key = None
-                    self.widget_interaction = False
-                    self.cut_line_widget = None
-                    
-                    self.connect_valid_cuts_to_make_mesh()
-                    return {'RUNNING_MODAL'}
-                
-
-                  
-            return {'RUNNING_MODAL'}
-        return {'RUNNING_MODAL'}
-        #ret_val = retopo_modal(self, context, event)
-        #print('modal ret val')
-        #print(ret_val)
-        #return ret_val
     
     def write_to_cache(self,tool_type):
         global contour_cache
@@ -1605,9 +955,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                         'shifts':fine_shifts,
                                         'int_shifts':int_shifts,
                                         'segments': self.segments}#,
-                                        #'verts':verts,
-                                        #'verts_simple':verts_simple}
-    
+   
     def load_from_cache(self,context, tool_type,clip):
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         if tool_type not in contour_cache:
@@ -2367,6 +1715,23 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             
         ####MODE, UI, DRAWING, and MODAL variables###
+        self.mode = 'LOOP'
+        #'LOOP' or 'GUIDE'
+        
+        self.modal_state = 'WAITING'
+        
+        #Loop and Guide Mode
+        #'WAITING'
+        #'NAVIGATING'
+        
+        #Loop Mode
+        #'WIDGET TRANSFORM'
+        #'CUTTING'
+        #'HOTKEY TRANSFORM'
+        
+        #Guide Mode
+        #'DRAWING'
+        
         
         #is the user moving an existing entity or a new one.
         self.new = False 
@@ -2377,6 +1742,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         #what is the user dragging..a cutline, a handle etc
         self.drag_target = None
+        
+        #potential item for snapping in 
+        self.snap = None
+        
         #what is the mouse over top of currently
         self.hover_target = None
         #keep track of selected cut_line and path
