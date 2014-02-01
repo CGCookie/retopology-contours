@@ -538,6 +538,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         region = context.region  
         rv3d = context.space_data.region_3d
         
+        #update the individual rings
+        for cut in self.cuts:
+            cut.update_visibility(context, ob)
+        
+        #update connecting edges between ring
         if context.space_data.use_occlude_geometry:
             rv3d = context.space_data.region_3d
             eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
@@ -3586,10 +3591,16 @@ class CutLineManipulatorWidget(object):
                             self.cut_line.vec_x = quat * self.vec_x.copy()
                             self.cut_line.vec_y = quat * self.vec_y.copy()
                             
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_a_3d, new_com, inter_no, mode = 'FIRST')[0]
-                            snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                            self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                            self.cut_line.seed_face_index = snap[2]
+                            intersect = contour_utilities.intersect_path_plane(self.path_a_3d, new_com, inter_no, mode = 'FIRST')
+                            
+                            if intersect:
+                                proposed_point = intersect[0]
+                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                                self.cut_line.seed_face_index = snap[2]
+                            
+                            else:
+                                self.cancel_transform()
                             print('DID WE DO IT RIGHT?')
                             
                             return {'RECUT'}
@@ -3739,7 +3750,7 @@ class CutLineManipulatorWidget(object):
                     
                     self.cut_line.vec_x = new_x
                     self.cut_line.vec_y = new_y
-                    self.cut_line.plane_no = new_no    
+                    self.cut_line.plane_no = new_no
                     return {'RECUT'}
         
         #
