@@ -896,8 +896,32 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         if self.mode == 'GUIDE':
             
             if self.modal_state == 'WAITING':
+                #NAVIGATION KEYS
+                if (event.type in {'MIDDLEMOUSE', 
+                                    'NUMPAD_2', 
+                                    'NUMPAD_4', 
+                                    'NUMPAD_6',
+                                    'NUMPAD_8', 
+                                    'NUMPAD_1', 
+                                    'NUMPAD_3', 
+                                    'NUMPAD_5', 
+                                    'NUMPAD_7',
+                                    'NUMPAD_9'} and event.value == 'PRESS'):
+                    
+                    self.modal_state = 'NAVIGATING'
+                    self.post_update = True
+                    context.area.header_text_set(text = 'NAVIGATING')
+
+                    return {'PASS_THROUGH'}
                 
-                if event.type == 'TAB' and event.value == 'PRESS':
+                #ZOOM KEYS
+                elif (event.type in  {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and not 
+                        (event.ctrl or event.shift)):
+                    
+                    self.post_update = True
+                    return{'PASS_THROUGH'}
+                
+                elif event.type == 'TAB' and event.value == 'PRESS':
                     self.mode = 'LOOP'
                     context.area.header_text_set(text = 'LOOP MODE: WAITING')
                     return {'RUNNING_MODAL'}
@@ -912,7 +936,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #self.selected_path = None
                     #self.snap_target = None
                     context.area.header_text_set(text = 'FORCE NEW')
-                
+                    return {'RUNNING_MODAL'}
                 #MOUSEMOVE
                     #assess hovering
                         #highlight appropriate things
@@ -924,7 +948,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                 elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
                     #if hover:
-                        #selected_path
+                        #self.selected_path
                     #else:
                     self.modal_state = 'DRAWING'
                     context.area.header_text_set(text = 'DRAWING')
@@ -937,6 +961,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.selcted_path = None
                         self.modal_state = 'WAITING'
                         context.area.header_text_set(text = 'GUIDE MODE: WAITING')
+                        return {'RUNNING_MODAL'}
                     
                     elif (event.type in {'LEFTARROW', 'RIGHTARROW'} and 
                           event.value == 'PRESS'):
@@ -963,21 +988,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             #let the user know the path is locked
                             #header message set
                         context.area.header_text_set(text = 'SEGMENTS')
+                        return {'RUNNING_MODAL'}
                    
                     elif event.type == 'S' and event.value == 'PRESS':
                         if event.shift:
                             #path.smooth_normals
                             context.area.header_text_set(text = 'SMOOTH NORMALS')
                             
-                        if event.ctrl:
+                        elif event.ctrl:
                             #smooth CoM path
                             context.area.header_text_set(text = 'SMOOTH CoM')
                         
-                        if event.alt:
+                        elif event.alt:
                             #path.interpolate_endpoints
                             context.area.header_text_set(text = 'INTERPOLATE ENDPOINTS')
                     
-                    return{'RUNNING_MODAL'}
+                        return{'RUNNING_MODAL'}
                         
             if self.modal_state == 'DRAWING':
                 
