@@ -690,27 +690,52 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         if self.mode == 'LOOP':
             
-            if self.state == 'NAVIGATING':
-                #NAVIGATION KEYS. Release:
-                    #self.state = 'WAITING'
+            if self.modal_state == 'NAVIGATING':
+                print(event.type + "  " + event.value)
+                
+                if (event.type in {'MOUSEMOVE',
+                                   'MIDDLEMOUSE', 
+                                    'NUMPAD_2', 
+                                    'NUMPAD_4', 
+                                    'NUMPAD_6',
+                                    'NUMPAD_8', 
+                                    'NUMPAD_1', 
+                                    'NUMPAD_3', 
+                                    'NUMPAD_5', 
+                                    'NUMPAD_7',
+                                    'NUMPAD_9'} and event.value == 'RELEASE'):
+                
+                    self.modal_state = 'WAITING'
+                    self.post_update = True
+                    context.area.header_text_set(text = 'WAITING')    
+                    return {'PASS_THROUGH'}
+            
+            
+            if self.modal_state == 'WAITING':
+                
+                if (event.type in {'ESC','RIGHT_MOUSE'} and 
+                    event.value == 'PRESS'):
                     
-                return {'PASS_THROUGH'}
-            
-            
-            if self.state == 'WAITING':
+                    context.area.header_text_set()
+                    contour_utilities.callback_cleanup(self,context)
+                    return {'CANCELLED'}
                 
-                #ESCAPE, RIGHTMOUSE press,
-                    #return ['CANCELLED'}
+                elif (event.type == 'TAB' and 
+                      event.value == 'PRESS'):
+                    
+                    self.mode = 'GUIDE'
+                    self.selected = None
+                    context.area.header_text_set(text = 'GUIDE MODE')
                 
-                #ENTER
-                    #put mesh data into bmesh
-                    #clean up stuff
-                    #return {'FINISHED'}
+                elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
+                    event.value == 'PRESS'):
+                    
+                    context.area.header_text_set()
+                    contour_utilities.callback_cleanup(self,context)
+
+                    return {'FINISHED'}
                 
-                #TAB
-                    #self.mode = 'GUIDE'
-                    #self.selected = None
-                    #self.selected_segment remains the same
+
                     
                 #MOUSEMOVE
                     #self.hover
@@ -719,19 +744,52 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #self.snap
                         #highlight important item
                 
-                #C
-                    #center cursor
-                    #return {'RUNNING MODAL'}
+                elif (event.type == 'C' and
+                      event.value == 'PRESS'):
+                    
+                    bpy.ops.view3d.view_center_cursor()
+                    return {'RUNNING MODAL'}
                 
                 #NAVIGATION KEYS
-                    #post update
-                    #self.nagivating = True
-                    #return {'PASS_THROUGH'}
+                elif (event.type in {'MIDDLEMOUSE', 
+                                    'NUMPAD_2', 
+                                    'NUMPAD_4', 
+                                    'NUMPAD_6',
+                                    'NUMPAD_8', 
+                                    'NUMPAD_1', 
+                                    'NUMPAD_3', 
+                                    'NUMPAD_5', 
+                                    'NUMPAD_7',
+                                    'NUMPAD_9'} and event.value == 'PRESS'):
+                    
+                    self.modal_state = 'NAVIGATING'
+                    self.post_update = True
+                    context.area.header_text_set(text = 'NAVIGATING')
+
+                    return {'PASS_THROUGH'}
                 
-                #if selected:
+                #ZOOM KEYS
+                elif (event.type in  {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and not 
+                        (event.ctrl or event.shift)):
+                    
+                    self.post_update = True
+                    return{'PASS_THROUGH'}
+                
+                if self.selected:
                     #G -> HOTKEY
+                    if event.type == 'G' and event.value == 'PRESS':
+                        self.modal_state = 'HOTKEY_TRANSFORM'
+                        self.hot_key = 'G'
+                        return {'RUNNING MODAL'}
                     #R -> HOTKEY
+                    if event.type == 'R' and event.value == 'PRESS':
+                        self.modal_state = 'HOTKEY_TRANSFORM'
+                        self.hot_key = 'R'
+                        return {'RUNNING MODAL'}
                     #X, DEL -> DELETE
+                    elif event.type == 'X' and event.value == 'PRESS':
+                        self.selected = None
+                        context.area.header_text_set(text = 'DELETE')
                     #S -> CURSOR TO SELECTED
                     #LEFT ARROW -? SHIFT
                     #RIGHT ARROW -> SHIFT
@@ -740,54 +798,95 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #if hover == selected:
                         #LEFTCLICK -> WIDGET
                         
-                #LEFTCLICK:
+                if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
                     #if hover:
                         #select
                         
                     #else:
                         #NewCut
-                        #self.state = 'CUTTING'
-                        #header message set
+                    self.modal_state = 'CUTTING'
+                    context.area.header_text_set(text = 'CUTTING')
+                    return {'RUNNING_MODAL'}
+                        
                 return {'RUNNING_MODAL'}
                         
-            elif self.state == 'CUTTING':
+            elif self.modal_state == 'CUTTING':
                 
-                #MOUSEMOVE
+                if event.type == 'MOUSEMOVE':
+                    #pass mouse coords to widget
+                    x = str(event.mouse_region_x)
+                    y = str(event.mouse_region_y)
+                    message = 'CUTTING: X: ' +  x + '  Y:  ' +  y
+                    context.area.header_text_set(text = message)
+                    return {'RUNNING_MODAL'}
                 
-                #LEFTMOUSE Release
+                elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                    
                     #new cut
                     #new guide?
                     #assess snap/extend/join
                     
-                    #self.selected
-                    #self.state == 'WAITING'
-                    
-                return {'RUNNING_MODAL'}
+                    self.selected = 1 #placeholder to allow hotkey testing
+                    self.modal_state = 'WAITING'
+                    context.area.header_text_set(text = 'LOOP MODE: WAITING')
+                    return {'RUNNING_MODAL'}
             
             
-            elif self.state == 'HOTKEY_TRANSFORM':
+            elif self.modal_state == 'HOTKEY_TRANSFORM':
+                if self.hot_key == 'G':
+                    action = 'Grab'
+                elif self.hot_key == 'R':
+                    action = 'Rotate'
                 
-                #MOUSEMOVE
+                if event.type == 'MOUSEMOVE':
+                    #pass mouse coords to widget
+                    x = str(event.mouse_region_x)
+                    y = str(event.mouse_region_y)
+                    message = action + ": X: " +  x + '  Y:  ' +  y
+                    context.area.header_text_set(text = message)
+                    return {'RUNNING_MODAL'}
+                    
+                
                     #widget.user_interaction
                     
                 #LEFTMOUSE event.value == 'PRESS':#RET, ENTER
+                if (event.type in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER'} and
+                    event.value == 'PRESS'):
                     #confirm transform
                     #recut, align, visibility?, and update the segment
-                    #self.state = 'WAITING'
+                    self.modal_state = 'WAITING'
+                    context.area.header_text_set(text = 'LOOP MODE: WAITING')
+                    return {'RUNNING_MODAL'}
                 
-                #ESC, RMB:
+                if (event.type in {'ESC', 'RIGHTMOUSE'} and
+                    event.value == 'PRESS'):
                     #widget.cancel_transform()
-                    #self.state = 'WAITING'
+                    context.area.header_text_set(text = 'LOOP MODE: WAITING')
+                    self.modal_state = 'WAITING'
+                    return {'RUNNING_MODAL'}
                 
-                return {'RUNNING_MODAL'}
             
-            elif self.state == 'WIDGET_TRANSFORM':
+            elif self.modal_state == 'WIDGET_TRANSFORM':
                 
                 #MOUSEMOVE
-                
+                if event.type == 'MOUSEMOVE':
+                    if event.shift:
+                        action = 'FINE WIDGET'
+                    else:
+                        action = 'WIDGET'
+                        
+                    x = str(event.mouse_region_x)
+                    y = str(event.mouse_region_y)
+                    message = action + ": X: " +  x + '  Y:  ' +  y
+                    context.area.header_text_set(text = message)
+                    return {'RUNNING_MODAL'}
+               
+                elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                 #LEFTMOUSE event.value == 'RELEASE'
                     #Do all the necessary recutting, aligning, path stuff
-                    #self.state = 'WAITING'
+                    self.modal_state = 'WAITING'
+                    context.area.header_text_set(text = 'LOOP MODE: WAITING')
+                    return {'RUNNING_MODAL'}
                     
                 return {'RUNNING_MODAL'}
                 
@@ -796,19 +895,24 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         if self.mode == 'GUIDE':
             
-            if self.state == 'WAITING':
-                #TAB:
-                    #self.mode = 'LOOP'
+            if self.modal_state == 'WAITING':
                 
+                if event.type == 'TAB' and event.value == 'PRESS':
+                    self.mode = 'LOOP'
+                    context.area.header_text_set(text = 'LOOP MODE: WAITING')
+                    return {'RUNNING_MODAL'}
                 
-                #C
+                elif event.type == 'C' and event.value == 'PRESS':
                     #center cursor
+                    bpy.ops.view3d.view_center_cursor()
+                    return {'RUNNING_MODAL'}
                     
-                #N
-                    #self.force_new = True
+                elif event.type == 'N' and event.value == 'PRESS':
+                    self.force_new = True
                     #self.selected_path = None
                     #self.snap_target = None
-                    
+                    context.area.header_text_set(text = 'FORCE NEW')
+                
                 #MOUSEMOVE
                     #assess hovering
                         #highlight appropriate things
@@ -818,24 +922,37 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         #self.snap_target ==
                         #highlight/draw appropriate things
                     
-                #LEFT CLICK:
+                elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
                     #if hover:
                         #selected_path
                     #else:
-                        #self.state = 'DRAWING'
-                        
-                #if selected:
-                    
-                    
-                    #X, DEL::
+                    self.modal_state = 'DRAWING'
+                    context.area.header_text_set(text = 'DRAWING')
+                    return {'RUNNING_MODAL'}    
+                
+                if self.selected_path:
+
+                    if event.value in {'X', 'DEL'} and event.value == 'PRESS':
                         #delete the path
-                        #selcted_path = None
-                        #self.state = 'WAITING'
+                        self.selcted_path = None
+                        self.modal_state = 'WAITING'
+                        context.area.header_text_set(text = 'GUIDE MODE: WAITING')
                     
-                    #LEFT ARROW, RIGHT ARROW:
+                    elif (event.type in {'LEFTARROW', 'RIGHTARROW'} and 
+                          event.value == 'PRESS'):
+                        
+                        if event.type == 'LEFTARROW':
+                            direction = 'cw'
+                        else:
+                            direction = 'ccw'
+                            
                         #shift entire segment
-                    
-                    #SCROLL UP/DWN + CTRL, + or - key
+                        context.area.header_text_set(text = 'GUIDE MODE: Shift ' + direction)
+                        return {'RUNNING_MODAL'}
+                        
+                    elif ((event.type in {'WHEEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
+                          (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
+                          
                         #if not selected_path.lock:
                             #path.segments
                             #distribute cut points
@@ -845,87 +962,53 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         #else:
                             #let the user know the path is locked
                             #header message set
+                        context.area.header_text_set(text = 'SEGMENTS')
                    
-                    #S -> Smoothing:
-                        #SHIFT:
+                    elif event.type == 'S' and event.value == 'PRESS':
+                        if event.shift:
                             #path.smooth_normals
+                            context.area.header_text_set(text = 'SMOOTH NORMALS')
+                            
+                        if event.ctrl:
+                            #smooth CoM path
+                            context.area.header_text_set(text = 'SMOOTH CoM')
                         
-                        #CTRL:
-                            #path.average_normals
-                        
-                        #ALT:
+                        if event.alt:
                             #path.interpolate_endpoints
+                            context.area.header_text_set(text = 'INTERPOLATE ENDPOINTS')
                     
                     return{'RUNNING_MODAL'}
                         
-            if self.state == 'DRAWING':
+            if self.modal_state == 'DRAWING':
                 
-                #MOUSEMOVE
-                    #append verts
+                if event.type == 'MOUSEMOVE':
+                    action = 'GUIDE MODE: Drawing'
+                    x = str(event.mouse_region_x)
+                    y = str(event.mouse_region_y)
+                    message = action + ": X: " +  x + '  Y:  ' +  y
+                    context.area.header_text_set(text = message)
+                    return {'RUNNING_MODAL'}
                     
-                #LEFTMOUSE RELSEASE:
+                if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     #raycast the draw points
                     #make a new path
-                    #cuts
-                    #etc
-                    #etc
+                    #put cuts on the path
+                    #push the mesh
+                    #update the visibility
                     
-                    #self.selected_path
+                    
+                    self.selected_path = 1
                     #update visibility
                     #etc, etc, etc
                     
-                    #self.state == 'WAITING'
-                
-                return{'RUNNING_MODAL'}
+                    self.modal_state = 'WAITING'
+                    context.area.header_text_set(text = 'GUIDE MODE: WAITING')
+                    return{'RUNNING_MODAL'}
                 
                 
             return{'RUNNING_MODAL'}
             
-            
-            
-            #nothing is selected
-                #analyze mouse movement for hovering
-            
-            
-            #hover = True
-            
-            #hover = False
-            
-            #left click to start a new cut
-            
-            #left click to interact with widget
-            
-            #x to delete segment
-            
-            #g or r to hotkey
-            
-            #c center cursor
-            
-            #s cursor to loop
-            
-            # <- and -> to shift
-            
-            #A to align
-                #A - align between
-                #ctrl A - align ahead
-                #shift A - align previus
-             
-            #enter guide mode
-            
-            
-  
-        
-        
-        #cutting
-        #navigating
-        #hovering
-        #transforming
-        #serlecting
-        
-        
-        
-        
-    
+
     def write_to_cache(self,tool_type):
         global contour_cache
         
