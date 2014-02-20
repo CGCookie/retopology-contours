@@ -1093,7 +1093,7 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
         segments - number of segments to divide path into
         shift - for cyclic verts chains, shifting the verts along 
                 the loop can provide better alignment with previous
-                loops.  This should be 0 to 1 representing a percentage of segment length.
+                loops.  This should be -1 to 1 representing a percentage of segment length.
                 Eg, a shift of .5 with 8 segments will shift the verts 1/16th of the loop length
                 
     return
@@ -1111,7 +1111,7 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
     #determine if cyclic or not, first vert same as last vert
     if 0 in edges[-1]:
         cyclic = True
-        #print('cyclic vert chain...oh well doesnt matter')
+        
     else:
         cyclic = False
         #zero out the shift in case the vert chain insn't cyclic
@@ -1121,7 +1121,7 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
    
     #calc_length
     arch_len = 0
-    cumulative_lengths = [0]#this is a list of the run sums
+    cumulative_lengths = [0]#TODO, make this the right size and dont append
     for i in range(0,len(verts)-1):
         v0 = verts[i]
         v1 = verts[i+1]
@@ -1130,9 +1130,6 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
         cumulative_lengths.append(arch_len)
         
     if cyclic:
-        #print('cyclic check?')
-        #print(len(cumulative_lengths))
-        #print(len(verts))
         v0 = verts[-1]
         v1 = verts[0]
         V = v1-v0
@@ -1808,7 +1805,10 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
             a known face which intersects the cutplane.
         pt_stop:  point on the plane defined to stop cutting.  World Coords
                 (type Mathutils.Vector)
-        normal_stop: normal direction of the plane defined to stop cutting
+        normal_stop: normal direction of the plane defined to stop cutting.  World COORD
+        
+    Return:
+        list[Vector()]  in local coords
     '''
     
     times = []
@@ -1821,6 +1821,7 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
     normal_stop_local =  imx.to_3x3() * normal_stop
 
     verts = {}
+    plane_hit = {}
     
     seeds = []
     prev_eds = []
@@ -1833,10 +1834,10 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
         B = ed.verts[1].co
         result = cross_edge(A, B, pt, no)
         
-        if result[0] != 'CROSS':
+        if result[0] and result[0] != 'CROSS':
             print('got an anomoly')
             print(result[0])
-            
+
         #here we are only tesing the good cases
         if result[0] == 'CROSS':
             #create a list to hold the verst we find from this seed
@@ -1845,29 +1846,16 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
             potential_faces = [face for face in ed.link_faces if face.index != seed]
             if len(potential_faces):
                 f = potential_faces[0]
-                
-                
-                #we will keep track of our growing vert chains
-                #based on the face they start with
-                direct = result[1] - pt
-                dir_to_plane = pt_stop_local - pt
-                direct.normalize()
-                dir_to_plane.normalize()
-                
-                right_direction = direct.dot(dir_to_plane) > 0
-                
-                #make sure we are pointed at the end point
-                #granted, if the surface is really loopy this
+                seeds.append(f)
+                verts[f.index] = [pt, result[1]]
 
-                
-                print(right_direction)
-                
-                if right_direction:
-                    seeds.append(f)
-                    verts[f.index] = [pt, result[1]]
-                  
+    #TODO:  debug and return values?
+    if len(seeds) == 0:
+        print('failure to find a direction to start with')
+        return None
+    
     total_tests = 0
-    for initial_element in seeds: #this will go both ways if they dont meet up.
+    for initial_element in seeds:
         element_tests = 0
         element = initial_element
         stop_test = None
@@ -1888,13 +1876,14 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
                 cross = cross_edge(A, B, pt_stop_local, normal_stop_local)
                 stop_test = cross[0]
                 if stop_test:
+                    prev_eds.pop()  #will need to retest this edge in case we come around a full loop
                     verts[initial_element.index].pop()
                     verts[initial_element.index].append(cross[1])
-            
-        if stop_test:
-            break
-        
+                    plane_hit[initial_element.index] = True
                     
+            else:
+                plane_hit[initial_element.index] = False
+      
         if total_tests-2 > max_tests:
             print('maxed out tests')
                    
@@ -1902,25 +1891,39 @@ def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop
                         
     
     #this iterates the keys in verts
-    #i have kept the keys consistent for
-    #verts
     if len(verts):
+        plane_chains = [verts[key] for key in verts if len(verts[key]) >= 2 and plane_hit[key]]
+        loose_chains = [verts[key] for key in verts if len(verts[key]) >= 2 and not plane_hit[key]]
         
-        chains = [verts[key] for key in verts if len(verts[key]) >= 2]
-        if len(chains):
-            sizes = [len(chain) for chain in chains]
-            print(sizes)
-            best = min(sizes)
-            ind = sizes.index(best)
+        print('%i chains hit the plane' % len(plane_chains))
+        print('%i chains did not hit the plane' % len(loose_chains))
         
-            return chains[ind]
-        else:
-            print('failure no chains > 2 verts')
-            return []
-                    
+        
+        #loose chains only
+        if len(plane_chains) == 0 and len(loose_chains):
+            if len(loose_chains) == 1:
+                print('one loose chain')
+                return loose_chains[0]
+            else:
+                print('best loose chain')
+                return min(loose_chains, key=lambda x: distance_point_to_plane(x[-1], pt_stop_local, normal_stop_local))
+                
+                
+        if len(plane_chains) == 1:
+            print('single plane chain')
+            return plane_chains[0]
+        
+        
+        if len(plane_chains) > 1:
+            print('best plane chain')
+            return min(plane_chains, key=lambda x: get_path_length(x))
+        #if one of each:
+        #return the one what hit the plane
+        #plane chains only
+        #pick the shortest one    
     else:
         print('failed to find a cut that hit the plane...perhaps we dont intersect that plane')
-        return []
+        return None
 
 def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed_index_b, max_tests = 10000, debug = True):
     '''
@@ -1973,10 +1976,10 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         result = cross_edge(A, B, pt, no)
         
         
-        if result[0] != 'CROSS':
+        if result[0] and result[0] != 'CROSS':
             print('got an anomoly')
             print(result[0])
-            
+            print('that is the result ^')
         #here we are only tesing the good cases
         if result[0] == 'CROSS':
             #create a list to hold the verst we find from this seed
@@ -2068,7 +2071,7 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         print('failed to find connection in either direction...perhaps points arent coplanar')
         return []
             
-def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
+def cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 10000, debug = True):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
     space.
@@ -2078,35 +2081,27 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         mx:   World matrix (type Mathutils.Matrix)
         point: any point on the cut plane in world coords (type Mathutils.Vector)
         normal:  plane normal direction (type Mathutisl.Vector)
-        seed: face index, typically achieved by raycast
+        seed_index: face index, typically achieved by raycast
+        direction: Vector which the cut should start traveling.
         exclude_edges: list of edge indices (usually already tested from previous iterations)
     '''
     
     times = []
     times.append(time.time())
-    #bme = bmesh.new()
-    #bme.from_mesh(me)
-    #bme.normal_update()
-    
-    #if debug:
-        #n = len(times)
-        #times.append(time.time())
-        #print('succesfully created bmesh in %f sec' % (times[n]-times[n-1]))
+
     verts =[]
     eds = []
     
     #convert point and normal into local coords
-    #in the mesh into world space.This saves 2*(Nverts -1) matrix multiplications
     imx = mx.inverted()
     pt = imx * point
     no = imx.to_3x3() * normal  #local normal
-    
+
     #edge_mapping = {}  #perhaps we should use bmesh becaus it stores the great cycles..answer yup
     
     #first initial search around seeded face.
     #if none, we may go back to brute force
     #but prolly not :-)
-    seed_edge = None
     seed_search = 0
     prev_eds = []
     seeds =[]
@@ -2123,8 +2118,8 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         
         #we should never get to this point because we are pre
         #triangulating the ngons before this function in the
-        #final work flow but this leaves not chance and keeps
-        #options to reuse this for later.        
+        #final work flow but this leaves no chance and keeps
+        #options to reuse this in later work      
         if len(ngons):
             new_geom = bmesh.ops.triangulate(bme, faces = ngons, use_beauty = True)
             new_faces = new_geom['faces']
@@ -2132,17 +2127,12 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
             #now we must find a new seed index since we have added new geometry
             for f in new_faces:
                 if point_in_tri(pt, f.verts[0].co, f.verts[1].co, f.verts[2].co):
-                    print('found the point inthe tri')
+                    print('found the point int he tri')
                     if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .001:
                         seed_index = f.index
                         print('found a new index to start with')
                         break
-            
-            
-    #if len(bme.faces[seed_index].edges) > 4:
-        #print('no NGon Support for initial seed yet! try again')
-        #return None
-    
+
     for ed in bme.faces[seed_index].edges:
         seed_search += 1        
         prev_eds.append(ed.index)
@@ -2151,30 +2141,27 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         B = ed.verts[1].co
         result = cross_edge(A, B, pt, no)
         if result[0] == 'CROSS':
-            #add the point, add the mapping move forward
-            #edge_mapping[len(verts)] = [f.index for f in ed.link_faces]
-            verts.append(result[1])
             potential_faces = [face for face in ed.link_faces if face.index != seed_index]
+                
             if len(potential_faces):
-                seeds.append(potential_faces[0])
-                seed_edge = True
-            else:
-                seed_edge = False
-        
-    if not seed_edge:
-        print('failed to find a good face to start with, cancelling until your programmer gets smarter')
-        return None    
+                f = potential_faces[0]
+                verts.append(result[1])
+                seeds.append(f)
+            
+    if not len(seeds):
+        print('cancelling until your programmer gets smarter')
+        return (None, None)
         
     #we have found one edge that crosses, now, baring any terrible disconnections in the mesh,
     #we traverse through the link faces, wandering our way through....removing edges from our list
-
     total_tests = 0
     
-    #by the way we append the verts in the first face...we find A then B then start at A... so there is a little  reverse in teh vert order at the middle.
+    #We find A then B then start at A... so there is a
+    #reverse in the vert order at the middle.
     verts.reverse()
     for element in seeds: #this will go both ways if they dont meet up.
         element_tests = 0
-        while element and total_tests < 10000:
+        while element and total_tests < max_tests:
             total_tests += 1
             element_tests += 1
             #first, we know that this face is not coplanar..that's good
@@ -2225,9 +2212,7 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         seed_1_verts = verts[:len(verts)-(element_tests)] #yikes maybe this index math is right
         seed_2_verts = verts[len(verts)-(element_tests):]
         seed_2_verts.reverse()
-        
         seed_2_verts.extend(seed_1_verts)
-        
         
         for i in range(0,len(seed_1_verts)-1):
             eds.append((i,i+1))
@@ -2239,18 +2224,138 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
     if len(verts):
-        #new_me = bpy.data.meshes.new('Cross Section')
-        #new_me.from_pydata(verts,eds,[])
-        
-    
-        #if debug:
-            #n = len(times)
-            #times.append(time.time())
-            #print('Total Time: %f sec' % (times[-1]-times[0]))
             
         return (verts, eds)
     else:
-        return None
+        return (None, None)
+
+def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, max_tests = 10000, debug = True):
+    '''
+    Takes a mesh and associated world matrix of the object and returns a cross secion in local
+    space.
+    
+    Args:
+        bme: Blender BMesh
+        mx:   World matrix (type Mathutils.Matrix)
+        point: any point on the cut plane in world coords (type Mathutils.Vector)
+        normal:  plane normal direction (type Mathutisl.Vector)
+        seed_index: face index, typically achieved by raycast
+        direction: Vector which the cut should start traveling.
+        exclude_edges: list of edge indices (usually already tested from previous iterations)
+    '''
+    
+    times = []
+    times.append(time.time())
+
+    verts =[]
+    eds = []
+    
+    #convert point and normal directoin into local coords
+    imx = mx.inverted()
+    pt = imx * point
+    no = imx.to_3x3() * normal  #local normal
+    direct = imx.to_3x3() * direction
+    direct.normalize()
+    
+    #edge_mapping = {}  #perhaps we should use bmesh becaus it stores the great cycles..answer yup
+    
+    seed_search = 0
+    prev_eds = []
+    seeds =[]
+    
+    if seed_index > len(bme.faces) - 1:
+        ngons = []
+        for f in bme.faces:
+            if len(f.verts) >  4:
+                ngons.append(f)
+        if len(ngons):
+            new_geom = bmesh.ops.triangulate(bme, faces = ngons, use_beauty = True)
+            new_faces = new_geom['faces']
+            
+            #now we must find a new seed index since we have added new geometry
+            for f in new_faces:
+                if point_in_tri(pt, f.verts[0].co, f.verts[1].co, f.verts[2].co):
+                    print('found the point in the tri')
+                    if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .001:
+                        seed_index = f.index
+                        print('found a new index to start with')
+                        break
+                    
+    for ed in bme.faces[seed_index].edges:
+        seed_search += 1   
+        prev_eds.append(ed.index)
+        
+        A = ed.verts[0].co
+        B = ed.verts[1].co
+        result = cross_edge(A, B, pt, no)
+        if result[0] == 'CROSS':
+            potential_faces = [face for face in ed.link_faces if face.index != seed_index]
+                
+            if len(potential_faces):
+                print('how many potential faces can there be?  There should only be 1')
+                print(len(potential_faces))
+                f = potential_faces[0]
+                
+                headed = f.calc_center_bounds() - pt
+                headed_2 = f.calc_center_bounds() - point
+                headed.normalize()
+                headed_2.normalize()
+                
+                if direct.dot(headed) > 0:
+                    print('local coords direciton')
+                    verts.append(result[1])
+                    seeds.append(f)
+                elif direct.dot(headed_2) > 0:
+                    print('world coords direciton')
+                    #verts.append(result[1])
+                    #seeds.append(f)
+ 
+    if not len(seeds) or len(seeds) > 1:
+        print('the initial seeds didnt go in the right direction')
+        print('or there were more seeds than there were supposed to be')
+        print('things might be slow until your programmer gets smarter')
+        
+        verts, edges = cross_section_seed(bme, mx, point, normal, seed_index)
+        return verts, edges
+    
+
+    #we have found one edge that crosses, now, baring any terrible disconnections in the mesh,
+    #we traverse through the link faces, wandering our way through....removing edges from our list
+    total_tests = 0
+    
+    element = seeds[0]
+    while element and total_tests < max_tests:
+        total_tests += 1
+        #first, we know that this face is not coplanar..that's good
+        #if new_face.no.cross(no) == 0:
+            #print('coplanar face, stopping calcs until your programmer gets smarter')
+            #return None
+        if type(element) == bmesh.types.BMFace:
+            element = face_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
+        
+        elif type(element) == bmesh.types.BMVert:
+            element = vert_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
+
+    print('%i vertices found so far' % len(verts))
+        
+    print('walked around cross section in %i tests' % total_tests)
+    print('found this many vertices: %i' % len(verts))       
+
+    #verts are created in order
+    for i in range(0,len(verts)-1):
+        eds.append((i,i+1))
+        
+    if debug:
+        n = len(times)
+        times.append(time.time())
+        print('calced connectivity %f sec' % (times[n]-times[n-1]))
+        
+    if len(verts):
+            
+        return (verts, eds)
+    else:
+        return (None, None)
+    
     
 def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
     '''
