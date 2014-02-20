@@ -669,7 +669,173 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         else:
             return False
     
+    def hover_loop_mode(self,context, settings, event):
+        '''
+        
+        '''
+        #identify hover target for highlighting
+        if self.cut_paths != []:
+            
+            new_target = False
+            target_at_all = False
+            prospective_targets = []
+            
+            for path in self.cut_paths:
+                for c_cut in path.cuts:
+                    if not c_cut.select:
+                        c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1) 
+                    
+                    h_target = c_cut.active_element(context,event.mouse_region_x,event.mouse_region_y)
+                    if h_target:
+                        c_cut.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+                        target_at_all = True
+                        new_target = h_target != self.hover_target
+                        if new_target:
+                            prospective_targets.append(h_target) #TODO: sort priority
+                            self.hover_target = h_target
+                            if self.hover_target.desc == 'CUT_LINE':
+                                ind = path.cuts.index(self.hover_target)
+                                ahead = ind + 1
+                                behind = ind - 1
+                            
+                                if ahead < len(path.cuts):
+                                    a_line = path.cuts[ahead]
+                                else:
+                                    a_line = None
+                            
+                                if behind > - 1:
+                                    b_line = path.cuts[behind]
+                                else:
+                                    b_line = None
+                                        
+
+                                if self.hover_target.select:    
+                                    self.cut_line_widget = CutLineManipulatorWidget(context, 
+                                                                                    settings,
+                                                                                    self.original_form, self.bme,
+                                                                                    self.hover_target, 
+                                                                                    event.mouse_region_x,
+                                                                                    event.mouse_region_y,
+                                                                                    cut_line_a = a_line, 
+                                                                                    cut_line_b = b_line)
+                                    self.cut_line_widget.derive_screen(context)
+                                
+                                else:
+                                    self.cut_line_widget = None
+                            
+                        else:
+                            if self.cut_line_widget:
+                                self.cut_line_widget.x = event.mouse_region_x
+                                self.cut_line_widget.y = event.mouse_region_y
+                                self.cut_line_widget.derive_screen(context)
+                    #elif not c_cut.select:
+                        #c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)          
+            if not target_at_all:
+                self.hover_target = None
+                self.cut_line_widget = None
+                context.area.header_text_set(self.header_message)
+                
+    def new_path_from_draw(self,context,settings):
+        '''
+        package all the steps needed to make a new path
+        TODO: What if errors?
+        '''
+        path = ContourCutSeries(context, self.draw_cache,
+                                    cull_factor = settings.cull_factor, 
+                                    smooth_factor = settings.smooth_factor,
+                                    feature_factor = settings.feature_factor)
+        
+        
+        path.ray_cast_path(context, self.original_form)
+        if self.existing_loops != []:
+            for eloop in self.existing_loops:
+                used = path.snap_end_to_existing(eloop)
+                if used:
+                    break
+                
+        path.find_knots()
+        path.smooth_path(context, ob = self.original_form)
+        path.create_cut_nodes(context)
+        path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
+        path.cuts_on_path(context, self.original_form, self.bme)
+        path.connect_cuts_to_make_mesh(self.original_form)
+        path.update_visibility(context, self.original_form)
+        self.cut_paths.append(path)
+
+        return path
     
+    def click_new_cut(self,context, settings, event):
+        
+
+            
+        s_color = (settings.stroke_rgb[0],settings.stroke_rgb[1],settings.stroke_rgb[2],1)
+        h_color = (settings.handle_rgb[0],settings.handle_rgb[1],settings.handle_rgb[2],1)
+        g_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
+        v_color = (settings.vert_rgb[0],settings.vert_rgb[1],settings.vert_rgb[2],1)
+
+        new_cut = ContourCutLine(event.mouse_region_x, event.mouse_region_y,
+                                             stroke_color = s_color,
+                                             handle_color = h_color,
+                                             geom_color = g_color,
+                                             vert_color = v_color)
+        
+        #this holds on to loose cuts for drawing until they can be placed
+        self.cut_lines.append(new_cut)
+        
+        return new_cut
+    
+    def release_place_cut(self,context,settings, event):
+        self.selected.tail.x = event.mouse_region_x
+        self.selected.tail.y = event.mouse_region_y
+        
+        
+        #hit the mesh for the first time
+        hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
+        
+        if hit:
+            
+            self.selected.cut_object(context, self.original_form, self.bme)
+            self.selected.simplify_cross(self.segments)
+            self.selected.update_com()
+            self.selected.update_screen_coords(context)
+            
+            
+            self.selected.head = None
+            self.selected.tail = None
+            
+            
+            if self.cut_paths != []:
+                inserted = False
+                for path in self.cut_paths:
+                    if path.insert_new_cut(context, self.original_form, self.bme, self.selected):
+                        #the cut belongs to the series now
+                        inserted = True
+                        self.cut_lines.remove(self.selected)
+                        path.connect_cuts_to_make_mesh(self.original_form)
+                        path.update_visibility(context, self.original_form)
+                        path.lock = True
+                        
+            if self.cut_paths == [] or not inserted:
+                #create a blank segment
+                path = ContourCutSeries(context, [],
+                                cull_factor = settings.cull_factor, 
+                                smooth_factor = settings.smooth_factor,
+                                feature_factor = settings.feature_factor)
+                
+                path.insert_new_cut(context, self.original_form, self.bme, self.selected)
+                path.lock = True  #for now
+                
+                for path in self.cut_paths:
+                    path.select = False
+                
+                self.cut_paths.append(path)
+                self.selected_path = path
+                path.select = True
+
+                print('made a new path from the new single cut')
+                
+            #TODO - Extension of existing geometry
+        
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -733,12 +899,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
 
                     
-                #MOUSEMOVE
-                    #self.hover
-                        #highlight important item
-                        
-                    #self.snap
-                        #highlight important item
+                if event.type == 'MOUSEMOVE':
+                    
+                    self.hover_loop_mode(context, settings, event)
+
                 
                 elif (event.type == 'C' and
                       event.value == 'PRESS'):
@@ -770,6 +934,39 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.post_update = True
                     return{'PASS_THROUGH'}
+                
+                elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+                    
+                    if self.hover_target and self.hover_target != self.selected:
+                        
+                        self.selected = self.hover_target    
+                        if not event.shift:
+                            for path in self.cut_paths:
+                                for cut in path.cuts:
+                                        cut.select = False   
+                                if self.selected in path.cuts:
+                                    path.select = True
+                                    self.selected_path = path
+                                else:
+                                    path.select = False
+                        
+                        self.hover_target.select = True
+                        
+                    
+                    elif self.hover_target  and self.hover_target == self.selected:
+                        
+                        self.modal_state = 'WIDGET_TRANSFORM'
+                        
+                        
+                    else:
+                        self.modal_state = 'CUTTING'
+                        context.area.header_text_set(text = self.mode + ': CUTTING')
+                        
+                        #make a new cut and handle it with self.selected
+                        self.selected = self.click_new_cut(context, settings, event)
+                        
+                        
+                    return {'RUNNING_MODAL'}
                 
                 if self.selected:
                     #print(event.type + " " + event.value)
@@ -808,8 +1005,26 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
                           (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
                           
-                        #if not selected_path.lock:
-                            #path.segments
+                        if not self.selected_path.lock:
+                            print('did we do the thaang')
+                            old_segments = self.selected_path.ring_segments
+                            self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE')
+                            if self.selected_path.ring_segments < 3:
+                                self.selected_path.ring_segments = 3
+                                
+                            for cut in self.selected_path.cuts:
+                                new_bulk_shift = round(cut.shift * old_segments/self.selected_path.ring_segments)
+                                new_fine_shift = old_segments/self.selected_path.ring_segments * cut.shift - new_bulk_shift
+                                
+                                
+                                new_shift =  self.selected_path.ring_segments/old_segments * cut.shift
+                                
+                                print(new_shift - new_bulk_shift - new_fine_shift)
+                                cut.shift = new_shift
+                                cut.simplify_cross(self.selected_path.ring_segments)
+                                
+                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                            self.selected_path.update_visibility(context, self.original_form)
                             #distribute cut points
                             #make new cuts
                             #alignment
@@ -822,15 +1037,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #if hover == selected:
                         #LEFTCLICK -> WIDGET
                         
-                if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                    #if hover:
-                        #select
-                        
-                    #else:
-                        #NewCut
-                    self.modal_state = 'CUTTING'
-                    context.area.header_text_set(text = self.mode + ': CUTTING')
-                    return {'RUNNING_MODAL'}
+                
                         
                 return {'RUNNING_MODAL'}
                         
@@ -842,15 +1049,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     y = str(event.mouse_region_y)
                     message = self.mode + ':CUTTING: X: ' +  x + '  Y:  ' +  y
                     context.area.header_text_set(text = message)
+                    
+                    self.selected.tail.x = event.mouse_region_x
+                    self.selected.tail.y = event.mouse_region_y
+                    #self.seleted.screen_to_world(context)
+                    
                     return {'RUNNING_MODAL'}
                 
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     
-                    #new cut
-                    #new guide?
-                    #assess snap/extend/join
+                    #the new cut is created
+                    #the new cut is assessed to be placed into an existing series
+                    #the new cut is assessed to be an extension of selected gemometry
+                    #the new cut is assessed to become the beginning of a new path
+                    self.release_place_cut(context, settings, event)
                     
-                    self.selected = 1 #placeholder to allow hotkey testing
+                    #we return to waiting
                     self.modal_state = 'WAITING'
                     context.area.header_text_set(text = self.mode + ': WAITING')
                     return {'RUNNING_MODAL'}
@@ -871,11 +1085,20 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     y = str(event.mouse_region_y)
                     message  = self.mode + ": " + action + ": X: " +  x + '  Y:  ' +  y
                     context.area.header_text_set(text = message)
-                    return {'RUNNING_MODAL'}
+                    
                     
                 
                     #widget.user_interaction
+                    self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
+                    self.selected.cut_object(context, self.original_form, self.bme)
+                    self.selected.simplify_cross(self.selected_path.ring_segments)
+                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
                     
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.update_visibility(context, self.original_form)
+                    return {'RUNNING_MODAL'}
+                
+                
                 #LEFTMOUSE event.value == 'PRESS':#RET, ENTER
                 if (event.type in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER'} and
                     event.value == 'PRESS'):
@@ -901,7 +1124,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         action = 'FINE WIDGET'
                     else:
                         action = 'WIDGET'
-                        
+                    
+                    self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y)    
+                    self.selected.cut_object(context, self.original_form, self.bme)
+                    self.selected.simplify_cross(self.selected_path.ring_segments)
+                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
+                    
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.update_visibility(context, self.original_form)
+                    
                     x = str(event.mouse_region_x)
                     y = str(event.mouse_region_y)
                     message = action + ": X: " +  x + '  Y:  ' +  y
@@ -986,7 +1217,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
 
                     if event.value in {'X', 'DEL'} and event.value == 'PRESS':
                         #delete the path
-                        self.selcted_path = None
+                        self.cut_paths.remove(self.selected_path)
+                        self.selected_path = None
                         self.modal_state = 'WAITING'
                         context.area.header_text_set(text = self.mode +': WAITING')
                         return {'RUNNING_MODAL'}
@@ -996,9 +1228,17 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         
                         if event.type == 'LEFT_ARROW':
                             direction = 'cw'
+                            for cut in self.selected_path.cuts:
+                                cut.shift += .05
+                                cut.simplify_cross(self.selected_path.ring_segments)
                         else:
                             direction = 'ccw'
-                            
+                            for cut in self.selected_path.cuts:
+                                cut.shift += -.05
+                                cut.simplify_cross(self.selected_path.ring_segments)
+                                
+                        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                        self.selected_path.update_visibility(context, self.original_form)    
                         #shift entire segment
                         context.area.header_text_set(text = self.mode +': Shift ' + direction)
                         return {'RUNNING_MODAL'}
@@ -1007,6 +1247,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                           (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
                           
                         #if not selected_path.lock:
+                        #TODO: path.locked
+                        #TODO:  dont recalc the path when no change happens
+                        if event.type in {'WHEELUPMOUSE','NUMPAD_PLUS'}:
+                            if not self.selected_path.lock:
+                                self.selected_path.segments += 1
+                        elif event.type in {'WHEELDOWNMOUSE', 'NUMPAD_MINUS'} and self.selected_path.segments > 3:
+                            if not self.selected_path.lock and self.selected_path.segments > 3:
+                                
+                                self.selected_path.segments -= 1
+                    
+                        if not self.selected_path.lock:
+                            self.selected_path.create_cut_nodes(context)
+                            self.selected_path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
+                            self.selected_path.cuts_on_path(context, self.original_form, self.bme)
+                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                            self.selected_path.update_visibility(context, self.original_form)
                             #path.segments
                             #distribute cut points
                             #make new cuts
@@ -1015,20 +1271,33 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         #else:
                             #let the user know the path is locked
                             #header message set
-                        context.area.header_text_set(text = self.mode +': PATH SEGMENTS')
+                            context.area.header_text_set(text = self.mode +': PATH SEGMENTS')
+                            
+                        else:
+                            context.area.header_text_set(text = self.mode +': Path is locked, cannot adjuste # of segments')
                         return {'RUNNING_MODAL'}
                    
                     elif event.type == 'S' and event.value == 'PRESS':
+                        print(event.type)
+                        print(event.alt)
+                        print(event.shift)
+                        print(event.ctrl)
                         if event.shift:
                             #path.smooth_normals
+                            self.selected_path.average_normals(context, self.original_form, self.bme)
+                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             context.area.header_text_set(text = 'SMOOTH NORMALS')
                             
                         elif event.ctrl:
                             #smooth CoM path
                             context.area.header_text_set(text = 'SMOOTH CoM')
-                        
+                            self.selected_path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
+                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                            
                         elif event.alt:
                             #path.interpolate_endpoints
+                            self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
+                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             context.area.header_text_set(text = 'INTERPOLATE ENDPOINTS')
                     
                         return{'RUNNING_MODAL'}
@@ -1041,22 +1310,23 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     y = str(event.mouse_region_y)
                     message = action + ": X: " +  x + '  Y:  ' +  y
                     context.area.header_text_set(text = message)
+                    
+                    #record screen drawing
+                    self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))   
+                    
                     return {'RUNNING_MODAL'}
                     
                 if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-                    #raycast the draw points
-                    #make a new path
-                    #put cuts on the path
-                    #push the mesh
-                    #update the visibility
+                    if len(self.draw_cache) > 10:
                     
+                        #wrap up all the functions into one thing
+                        self.selected_path  = self.new_path_from_draw(context, settings)
+                        
+                        self.drag = False #TODO: is self.drag still needed?
+                        
+                        self.force_new = False
                     
-                    self.selected_path = 1
-                    #TODO...toggle this or not?
-                    self.force_new = False
-                    #update visibility
-                    #etc, etc, etc
-                    
+                    self.draw_cache = []
                     self.modal_state = 'WAITING'
                     context.area.header_text_set(text = 'GUIDE MODE: WAITING')
                     return{'RUNNING_MODAL'}
