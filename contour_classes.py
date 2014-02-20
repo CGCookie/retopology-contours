@@ -46,7 +46,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
-        
+        self.lock = False
         self.select = False
         self.desc = 'CUT SERIES'
         self.cuts = []
@@ -332,11 +332,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             if i > 0:
                 self.align_cut(cut, mode='BEHIND', fine_grain='TRUE')
                 
-            if self.existing_head:
-                self.existing_head.align_to_other(self.cuts[0])
+        if self.existing_head:
+            self.existing_head.align_to_other(self.cuts[0])
                 
-            if self.existing_tail:
-                self.existing_tail.align_to_other(self.cuts[-1])
+        if self.existing_tail:
+            self.existing_tail.align_to_other(self.cuts[-1])
        
     def smooth_normals_com(self,context,ob,bme,iterations = 5):
         
@@ -380,6 +380,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut.plane_no = normals[i]
             cut.cut_object(context, ob,  bme)
             cut.simplify_cross(self.ring_segments)
+            if i > 0:
+                self.align_cut(cut, mode='BEHIND', fine_grain='TRUE')
             cut.update_com()
             cut.generic_3_axis_from_normal()
                
@@ -417,6 +419,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut.plane_no = avg_normal
             cut.cut_object(context, ob,  bme)
             cut.simplify_cross(self.ring_segments)
+            if i > 0:
+                self.align_cut(cut, mode='BEHIND', fine_grain='TRUE')
             cut.update_com()
             cut.generic_3_axis_from_normal()
          
@@ -448,9 +452,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         for i in range(0,interps):
             print((i+1)/(end-start))
-            self.cuts[start + i + 1].plane_no = no_initial.lerp(no_final, (i+1)/(end-start))
+            self.cuts[start + i+1].plane_no = no_initial.lerp(no_final, (i+1)/(end-start))
             self.cuts[start + i+1].cut_object(context, ob,  bme)
             self.cuts[start + i+1].simplify_cross(self.ring_segments)
+            if i > 0:
+                self.align_cut(self.cuts[start + i+1], mode='BEHIND', fine_grain='TRUE')
             self.cuts[start + i+1].update_com()
           
     def connect_cuts_to_make_mesh(self, ob):
@@ -670,6 +676,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         self.cuts[0].verts.reverse()
                         print('origianl loop reversal to fit established path direction')
                 
+                    self.cuts.reverse()
+                    
                 #neither does the new cut.
                 if new_cut.plane_no.dot(direction) < 0:
                     print('normal reversal to fit path')
@@ -740,6 +748,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         print('loop reversal to fit into new path')
                         
                     self.cuts.insert(i+1, new_cut)
+                    
+                    #add an element to the visibility list
+                    for vis in self.follow_vis:
+                        vis.insert(i+1, True)
+                    
                     new_cut.simplify_cross(self.ring_segments)
                     self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
                     
@@ -837,6 +850,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         '''
         removes a cut from the sequence
         '''
+        
+        self.cuts.remove(cut)
+        
+        
           
     def align_cut(self, cut, mode = 'BETWEEN', fine_grain = True):
         '''
@@ -3151,31 +3168,13 @@ class ContourCutLine(object):
             #print(len(self.verts_simple))
             print('non uniform loops, stopping until your developer gets smarter')
             return
-        
-        
-        #turns out, sum of diagonals is > than semi perimeter
-        #lets exploit this (only true if quad is pretty much flat)
-        #if we have paths reversed...our indices will give us diagonals
-        #instead of perimeter
-        #D1_O = verts_2[0] - verts_1[0]
-        #D2_O = verts_2[-1] - verts_1[-1]
-        #D1_R = verts_2[0] - verts_1[-1]
-        #D2_R = verts_2[-1] - verts_1[0]
-                
-        #original_length = D1_O.length + D2_O.length
-        #reverse_length = D1_R.length + D2_R.length
-        #if reverse_length < original_length:
-            #verts_2.reverse()
-            #print('reversing')
             
         if cyclic:
             #another test to verify loop direction is to take
             #something reminiscint of the curl
             #since the loops in our case are guaranteed planar
             #(they come from cross sections) we can find a direction
-            #from which to take the curl pretty easily.  Apologies to
-            #any real mathemeticians reading this becuase I just
-            #bastardized all these math terms.
+            #from which to take the curl pretty easily
             V1_0 = verts_1[1] - verts_1[0]
             V1_1 = verts_1[2] - verts_1[1]
             
@@ -3187,9 +3186,9 @@ class ContourCutLine(object):
             no_2 = V2_0.cross(V2_1)
             no_2.normalize()
             
-            #we have no idea which way we will get
-            #so just pick the directions which are
-            #pointed in the general same direction
+            #in general, we don't know that the loops are
+            #oriented in the same direction.  However the contour
+            #cut series class should hanlde that
             if no_1.dot(no_2) < 0:
                 no_2 = -1 * no_2
             
@@ -3203,11 +3202,9 @@ class ContourCutLine(object):
                 print('reversing derived loop direction')
                 print('curl1: %f and curl2: %f' % (curl_1,curl_2))
                 self.verts_simple.reverse()
-                print('reversing the base loop')
                 self.verts.reverse()
                 self.shift *= -1
-                
-        
+
         else:
             #if the segement is not cyclic
             #all we have to do is compare the endpoints
@@ -3236,7 +3233,6 @@ class ContourCutLine(object):
                     edge_len_dict[edge] = vect.length
             
             shift_lengths = []
-            #shift_cross = []
             for shift in range(0,len(self.verts_simple)):
                 tmp_len = 0
                 #tmp_cross = 0
@@ -3309,7 +3305,9 @@ class ContourCutLine(object):
                     #print(alignment_quality_right)
                 print('converged or didnt in %i iterations' % iterations)
                 print('final alignment quality is %f' % alignment_quality)
-              
+                self.shift += self.int_shift
+                self.int_shift = 0
+                
     def active_element(self,context,x,y):
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
@@ -3414,36 +3412,7 @@ class CutLineManipulatorWidget(object):
         self.transform_mode = None
         
         self.ob = ob
-        #We will need this plane to establish a contour
-        #along the surface
-        pt = self.cut_line.verts_simple[0]
-        surface_no = cut_line.verts_simple[0] - cut_line.plane_com
-        cut_no = surface_no.cross(cut_line.plane_no)
-        snap = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cut_line.verts_simple[0])
-        seed = snap[2]
         
-            
-        if cut_line_a:
-            self.a = cut_line_a.plane_com
-            self.a_no = cut_line_a.plane_no
-            self.a_vert = cut_line_a.verts_simple[0]
-            self.path_to_a = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, cut_line_a.verts_simple[0], cut_line_a.plane_no)        
-            self.path_a_3d = [ob.matrix_world * v for v in self.path_to_a]
-        else:
-            self.a = None
-            self.a_no = None
-            self.path_to_a = []
-        
-        if cut_line_b:
-            self.b = cut_line_b.plane_com
-            self.b_no = cut_line_b.plane_no
-            self.b_vert = cut_line_b.verts_simple[0]
-            self.path_to_b = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, cut_line_b.verts_simple[0], cut_line_b.plane_no)
-            self.path_b_3d = [ob.matrix_world * v for v in self.path_to_b]
-        else:
-            self.b = None
-            self.b_no = None
-            self.path_to_b = []
             
         self.color = (settings.widget_color[0], settings.widget_color[1],settings.widget_color[2],1)
         self.color2 = (settings.widget_color2[0], settings.widget_color2[1],settings.widget_color2[2],1)
@@ -3479,6 +3448,57 @@ class CutLineManipulatorWidget(object):
         self.initial_plane_no = self.cut_line.plane_no.copy()
         self.initial_seed = self.cut_line.seed_face_index
         
+        #We will need this plane to establish a contour
+        #along the surface
+        #TODO: what if all this stuff fails?
+        pt = self.cut_line.verts_simple[0]
+        snap = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cut_line.verts_simple[0])
+        seed = snap[2]
+        #surface_no = cut_line.verts_simple[0] - cut_line.plane_com
+        #We may need to contemplate this
+        surface_no = ob.matrix_world.inverted().transposed() * snap[1]
+        #surface_no = ob.matrix_world.to_3x3() * snap[1]
+        cut_no = surface_no.cross(cut_line.plane_no)
+        
+            
+        if cut_line_a:
+            v1 = cut_line_a.verts_simple[0] - self.cut_line.verts_simple[0]
+            cut_no = surface_no.cross(v1)
+            self.a = cut_line_a.plane_com
+            self.a_no = cut_line_a.plane_no
+            self.a_vert = cut_line_a.verts_simple[0]
+            self.path_to_a = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, self.a_vert, cut_line_a.plane_no)        
+            if self.path_to_a:
+                self.path_a_3d = [ob.matrix_world * v for v in self.path_to_a]
+        else:
+            self.a = None
+            self.a_no = None
+            self.path_to_a, eds_a = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                         pt, cut_no, seed, 
+                                                                         self.initial_plane_no, 
+                                                                         max_tests = 20, debug = False)
+            if self.path_to_a:
+                self.path_a_3d = [ob.matrix_world * v for v in self.path_to_a]
+            
+        if cut_line_b:
+            v1 = cut_line_b.verts_simple[0] - self.cut_line.verts_simple[0]
+            cut_no = surface_no.cross(v1)
+            self.b = cut_line_b.plane_com
+            self.b_no = cut_line_b.plane_no
+            self.b_vert = cut_line_b.verts_simple[0]
+            self.path_to_b = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, self.b_vert, cut_line_b.plane_no)
+            if self.path_to_b:
+                self.path_b_3d = [ob.matrix_world * v for v in self.path_to_b]
+        else:
+            self.b = None
+            self.b_no = None
+            self.path_to_b, eds_b = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                         pt, cut_no, seed, 
+                                                                         -1 * self.initial_plane_no,
+                                                                         max_tests = 20, debug = False)
+            if self.path_to_b:
+                self.path_b_3d = [ob.matrix_world * v for v in self.path_to_b]
+            
         self.wedge_1 = []
         self.wedge_2 = []
         self.wedge_3 = []
@@ -3608,7 +3628,14 @@ class CutLineManipulatorWidget(object):
                         elif not self.b and world_vec.dot(vec_a_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
-                            return {'REHIT','RECUT'}
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_b_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                            if proposed_point:
+                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                                self.cut_line.seed_face_index = snap[2]
+                            else:
+                                self.cancel_transform()
+                            return {'RECUT'}
                     
                     if self.b:
                         b_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.b)
@@ -3647,11 +3674,28 @@ class CutLineManipulatorWidget(object):
                         elif not self.a and world_vec.dot(vec_b_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
-                            
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_a_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                            if proposed_point:
+                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                                self.cut_line.seed_face_index = snap[2]
+                            else:
+                                self.cancel_transform()
+                    
                     if not self.a and not self.b:
                         translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                         self.cut_line.plane_com = self.initial_com + translate
-                        return {'REHIT','RECUT'}
+                        
+                        proposed_point = contour_utilities.intersect_path_plane(self.path_a_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                        if not proposed_point:
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_b_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                            if proposed_point:
+                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                                self.cut_line.seed_face_index = snap[2]
+                            else:
+                                self.cancel_transform()
+                        return {'RECUT'}
                     
                     return {'DO_NOTHING'}
 
@@ -3751,6 +3795,17 @@ class CutLineManipulatorWidget(object):
                     self.cut_line.vec_x = new_x
                     self.cut_line.vec_y = new_y
                     self.cut_line.plane_no = new_no
+                    
+                    new_pt = contour_utilities.intersect_path_plane(self.path_a_3d, self.initial_com, new_no, mode = 'FIRST')
+                    if not new_pt:
+                        new_pt = contour_utilities.intersect_path_plane(self.path_b_3d, self.initial_com, new_no, mode = 'FIRST')
+                    
+                    if new_pt:
+                        snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * new_pt[0])
+                        self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                        self.cut_line.seed_face_index = snap[2] 
+                    else:
+                        self.cancel_transform()
                     return {'RECUT'}
         
         #
@@ -3781,6 +3836,9 @@ class CutLineManipulatorWidget(object):
             #self.screen_no.normalize()
             
             imx = rv3d.view_matrix.inverted()
+            #http://www.lighthouse3d.com/tutorials/glsl-tutorial/the-normal-matrix/
+            #Therefore the correct matrix to transform the normal is the 
+            #transpose of the inverse of the M matrix. 
             normal_3d = imx.transposed() * self.cut_line.plane_no
             self.screen_no = Vector((normal_3d[0],normal_3d[1]))
             
@@ -3841,12 +3899,12 @@ class CutLineManipulatorWidget(object):
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
-            if self.path_to_a != []:
-                contour_utilities.draw_3d_points(context, self.path_a_3d, self.color5, 3)
+        if self.path_to_a and self.path_to_a != []:
+            contour_utilities.draw_3d_points(context, self.path_a_3d, self.color5, 6)
         if self.b:
             contour_utilities.draw_3d_points(context, [self.b], self.color3, 5)
-            if self.path_to_b != []:
-                contour_utilities.draw_3d_points(context, self.path_b_3d, self.color5, 3)
+        if self.path_to_b and self.path_to_b != []:
+            contour_utilities.draw_3d_points(context, self.path_b_3d, self.color3, 6)
             
         if not self.transform and not self.hotkey:
             #draw wedges
