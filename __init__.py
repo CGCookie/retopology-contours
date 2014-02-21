@@ -1136,7 +1136,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.widget_transform(context, settings, event)
                     
-                    message = self.modal_state + ":  " + self.cut_line_widget.transform_mode
+                    message = self.modal_state
                     context.area.header_text_set(text = message)
                     return {'RUNNING_MODAL'}
                
