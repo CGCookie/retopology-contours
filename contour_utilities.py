@@ -2315,7 +2315,7 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
         print('or there were more seeds than there were supposed to be')
         print('things might be slow until your programmer gets smarter')
         
-        verts, edges = cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 1000, debug)
+        verts, edges = cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 1000, debug = False)
         return verts, edges
     
 
@@ -2390,6 +2390,6 @@ def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
                 break
             
     if len(intersects) == 0:
-        intersects = None
+        intersects = [None]
         
     return intersects

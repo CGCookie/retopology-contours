@@ -3510,7 +3510,7 @@ class CutLineManipulatorWidget(object):
         self.arc_arrow_1 = []
         self.arc_arrow_2 = []
                 
-    def user_interaction(self, context, mouse_x,mouse_y):
+    def user_interaction(self, context, mouse_x,mouse_y, shift = False):
         '''
         analyse mouse coords x,y
         return [type, transform]
@@ -3579,6 +3579,9 @@ class CutLineManipulatorWidget(object):
                     else:
                         factor = screen_dist/mouse_wrt_widget.length
                     
+                    if shift:
+                        factor *= 1/5
+                        
                     if self.a:
                         a_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.a)
                         vec_a_screen = a_screen - com_screen
