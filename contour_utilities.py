@@ -2315,7 +2315,7 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
         print('or there were more seeds than there were supposed to be')
         print('things might be slow until your programmer gets smarter')
         
-        verts, edges = cross_section_seed(bme, mx, point, normal, seed_index)
+        verts, edges = cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 1000, debug)
         return verts, edges
     
 

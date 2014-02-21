@@ -56,7 +56,6 @@ import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities
-import contour_modals
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
@@ -835,7 +834,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 print('made a new path from the new single cut')
                 
             #TODO - Extension of existing geometry
+    def widget_transform(self,context,settings, event):
         
+        self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y, shift = event.shift)    
+        self.selected.cut_object(context, self.original_form, self.bme)
+        self.selected.simplify_cross(self.selected_path.ring_segments)
+        self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
+        
+        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+        self.selected_path.update_visibility(context, self.original_form)    
+            
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -1125,17 +1133,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     else:
                         action = 'WIDGET'
                     
-                    self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y)    
-                    self.selected.cut_object(context, self.original_form, self.bme)
-                    self.selected.simplify_cross(self.selected_path.ring_segments)
-                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
                     
-                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                    self.selected_path.update_visibility(context, self.original_form)
+                    self.widget_transform(context, settings, event)
                     
-                    x = str(event.mouse_region_x)
-                    y = str(event.mouse_region_y)
-                    message = action + ": X: " +  x + '  Y:  ' +  y
+                    message = self.modal_state + ":  " + self.cut_line_widget.transform_mode
                     context.area.header_text_set(text = message)
                     return {'RUNNING_MODAL'}
                
