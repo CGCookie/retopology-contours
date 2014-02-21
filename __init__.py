@@ -843,7 +843,39 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
         self.selected_path.update_visibility(context, self.original_form)    
+    
+    def guide_arrow_shift(self,context,event):
+        if event.type == 'LEFT_ARROW':         
+            for cut in self.selected_path.cuts:
+                cut.shift += .05
+                cut.simplify_cross(self.selected_path.ring_segments)
+        else:
+            for cut in self.selected_path.cuts:
+                cut.shift += -.05
+                cut.simplify_cross(self.selected_path.ring_segments)
+                                
+        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+        self.selected_path.update_visibility(context, self.original_form)  
+                        
+    def loop_align_modal(self,context, event):
+        if not event.ctrl and not event.shift:
+            act = 'BETWEEN'
+                
+        #align ahead    
+        elif event.ctrl and not event.shift:
+            act = 'FORWARD'
             
+        #align behind    
+        elif event.shift and not event.ctrl:
+            act = 'BACKWARD'
+            
+        self.selected_path.align_cut(self.selected, mode = act, fine_grain = True)
+        self.selected.simplify_cross(self.selected_path.ring_segments)
+        
+        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+        self.selected_path.update_visibility(context, self.original_form)
+            
+                                       
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -1002,14 +1034,25 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                           event.value == 'PRESS'):
                         
                         if event.type == 'LEFT_ARROW':
-                            direction = 'cw'
+                            self.selected.shift += .05
+                            
                         else:
-                            direction = 'ccw'
+                            self.selected.shift += -.05
+                            
+                        self.selected.simplify_cross(self.selected_path.ring_segments)
+                        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                        self.selected_path.update_visibility(context, self.original_form)
                             
                         #shift single ring
-                        context.area.header_text_set(text = self.mode +': Shift ' + direction)
+                        context.area.header_text_set(text = self.mode +': Shift ' + str(self.selected.shift))
                         return {'RUNNING_MODAL'}
                     
+                    elif event.type == 'A' and event.value == 'PRESS':
+                    
+                        self.loop_align_modal(context,event)
+                        
+                        return {'RUNNING_MODAL'}
+                        
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
                           (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
                           
@@ -1227,21 +1270,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
                         
-                        if event.type == 'LEFT_ARROW':
-                            direction = 'cw'
-                            for cut in self.selected_path.cuts:
-                                cut.shift += .05
-                                cut.simplify_cross(self.selected_path.ring_segments)
-                        else:
-                            direction = 'ccw'
-                            for cut in self.selected_path.cuts:
-                                cut.shift += -.05
-                                cut.simplify_cross(self.selected_path.ring_segments)
-                                
-                        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                        self.selected_path.update_visibility(context, self.original_form)    
+                        
+                        self.guide_arrow_shift(context, event)
+                          
                         #shift entire segment
-                        context.area.header_text_set(text = self.mode +': Shift ' + direction)
+                        context.area.header_text_set(text = self.mode +': Shift ')
                         return {'RUNNING_MODAL'}
                         
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or

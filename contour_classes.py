@@ -318,6 +318,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             no.normalize()
             
             #make the cut in the view plane
+            #TODO..this is not always smart!
             perp_vec = no.cross(view_z)
             final_no = view_z.cross(perp_vec)
             final_no.normalize()
