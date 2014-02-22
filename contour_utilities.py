@@ -2087,7 +2087,10 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         print('failed to find connection in either direction...perhaps points arent coplanar')
         return []
             
-def cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 10000, debug = True):
+def cross_section_seed(bme, mx, 
+                       point, normal, 
+                       seed_index, 
+                       max_tests = 10000, debug = True):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
     space.
@@ -2098,6 +2101,7 @@ def cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 10000, de
         point: any point on the cut plane in world coords (type Mathutils.Vector)
         normal:  plane normal direction (type Mathutisl.Vector)
         seed_index: face index, typically achieved by raycast
+        self_stop: a normal vector which defines a plane to stop cutting
         direction: Vector which the cut should start traveling.
         exclude_edges: list of edge indices (usually already tested from previous iterations)
     '''
@@ -2247,7 +2251,12 @@ def cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 10000, de
     else:
         return (None, None)
 
-def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, max_tests = 10000, debug = True):
+def cross_section_seed_direction(bme, mx, 
+                                 point, normal, 
+                                 seed_index, direction, 
+                                 stop_plane = None,
+                                 max_tests = 10000,
+                                 debug = True):
     '''
     Takes a bmesh and associated world matrix of the object and 
     returns a cross secion in local space.  
@@ -2262,6 +2271,8 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
         normal:  plane normal direction (type Mathutisl.Vector)
         seed_index: face index, typically achieved by raycast
         direction: Vector which the cut should start traveling.
+        
+        stop_plane = [stop_pt, stop_no]  a 2 item list of 2 vectors defining a plane to stop at
     '''
     
     times = []
@@ -2274,8 +2285,10 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
     direct = imx.to_3x3() * direction
     direct.normalize()
 
-    feeler_verts = {}
-    feeler_prev_eds = {}
+    if stop_plane:
+        stop_pt = imx * stop_plane[0]
+        stop_no = imx.to_3x3() * stop_plane[1]
+
     prev_eds = []
     seeds = {}  #a list of 0,1, or 2 edges.
     
@@ -2298,8 +2311,7 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
 
                 f = potential_faces[0]
                 seeds[len(verts)-1] = f
-                
-                feeler_verts[f] = result[1]
+
             else:
                 seeds[len(verts)-1] = None
                 print('seed face is an edge of mesh face')
@@ -2317,12 +2329,8 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
     else:
         headed = verts[0] - verts[1]
         headed.normalize()
-        
-        print('####################################')        
+       
         if headed.dot(direct) > .1:
-            print('found the right direction')
-            print('prove the other direciton wrong?')
-            print(direct.dot(verts[1]-verts[0]))
             element = seeds[0]
             verts.pop(1)
             verts.insert(0,pt)
@@ -2330,21 +2338,17 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
             if not element:
                 return (verts,[(0,1)])
         else:
-            print('The other direction is right')
-            print('prove it?')
-            print(direct.dot(verts[1]-verts[0]))
             element = seeds[1]
             verts.pop(0)
             verts.insert(0,pt)
             
             if not element:
                 return (verts,[(0,1)])
-    
-    
+            
     total_tests = 0
-      
-    while element and total_tests < max_tests:
-        print('index: %i ' % element.index)
+    stop_test = False
+    
+    while element and total_tests < max_tests and not stop_test:
         total_tests += 1
         #first, we know that this face is not coplanar..that's good
         #if new_face.no.cross(no) == 0:
@@ -2358,10 +2362,19 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
             #vert
             element = vert_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
 
+        if element and stop_plane and total_tests > 1:
+            A = verts[-2]
+            B = verts[-1]
+            cross = cross_edge(A, B, stop_pt, stop_no)
+            stop_test = cross[0]
+            if stop_test:
+                prev_eds.pop()  #will need to retest this edge in case we come around a full loop
+                verts.pop()
+                verts.append(cross[1])
+    
     print('walked around cross section in %i tests' % total_tests)
     print('found this many vertices: %i' % len(verts))       
     
-           
     #verts are created in order
     for i in range(0,len(verts)-1):
         eds.append((i,i+1))
@@ -2371,8 +2384,7 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
         times.append(time.time())
         print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
-    if len(verts):
-        print(verts)  
+    if len(verts):  
         return (verts, eds)
     else:
         return (None, None)
