@@ -803,6 +803,22 @@ def bound_box(verts):
         bounds.append((low,high))
         
     return bounds
+
+def diagonal(bounds):
+    '''
+    returns the diagonal dimension of min/max
+    pairs of bounds.  Will generalize to N dimensions
+    however only really meaningful for 2 or 3 dim vectors
+    '''
+    diag = 0
+    for min_max in bounds:
+        l = min_max[1] - min_max[0]
+        diag += l * l
+        
+    diag = diag ** .5
+    
+    return diag
+    
 #adapted from opendentalcad then to pie menus now here
 
 def point_inside_loop2d(loop, point):
@@ -1011,7 +1027,7 @@ def face_cycle(face, pt, no, prev_eds, verts):#, connection):
                 verts.append(result[1])  #store the "intersection"
                     
                 return co_point
-                           
+            
 def vert_cycle(vert, pt, no, prev_eds, verts):#, connection):
     '''
     args:
@@ -2183,6 +2199,8 @@ def cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 10000, de
     #will only get one try, and find no new crosses
     #trivially, mast make sure that the first seed we found wasn't
     #on a non manifold edge, which should never happen
+    #TODO:  find a better way to determine this. Currently we dont preserve
+    #enough information
     closed_loop = element_tests == 1 and len(seeds) == 2
     
     print('walked around cross section in %i tests' % total_tests)
@@ -2231,8 +2249,11 @@ def cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 10000, de
 
 def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, max_tests = 10000, debug = True):
     '''
-    Takes a mesh and associated world matrix of the object and returns a cross secion in local
-    space.
+    Takes a bmesh and associated world matrix of the object and 
+    returns a cross secion in local space.  
+    bmesh should not have any ngons (tris and quads only).  
+    If original bmesh has ngons, triangulate the bmesh
+    or a copy of the bmesh first.
     
     Args:
         bme: Blender BMesh
@@ -2241,90 +2262,89 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
         normal:  plane normal direction (type Mathutisl.Vector)
         seed_index: face index, typically achieved by raycast
         direction: Vector which the cut should start traveling.
-        exclude_edges: list of edge indices (usually already tested from previous iterations)
     '''
     
     times = []
     times.append(time.time())
 
-    verts =[]
-    eds = []
-    
     #convert point and normal directoin into local coords
     imx = mx.inverted()
     pt = imx * point
     no = imx.to_3x3() * normal  #local normal
     direct = imx.to_3x3() * direction
     direct.normalize()
-    
-    #edge_mapping = {}  #perhaps we should use bmesh becaus it stores the great cycles..answer yup
-    
-    seed_search = 0
+
+    feeler_verts = {}
+    feeler_prev_eds = {}
     prev_eds = []
-    seeds =[]
+    seeds = {}  #a list of 0,1, or 2 edges.
     
-    if seed_index > len(bme.faces) - 1:
-        ngons = []
-        for f in bme.faces:
-            if len(f.verts) >  4:
-                ngons.append(f)
-        if len(ngons):
-            new_geom = bmesh.ops.triangulate(bme, faces = ngons, use_beauty = True)
-            new_faces = new_geom['faces']
-            
-            #now we must find a new seed index since we have added new geometry
-            for f in new_faces:
-                if point_in_tri(pt, f.verts[0].co, f.verts[1].co, f.verts[2].co):
-                    print('found the point in the tri')
-                    if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .001:
-                        seed_index = f.index
-                        print('found a new index to start with')
-                        break
-                    
-    for ed in bme.faces[seed_index].edges:
-        seed_search += 1   
+    #return values
+    verts =[]
+    eds = []
+    
+    print('seed_index: %i ' % seed_index)                
+    for ed in bme.faces[seed_index].edges:  #should be 3 or 4 edges
         prev_eds.append(ed.index)
-        
         A = ed.verts[0].co
         B = ed.verts[1].co
         result = cross_edge(A, B, pt, no)
         if result[0] == 'CROSS':
+            
+            verts.append(result[1])
             potential_faces = [face for face in ed.link_faces if face.index != seed_index]
-                
+               
             if len(potential_faces):
-                print('how many potential faces can there be?  There should only be 1')
-                print(len(potential_faces))
-                f = potential_faces[0]
-                
-                headed = f.calc_center_bounds() - pt
-                headed_2 = f.calc_center_bounds() - point
-                headed.normalize()
-                headed_2.normalize()
-                
-                if direct.dot(headed) > 0:
-                    print('local coords direciton')
-                    verts.append(result[1])
-                    seeds.append(f)
-                elif direct.dot(headed_2) > 0:
-                    print('world coords direciton')
-                    #verts.append(result[1])
-                    #seeds.append(f)
- 
-    if not len(seeds) or len(seeds) > 1:
-        print('the initial seeds didnt go in the right direction')
-        print('or there were more seeds than there were supposed to be')
-        print('things might be slow until your programmer gets smarter')
-        
-        verts, edges = cross_section_seed(bme, mx, point, normal, seed_index, max_tests = 1000, debug = False)
-        return verts, edges
-    
 
-    #we have found one edge that crosses, now, baring any terrible disconnections in the mesh,
-    #we traverse through the link faces, wandering our way through....removing edges from our list
-    total_tests = 0
+                f = potential_faces[0]
+                seeds[len(verts)-1] = f
+                
+                feeler_verts[f] = result[1]
+            else:
+                seeds[len(verts)-1] = None
+                print('seed face is an edge of mesh face')
+ 
+    if len(verts) < 2:
+        print('critical error, probably machine error')
+        #TODO: debug and dump relevant info
+        return (None, None)
     
-    element = seeds[0]
+    elif len(verts) > 2:
+        print('critial error probably concave ngong or something')
+        #TODO: debug and dump relevant info
+        return (None, None) 
+      
+    else:
+        headed = verts[0] - verts[1]
+        headed.normalize()
+        
+        print('####################################')        
+        if headed.dot(direct) > .1:
+            print('found the right direction')
+            print('prove the other direciton wrong?')
+            print(direct.dot(verts[1]-verts[0]))
+            element = seeds[0]
+            verts.pop(1)
+            verts.insert(0,pt)
+            
+            if not element:
+                return (verts,[(0,1)])
+        else:
+            print('The other direction is right')
+            print('prove it?')
+            print(direct.dot(verts[1]-verts[0]))
+            element = seeds[1]
+            verts.pop(0)
+            verts.insert(0,pt)
+            
+            if not element:
+                return (verts,[(0,1)])
+    
+    
+    total_tests = 0
+      
     while element and total_tests < max_tests:
+        print('index: %i ' % element.index)
         total_tests += 1
         #first, we know that this face is not coplanar..that's good
         #if new_face.no.cross(no) == 0:
@@ -2334,13 +2354,14 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
             element = face_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
         
         elif type(element) == bmesh.types.BMVert:
+            #TODO: I would like to debug if we hit a
+            #vert
             element = vert_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
 
-    print('%i vertices found so far' % len(verts))
-        
     print('walked around cross section in %i tests' % total_tests)
     print('found this many vertices: %i' % len(verts))       
-
+    
+           
     #verts are created in order
     for i in range(0,len(verts)-1):
         eds.append((i,i+1))
@@ -2351,7 +2372,7 @@ def cross_section_seed_direction(bme, mx, point, normal, seed_index, direction, 
         print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
     if len(verts):
-            
+        print(verts)  
         return (verts, eds)
     else:
         return (None, None)
