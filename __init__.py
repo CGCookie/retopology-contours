@@ -758,6 +758,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
         path.cuts_on_path(context, self.original_form, self.bme)
         path.connect_cuts_to_make_mesh(self.original_form)
+        path.backbone_from_cuts(context, self.original_form, self.bme)
         path.update_visibility(context, self.original_form)
         self.cut_paths.append(path)
 
@@ -875,7 +876,39 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
         self.selected_path.update_visibility(context, self.original_form)
             
-                                       
+    def loop_hotkey_modal(self,context,event):
+        
+        if len(self.valid_cuts) and self.selected in self.valid_cuts:
+            ind = self.valid_cuts.index(self.selected)
+            ahead = ind + 1
+            behind = ind - 1
+        
+            if ahead < len(self.cut_lines):
+                a_line = self.valid_cuts[ahead]
+            else:
+                print('NOT A LINE?')
+                a_line = None
+        
+            if behind > - 1:
+                b_line = self.valid_cuts[behind]
+            else:
+                b_line = None
+                
+        else:
+            a_line = None
+            b_line = None
+            
+        self.cut_line_widget = CutLineManipulatorWidget(context, settings, 
+                                                        self.original_form, self.bme,
+                                                        self.selected,
+                                                        event.mouse_region_x,event.mouse_region_y,
+                                                        cut_line_a = a_line, cut_line_b = b_line,
+                                                        hotkey = self.hot_key)
+        if self.hot_key == 'G':
+            self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
+        elif self.hot_key == 'R':
+            self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
+                                                   
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -1136,9 +1169,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     y = str(event.mouse_region_y)
                     message  = self.mode + ": " + action + ": X: " +  x + '  Y:  ' +  y
                     context.area.header_text_set(text = message)
-                    
-                    
-                
+
                     #widget.user_interaction
                     self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
                     self.selected.cut_object(context, self.original_form, self.bme)
