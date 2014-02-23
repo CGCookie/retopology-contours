@@ -788,7 +788,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected.tail.x = event.mouse_region_x
         self.selected.tail.y = event.mouse_region_y
         
-        width = Vector((self.selcted.head.x, self.selected.head.y)) - Vector((self.selected.tail.x, self.selected.tail.y))
+        width = Vector((self.selected.head.x, self.selected.head.y)) - Vector((self.selected.tail.x, self.selected.tail.y))
         
         #prevent small errant strokes
         if width.length < 20: #TODO: Setting for minimum pixel width
@@ -1068,7 +1068,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
                         
-                        self.arrow_ring_shift(self,context)
+                        self.loop_arrow_shift(context,event)
                         
                         return {'RUNNING_MODAL'}
                     
