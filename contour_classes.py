@@ -372,10 +372,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
                 else:
                     diag = contour_utilities.diagonal_verts(self.cuts[0].verts_simple)
-            
                     cast_point = self.cuts[0].verts_simple[0] - diag * self.cuts[0].plane_no
                     cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
-                    vertebra3d = [cast_sfc, self.cuts[0].verts_simple[0]]
+                    vertebra3d = [self.cuts[0].verts_simple[0], cast_sfc]
                 
                 self.backbone.append(vertebra3d)
             
@@ -400,7 +399,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.backbone.append(vertebra3d)    
         
         
-        #shoot a cut out the front
         cut_no = surface_no.cross(cut.plane_no)
         vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
                                                                   pt,cut_no, seed,
@@ -411,7 +409,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
 
         if vertebra:
             vertebra3d = [ob.matrix_world * v for v in vertebra]
-        
+            vertebra3d.reverse()
         else:
             diag = contour_utilities.diagonal_verts(cut.verts_simple)
     
@@ -420,7 +418,107 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             vertebra3d = [cast_sfc, cut.verts_simple[0]]
         
         self.backbone.append(vertebra3d)
-       
+    
+    def update_backbone(self,context,ob,bme,cut, insert = False):
+        '''
+        update just the segments of the backbone affected by a cut
+        do this after it has been inserted and aligned or after
+        it has been transformed
+        '''
+        
+        ind = self.cuts.index(cut)
+        pt = cut.verts_simple[0]
+        snap = ob.closest_point_on_mesh(ob.matrix_world.inverted() * pt)
+        seed = snap[2]
+        surface_no = ob.matrix_world.inverted().transposed() * snap[1]
+        
+        if ind == 0:
+            #shoot a cut out the back
+            cut_no = surface_no.cross(cut.plane_no)
+            vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                      pt,cut_no, seed, 
+                                                                      -1 * cut.plane_no,
+                                                                      stop_plane = [cut.plane_com, cut.plane_no],
+                                                                      max_tests=1000)[0]
+            
+            if vertebra:
+                vertebra3d = [ob.matrix_world * v for v in vertebra]
+            
+            else:
+                diag = contour_utilities.diagonal_verts(self.cuts[0].verts_simple)
+        
+                cast_point = self.cuts[0].verts_simple[0] - diag * self.cuts[0].plane_no
+                cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
+                vertebra3d = [cast_sfc, self.cuts[0].verts_simple[0]]
+            
+            self.backbone.pop(0)
+            self.backbone.insert(0,vertebra3d)
+            
+            
+        if ind > 0 and ind < len(self.cuts):
+            #cut backward to reach the other cut
+            v1 = cut.verts_simple[0] - self.cuts[ind-1].verts_simple[0]
+            cut_no = surface_no.cross(v1)
+            #alternatively....just use cut.verts_simple[1] - cut.verts_simple[0]
+
+            vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                      pt,cut_no, seed, 
+                                                                      -1 * v1,
+                                                                      stop_plane = [self.cuts[ind-1].plane_com, self.cuts[ind-1].plane_no],
+                                                                      max_tests=1000)[0]
+            if vertebra:
+                vertebra3d = [ob.matrix_world * v for v in vertebra]
+            else:
+                vertebra3d = [cut.verts_simple[0], self.cuts[ind-1].verts_simple[0]]
+        
+        
+            self.backbone.pop(ind)
+            self.backbone.insert(ind,vertebra3d)    
+        
+        
+        #foward cut must be updated too
+        
+        if ind < len(self.cuts) -1:
+            v1 = self.cuts[ind+1].verts_simple[0] - cut.verts_simple[0]
+            cut_no = surface_no.cross(v1)
+            vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                      pt,cut_no, seed, 
+                                                                      v1,
+                                                                      stop_plane = [self.cuts[ind+1].plane_com, self.cuts[ind+1].plane_no],
+                                                                      max_tests=1000)[0]
+            if vertebra:
+                vertebra3d = [ob.matrix_world * v for v in vertebra]
+            else:
+                vertebra3d = [cut.verts_simple[0], self.cuts[ind-1].verts_simple[0]]
+        
+            #the backbone flows opposite direction the cuts
+            vertebra3d.reverse()
+            if not insert:
+                self.backbone.pop(ind + 1)
+            self.backbone.insert(ind + 1,vertebra3d)
+            
+        
+        if ind == len(self.cuts) - 1:
+            cut_no = surface_no.cross(cut.plane_no)
+            vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                      pt,cut_no, seed,
+                                                                      cut.plane_no,
+                                                                      stop_plane = [cut.plane_com, cut.plane_no],
+                                                                      max_tests=1000)[0] 
+    
+    
+            if vertebra:
+                vertebra3d = [ob.matrix_world * v for v in vertebra]
+                vertebra3d.reverse()
+            else:
+                diag = contour_utilities.diagonal_verts(cut.verts_simple)
+                cast_point = cut.verts_simple[0] + diag * cut.plane_no
+                cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
+                vertebra3d = [cast_sfc, cut.verts_simple[0]]
+            
+            self.backbone.pop()
+            self.backbone.append(vertebra3d)
+           
     def smooth_normals_com(self,context,ob,bme,iterations = 5):
         
         com_path = []
@@ -713,6 +811,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             self.segments = 1
             
             inserted = True
+            self.backbone_from_cuts(context, ob, bme)
             return inserted
         
         
@@ -745,7 +844,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 #establish path direction
                 direction = self.cuts[1].plane_com - self.cuts[0].plane_com
                 
-                #the original cut has no knowlege of the intended
+                #the original cut has no knowledge of the intended
                 #cut path
                 if self.cuts[0].plane_no.dot(direction) < 0:
                     print('normal reversal to fit path')
@@ -757,7 +856,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         self.cuts[0].verts.reverse()
                         print('origianl loop reversal to fit established path direction')
                 
-                    self.cuts.reverse()
+                    #self.cuts.reverse()
                     
                 #neither does the new cut.
                 if new_cut.plane_no.dot(direction) < 0:
@@ -768,14 +867,15 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     if spin < 0:
                         new_cut.verts_simple.reverse()
                         new_cut.verts.reverse()
+                        
+                        for vertebra in self.backbone:
+                            vertebra.reverse()    
+                        self.backbone.reverse()
                         print('loop reversal to fit into new path')
                         
-                #align the cut
+                #align the cut, update the backbone etc
                 self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
-                
-                #the world path is constructed by the 0th vert
-                #in each ring.
-                self.world_path.append(new_cut.verts_simple[0])
+                self.update_backbone(context, ob, bme, new_cut, insert = True)
                 inserted = True
                 return inserted
         
@@ -808,14 +908,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         print('loop reversal to fit into new path')
                         
                     self.cuts.insert(i+1, new_cut)
-                    
+                    self.segments += 1
                     #add an element to the visibility list
                     for vis in self.follow_vis:
                         vis.insert(i+1, True)
                     
                     new_cut.simplify_cross(self.ring_segments)
                     self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
-                    
+                    self.update_backbone(context, ob, bme, new_cut, insert = True)
                     inserted = True
                 
             #Check the enpoints
@@ -856,15 +956,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                             
                         
                         self.cuts.insert(0, new_cut)
+                        self.segments += 1
                         new_cut.simplify_cross(self.ring_segments)
                         self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
-                        n = contour_utilities.nearest_point(self.world_path[0], new_cut.verts)
-                        
-                        #add the closes point on the cut to the world path to extend it as well
-                        self.world_path.insert(0, new_cut.verts[n])
-                        self.raw_world.insert(0, new_cut.verts[n])
-                        self.cut_points.insert(0, new_cut.verts[n])
-                        self.snap_to_object(ob, raw = False, world = False, cuts = True)
+                        self.update_backbone(context, ob, bme, new_cut, insert = True)
                         inserted = True
                         
                 if not inserted:
@@ -895,13 +990,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                                 print('loop reversal to fit into new path')
                             
                             self.cuts.append(new_cut)
+                            self.segments += 1
                             new_cut.simplify_cross(self.ring_segments)
                             self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
-                            n = contour_utilities.nearest_point(self.world_path[-1], new_cut.verts)
-                            self.world_path.append(new_cut.verts[n])
-                            self.raw_world.append(new_cut.verts[n])
-                            self.cut_points.append(new_cut.verts[n])
-                            self.snap_to_object(ob, raw = False, world = False, cuts = True)
+                            self.update_backbone(context, ob, bme, new_cut, insert = True)
                             inserted = True
     
         return inserted
@@ -2829,8 +2921,7 @@ class ContourCutLine(object):
             if three_dimensional:
                 
                 contour_utilities.draw_3d_points(context, self.verts, self.vert_color, settings.raw_vert_size)
-            else:    
-                contour_utilities.draw_points(context, self.verts_screen, self.vert_color, settings.raw_vert_size)
+
         
         
         

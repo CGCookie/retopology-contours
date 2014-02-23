@@ -788,6 +788,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected.tail.x = event.mouse_region_x
         self.selected.tail.y = event.mouse_region_y
         
+        width = Vector((self.selcted.head.x, self.selected.head.y)) - Vector((self.selected.tail.x, self.selected.tail.y))
+        
+        #prevent small errant strokes
+        if width.length < 20: #TODO: Setting for minimum pixel width
+            self.cut_lines.remove(self.selected)
+            self.selected = None
+            return
         
         #hit the mesh for the first time
         hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
@@ -857,7 +864,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
         self.selected_path.update_visibility(context, self.original_form)  
-                        
+
+    def loop_arrow_shift(self,context,event):    
+        if event.type == 'LEFT_ARROW':
+            self.selected.shift += .05
+            
+        else:
+            self.selected.shift += -.05
+            
+        self.selected.simplify_cross(self.selected_path.ring_segments)
+        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+        self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
+        self.selected_path.update_visibility(context, self.original_form)
+            
+        #shift single ring
+        context.area.header_text_set(text = self.mode +': Shift ' + str(self.selected.shift))
+                                                
     def loop_align_modal(self,context, event):
         if not event.ctrl and not event.shift:
             act = 'BETWEEN'
@@ -877,32 +899,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected_path.update_visibility(context, self.original_form)
             
     def loop_hotkey_modal(self,context,event):
-        
-        if len(self.valid_cuts) and self.selected in self.valid_cuts:
-            ind = self.valid_cuts.index(self.selected)
-            ahead = ind + 1
-            behind = ind - 1
-        
-            if ahead < len(self.cut_lines):
-                a_line = self.valid_cuts[ahead]
-            else:
-                print('NOT A LINE?')
-                a_line = None
-        
-            if behind > - 1:
-                b_line = self.valid_cuts[behind]
-            else:
-                b_line = None
-                
-        else:
-            a_line = None
-            b_line = None
             
-        self.cut_line_widget = CutLineManipulatorWidget(context, settings, 
+        self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
                                                         self.original_form, self.bme,
                                                         self.selected,
                                                         event.mouse_region_x,event.mouse_region_y,
-                                                        cut_line_a = a_line, cut_line_b = b_line,
+                                                        cut_line_a = None, cut_line_b = None,
                                                         hotkey = self.hot_key)
         if self.hot_key == 'G':
             self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
@@ -1066,18 +1068,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
                         
-                        if event.type == 'LEFT_ARROW':
-                            self.selected.shift += .05
-                            
-                        else:
-                            self.selected.shift += -.05
-                            
-                        self.selected.simplify_cross(self.selected_path.ring_segments)
-                        self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                        self.selected_path.update_visibility(context, self.original_form)
-                            
-                        #shift single ring
-                        context.area.header_text_set(text = self.mode +': Shift ' + str(self.selected.shift))
+                        self.arrow_ring_shift(self,context)
+                        
                         return {'RUNNING_MODAL'}
                     
                     elif event.type == 'A' and event.value == 'PRESS':
@@ -1399,7 +1391,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
             return{'RUNNING_MODAL'}
             
-
     def write_to_cache(self,tool_type):
         global contour_cache
         
