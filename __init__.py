@@ -1335,10 +1335,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         return {'RUNNING_MODAL'}
                    
                     elif event.type == 'S' and event.value == 'PRESS':
-                        print(event.type)
-                        print(event.alt)
-                        print(event.shift)
-                        print(event.ctrl)
+
                         if event.shift:
                             #path.smooth_normals
                             self.selected_path.average_normals(context, self.original_form, self.bme)
