@@ -1222,6 +1222,18 @@ def list_shift(seq, n):
     n = n % len(seq)
     return seq[n:] + seq[:n]
 
+def concatenate(*lists):
+    lengths = map(len,lists)
+    newlen = sum(lengths)
+    newlist = [None]*newlen
+    start = 0
+    end = 0
+    for l,n in zip(lists,lengths):
+        end+=n
+        newlist[start:end] = l
+        start+=n
+    return newlist
+
 def find_doubles(seq):
     seen = set()
     seen_add = seen.add

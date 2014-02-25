@@ -453,8 +453,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
             self.backbone.pop(0)
             self.backbone.insert(0,vertebra3d)
-            
-            
+                
         if ind > 0 and ind < len(self.cuts):
             #cut backward to reach the other cut
             v1 = cut.verts_simple[0] - self.cuts[ind-1].verts_simple[0]
@@ -516,7 +515,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
                 vertebra3d = [cast_sfc, cut.verts_simple[0]]
             
-            self.backbone.pop()
+            if not insert:
+                self.backbone.pop()
             self.backbone.append(vertebra3d)
            
     def smooth_normals_com(self,context,ob,bme,iterations = 5):
@@ -854,8 +854,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     if spin < 0:
                         self.cuts[0].verts_simple.reverse()
                         self.cuts[0].verts.reverse()
+                        #TODO: cyclic vs not cyclic
+                        self.cuts[0].verts = contour_utilities.list_shift(self.cuts[0].verts,-1)
+                        self.cuts[0].verts_simple = contour_utilities.list_shift(self.cuts[0].verts_simple,-1)
                         print('origianl loop reversal to fit established path direction')
                 
+                        for vertebra in self.backbone:
+                            vertebra.reverse()    
+                        self.backbone.reverse()
                     #self.cuts.reverse()
                     
                 #neither does the new cut.
@@ -867,10 +873,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     if spin < 0:
                         new_cut.verts_simple.reverse()
                         new_cut.verts.reverse()
-                        
-                        for vertebra in self.backbone:
-                            vertebra.reverse()    
-                        self.backbone.reverse()
+                        #TODO: Cyclic vs not cyclic
+                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                        new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
+
                         print('loop reversal to fit into new path')
                         
                 #align the cut, update the backbone etc
@@ -905,6 +911,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     if spin < 0:
                         new_cut.verts_simple.reverse()
                         new_cut.verts.reverse()
+                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                        new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
                         print('loop reversal to fit into new path')
                         
                     self.cuts.insert(i+1, new_cut)
@@ -920,7 +928,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
             #Check the enpoints
             #TODO: Unless there is an existing vert loop endpoint
-            fraction = 5 * contour_utilities.get_path_length(self.world_path) /  (len(self.cuts) - 1)
+            
+            spine = self.backbone[1:-1]
+            spine_length = sum([contour_utilities.get_path_length(vertebra) for vertebra in spine])
+            fraction = 5 * spine_length /  (len(self.cuts) - 1)
+            
             
             if not inserted:
                 
@@ -952,6 +964,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         if spin < 0:
                             new_cut.verts_simple.reverse()
                             new_cut.verts.reverse()
+                            new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                            new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
                             print('loop reversal to fit into new path')
                             
                         
@@ -987,6 +1001,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                             if spin < 0:
                                 new_cut.verts_simple.reverse()
                                 new_cut.verts.reverse()
+                                new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                                new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
                                 print('loop reversal to fit into new path')
                             
                             self.cuts.append(new_cut)
