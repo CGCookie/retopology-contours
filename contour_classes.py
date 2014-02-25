@@ -3567,7 +3567,10 @@ class ContourCutLine(object):
             return None
 
 class CutLineManipulatorWidget(object):
-    def __init__(self,context, settings, ob, bme, cut_line,x,y,cut_line_a = None, cut_line_b = None, hotkey = False):
+    def __init__(self,context, settings, ob, bme, 
+                 cut_line,cut_path,
+                 x,y,
+                 hotkey = False):
         
         self.desc = 'WIDGET'
         self.cut_line = cut_line
@@ -3617,57 +3620,26 @@ class CutLineManipulatorWidget(object):
         self.vec_y = self.cut_line.vec_y.copy()
         self.initial_plane_no = self.cut_line.plane_no.copy()
         self.initial_seed = self.cut_line.seed_face_index
+                
+        #find out where the cut is
+        ind = cut_path.cuts.index(cut_line)
+        self.path_behind = cut_path.backbone[ind]
+        self.path_ahead = cut_path.backbone[ind+1]
         
-        #We will need this plane to establish a contour
-        #along the surface
-        #TODO: what if all this stuff fails?
-        pt = self.cut_line.verts_simple[0]
-        snap = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cut_line.verts_simple[0])
-        seed = snap[2]
-        #surface_no = cut_line.verts_simple[0] - cut_line.plane_com
-        #We may need to contemplate this
-        surface_no = ob.matrix_world.inverted().transposed() * snap[1]
-        #surface_no = ob.matrix_world.to_3x3() * snap[1]
-        cut_no = surface_no.cross(cut_line.plane_no)
         
-            
-        if cut_line_a:
-            v1 = cut_line_a.verts_simple[0] - self.cut_line.verts_simple[0]
-            cut_no = surface_no.cross(v1)
-            self.a = cut_line_a.plane_com
-            self.a_no = cut_line_a.plane_no
-            self.a_vert = cut_line_a.verts_simple[0]
-            self.path_to_a = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, self.a_vert, cut_line_a.plane_no)        
-            if self.path_to_a:
-                self.path_a_3d = [ob.matrix_world * v for v in self.path_to_a]
-        else:
-            self.a = None
-            self.a_no = None
-            self.path_to_a, eds_a = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
-                                                                         pt, cut_no, seed, 
-                                                                         self.initial_plane_no, 
-                                                                         max_tests = 20, debug = False)
-            if self.path_to_a:
-                self.path_a_3d = [ob.matrix_world * v for v in self.path_to_a]
-            
-        if cut_line_b:
-            v1 = cut_line_b.verts_simple[0] - self.cut_line.verts_simple[0]
-            cut_no = surface_no.cross(v1)
-            self.b = cut_line_b.plane_com
-            self.b_no = cut_line_b.plane_no
-            self.b_vert = cut_line_b.verts_simple[0]
-            self.path_to_b = contour_utilities.cross_section_until_plane(bme, ob.matrix_world, pt, cut_no, seed, self.b_vert, cut_line_b.plane_no)
-            if self.path_to_b:
-                self.path_b_3d = [ob.matrix_world * v for v in self.path_to_b]
+        if ind > 0:
+            self.b = cut_path.cuts[ind-1].plane_com
+            self.b_no = cut_path.cuts[ind-1].plane_no
         else:
             self.b = None
             self.b_no = None
-            self.path_to_b, eds_b = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
-                                                                         pt, cut_no, seed, 
-                                                                         -1 * self.initial_plane_no,
-                                                                         max_tests = 20, debug = False)
-            if self.path_to_b:
-                self.path_b_3d = [ob.matrix_world * v for v in self.path_to_b]
+            
+        if ind < len(cut_path.cuts)-1:
+            self.a = cut_path.cuts[ind+1].plane_com
+            self.a_no = cut_path.cuts[ind+1].plane_no
+        else:
+            self.a = None
+            self.b_no = None
             
         self.wedge_1 = []
         self.wedge_2 = []
@@ -3757,9 +3729,7 @@ class CutLineManipulatorWidget(object):
                         vec_a_screen = a_screen - com_screen
                         vec_a_screen_norm = vec_a_screen.normalized()
                         
-                        vec_a = self.a - self.initial_com
-                        vec_a2 = self.a_vert - self.cut_line.verts_simple[0]
-                        
+                        vec_a = self.a - self.initial_com                        
                         vec_a_dir = vec_a.normalized()
                         
                         if mouse_wrt_widget.dot(vec_a_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_a_screen_norm) < vec_a_screen.length:
@@ -3784,7 +3754,7 @@ class CutLineManipulatorWidget(object):
                             self.cut_line.vec_x = quat * self.vec_x.copy()
                             self.cut_line.vec_y = quat * self.vec_y.copy()
                             
-                            intersect = contour_utilities.intersect_path_plane(self.path_a_3d, new_com, inter_no, mode = 'FIRST')
+                            intersect = contour_utilities.intersect_path_plane(self.path_ahead, new_com, inter_no, mode = 'FIRST')
                             
                             if intersect:
                                 proposed_point = intersect[0]
@@ -3801,7 +3771,7 @@ class CutLineManipulatorWidget(object):
                         elif not self.b and world_vec.dot(vec_a_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_b_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
                             if proposed_point:
                                 snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                                 self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
@@ -3837,7 +3807,7 @@ class CutLineManipulatorWidget(object):
                             self.cut_line.vec_y = quat * self.vec_y.copy()
                             
                             #TODO:  what if we don't get a proposed point?
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_b_3d, new_com, inter_no, mode = 'FIRST')[0]
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_behind, new_com, inter_no, mode = 'FIRST')[0]
                             snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                             self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
                             self.cut_line.seed_face_index = snap[2]
@@ -3847,7 +3817,7 @@ class CutLineManipulatorWidget(object):
                         elif not self.a and world_vec.dot(vec_b_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_a_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
                             if proposed_point:
                                 snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                                 self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
@@ -3859,9 +3829,9 @@ class CutLineManipulatorWidget(object):
                         translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                         self.cut_line.plane_com = self.initial_com + translate
                         
-                        proposed_point = contour_utilities.intersect_path_plane(self.path_a_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                        proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
                         if not proposed_point:
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_b_3d, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                            proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
                             if proposed_point:
                                 snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                                 self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
@@ -3887,32 +3857,13 @@ class CutLineManipulatorWidget(object):
                 elif self.transform_mode in {'ROTATE_VIEW_PERPENDICULAR', 'ROTATE_VIEW'}:
                     
                     #establish the transform axes
-                    '''
-                    screen_com = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.cut_line.plane_com)
-                    vertical_screen_vec = Vector((math.cos(self.angle + .5 * math.pi), math.sin(self.angle + .5 * math.pi)))
-                    screen_y = screen_com + vertical_screen_vec
-                    world_pre_y = region_2d_to_location_3d(region, rv3d, (screen_y[0], screen_y[1]),self.cut_line.plane_com)
-                    world_y = world_pre_y - self.cut_line.plane_com
-                    world_y_correct = world_y.dot(self.initial_plane_no)
-                    world_y = world_y - world_y_correct * self.initial_plane_no
-                    world_y.normalize()
-                    
-                    world_x = self.initial_plane_no.cross(world_y)
-                    world_x.normalize()
-                    '''
-                    
                     axis_1  = rv3d.view_rotation * Vector((0,0,1))
                     axis_1.normalize()
                     
                     axis_2 = self.initial_plane_no.cross(axis_1)
                     axis_2.normalize()
                     
-                    #self.cut_line.vec_x = world_x
-                    #self.cut_line.vec_y = world_y
-                    
-                    #self.cut_line.plane_x = self.cut_line.plane_com + 2 * world_x
-                    #self.cut_line.plane_y = self.cut_line.plane_com + 2 * world_y
-                    #self.cut_line.plane_z = self.cut_line.plane_com + 2 * self.initial_plane_no
+
                     
                     #identify which quadrant we are in
                     screen_angle = math.atan2(mouse_wrt_widget[1], mouse_wrt_widget[0])
@@ -3941,21 +3892,7 @@ class CutLineManipulatorWidget(object):
                         cos = math.cos(rot_angle/2)
                         #quat = Quaternion((cos, sin*world_y[0], sin*world_y[1], sin*world_y[2]))
                         quat = Quaternion((cos, sin*axis_2[0], sin*axis_2[1], sin*axis_2[2])) 
-                        
-                        #new_no = self.initial_plane_no.copy() #its not rotated yet
-                        #new_no.rotate(quat)
-    
-                        #rotate around x axis...update y
-                        #world_x = world_y.cross(new_no)
-                        #new_com = self.initial_com
-                        #new_tan = new_com + world_x
-                        
-                        
-                        #self.cut_line.plane_x = self.cut_line.plane_com + 2 * world_x
-                        #self.cut_line.plane_y = self.cut_line.plane_com + 2 * world_y
-                        #self.cut_line.plane_z = self.cut_line.plane_com + 2 * new_no
-                    
-               
+
                     new_no = self.initial_plane_no.copy() #its not rotated yet
                     new_no.rotate(quat)
 
@@ -3969,9 +3906,9 @@ class CutLineManipulatorWidget(object):
                     self.cut_line.vec_y = new_y
                     self.cut_line.plane_no = new_no
                     
-                    new_pt = contour_utilities.intersect_path_plane(self.path_a_3d, self.initial_com, new_no, mode = 'FIRST')
+                    new_pt = contour_utilities.intersect_path_plane(self.path_ahead, self.initial_com, new_no, mode = 'FIRST')
                     if not new_pt:
-                        new_pt = contour_utilities.intersect_path_plane(self.path_b_3d, self.initial_com, new_no, mode = 'FIRST')
+                        new_pt = contour_utilities.intersect_path_plane(self.path_behind, self.initial_com, new_no, mode = 'FIRST')
                     
                     if new_pt:
                         snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * new_pt[0])
@@ -3980,21 +3917,6 @@ class CutLineManipulatorWidget(object):
                     else:
                         self.cancel_transform()
                     return {'RECUT'}
-        
-        #
-        #Tranfsorm mode = NORMAL_TANSLATE
-            #get the distance from mouse to self.x,y - inner radius
-            
-            #get the world distance by projecting both the original x,y- inner radius
-            #and the mouse_x,mouse_y to the depth of the COPM
-            
-            #if "precision divide by 1/10?
-            
-            #add the translation vector to the
-        
-        #Transform mode = ROTATE_VIEW
-        
-        #Transfrom mode = EDGE_PEREPENDICULAR
         
 
     def derive_screen(self,context):
@@ -4072,31 +3994,17 @@ class CutLineManipulatorWidget(object):
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
-        if self.path_to_a and self.path_to_a != []:
-            contour_utilities.draw_3d_points(context, self.path_a_3d, self.color5, 6)
+        if self.path_ahead and self.path_ahead != []:
+            contour_utilities.draw_3d_points(context, self.path_ahead, self.color5, 6)
         if self.b:
             contour_utilities.draw_3d_points(context, [self.b], self.color3, 5)
-        if self.path_to_b and self.path_to_b != []:
-            contour_utilities.draw_3d_points(context, self.path_b_3d, self.color3, 6)
+        if self.path_behind and self.path_behind != []:
+            contour_utilities.draw_3d_points(context, self.path_behind, self.color3, 6)
             
         if not self.transform and not self.hotkey:
-            #draw wedges
-            #contour_utilities.draw_polyline_from_points(context, self.wedge_1, self.color, self.line_width, "GL_LINES")
-            #contour_utilities.draw_polyline_from_points(context, self.wedge_2, self.color, self.line_width, "GL_LINES")
-            #contour_utilities.draw_polyline_from_points(context, self.wedge_3, self.color, self.line_width, "GL_LINES")
-            #contour_utilities.draw_polyline_from_points(context, self.wedge_4, self.color, self.line_width, "GL_LINES")
             
-            #draw inner circle
-            #contour_utilities.draw_polyline_from_points(context, self.inner_circle, (self.color[0],self.color[1],self.color[2],.5), self.line_width, "GL_LINES")
-            
-            #draw outer circle (two halfs later)
-            #contour_utilities.draw_polyline_from_points(context, self.outer_circle_1[0:l-1], (0,.5,.8,1), self.line_width, "GL_LINES")
-
-                
-            #draw arc 1
             l = len(self.arc_arrow_1)
-            #contour_utilities.draw_polyline_from_points(context, self.arc_arrow_1[:l-1], self.color2, self.line_width, "GL_LINES")
-
+            
             #draw outer circle half
             contour_utilities.draw_polyline_from_points(context, self.outer_circle_1[0:l-2], self.color4, self.line_width, "GL_LINES")
             contour_utilities.draw_polyline_from_points(context, self.outer_circle_2[0:l-2], self.color4, self.line_width, "GL_LINES")

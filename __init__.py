@@ -693,30 +693,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             prospective_targets.append(h_target) #TODO: sort priority
                             self.hover_target = h_target
                             if self.hover_target.desc == 'CUT_LINE':
-                                ind = path.cuts.index(self.hover_target)
-                                ahead = ind + 1
-                                behind = ind - 1
-                            
-                                if ahead < len(path.cuts):
-                                    a_line = path.cuts[ahead]
-                                else:
-                                    a_line = None
-                            
-                                if behind > - 1:
-                                    b_line = path.cuts[behind]
-                                else:
-                                    b_line = None
-                                        
 
                                 if self.hover_target.select:    
                                     self.cut_line_widget = CutLineManipulatorWidget(context, 
                                                                                     settings,
                                                                                     self.original_form, self.bme,
-                                                                                    self.hover_target, 
+                                                                                    self.hover_target,
+                                                                                    self.selected_path,
                                                                                     event.mouse_region_x,
-                                                                                    event.mouse_region_y,
-                                                                                    cut_line_a = a_line, 
-                                                                                    cut_line_b = b_line)
+                                                                                    event.mouse_region_y)
                                     self.cut_line_widget.derive_screen(context)
                                 
                                 else:
@@ -903,14 +888,18 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
                                                         self.original_form, self.bme,
                                                         self.selected,
+                                                        self.selected_path,
                                                         event.mouse_region_x,event.mouse_region_y,
-                                                        cut_line_a = None, cut_line_b = None,
                                                         hotkey = self.hot_key)
         if self.hot_key == 'G':
             self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
         elif self.hot_key == 'R':
             self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
-                                                   
+        
+        self.cut_line_widget.initial_x = event.mouse_region_x
+        self.cut_line_widget.initial_y = event.mouse_region_y
+        self.cut_line_widget.derive_screen(context)
+                                             
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -1050,11 +1039,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     if event.type == 'G' and event.value == 'PRESS':
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'G'
+                        self.loop_hotkey_modal(context,event)
                         return {'RUNNING_MODAL'}
                     #R -> HOTKEY
                     if event.type == 'R' and event.value == 'PRESS':
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'R'
+                        self.loop_hotkey_modal(context,event)
                         return {'RUNNING_MODAL'}
                     
                     #X, DEL -> DELETE
@@ -1184,7 +1175,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 if (event.type in {'ESC', 'RIGHTMOUSE'} and
                     event.value == 'PRESS'):
-                    #widget.cancel_transform()
+                    self.cut_line_widget.cancel_transform
                     context.area.header_text_set(text = self.mode + ': WAITING')
                     self.modal_state = 'WAITING'
                     return {'RUNNING_MODAL'}
