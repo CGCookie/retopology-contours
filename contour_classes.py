@@ -641,6 +641,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             self.cuts[start + i+1].update_com()
           
     def connect_cuts_to_make_mesh(self, ob):
+        '''
+        This also takes care of bridging to existing vert loops
+        At the end..a simple doubles removal solidifies the bridge
+        
+        Eventually, I will get smart enough to bridge a loop to existing
+        geom by using the index math, but it's prbably an hour chore and
+        there are other higher priority items at the momen.
+        '''
         total_verts = []
         total_edges = []
         total_faces = []
@@ -1020,6 +1028,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         '''
         
         self.cuts.remove(cut)
+        
+        #update a ton of crap?
+        
                   
     def align_cut(self, cut, mode = 'BETWEEN', fine_grain = True):
         '''
@@ -1117,8 +1128,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             bmfaces.append(reto_bme.faces.new(new_face))
             
         
-        bmesh.update_edit_mesh(original_me, tessface=False, destructive=True)
+        if self.existing_head or self.existing_tail:
+            if self.existing_head:
+                weld_verts = [reto_bme.verts[n] for n in self.existing_head.vert_inds_sorted]
             
+            if self.existing_tail:
+                weld_verts.extend([reto_bme.verts[n] for n in self.existing_tail.vert_inds_sorted])
+        
+            bmesh.ops.remove_doubles(reto_bme, verts = bmverts + weld_verts, dist = .0001)    
     def draw(self,context, path = True, nodes = True, rings = True, follows = True, backbone = True):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
@@ -1239,7 +1256,7 @@ class ExistingVertList(object):
         
         self.desc = 'EXISTING_VERT_LIST'
         
-        #will need this later for bridging
+        #will need this later for bridging?
         self.vert_inds_unsorted = [vert.index for vert in verts]
         
         if key_type == 'EDGES':
@@ -1281,7 +1298,8 @@ class ExistingVertList(object):
             v = verts[self.vert_inds_unsorted.index(i)]
             self.verts_simple.append(mx * v.co)
          
-        self.plane_no = None
+        self.plane_no = None  #TODO best fit plane?
+        self.vert_inds_sorted = vert_inds_sorted
             
     def derive_normal(self):
         
