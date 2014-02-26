@@ -606,36 +606,20 @@ def retopo_draw_callback(self,context):
                     
         self.post_update = False
         
-    for cut_collection in [self.cut_lines]: #, self.valid_cuts]:
-        if len(cut_collection) > 0:
-            for i, c_cut in enumerate(cut_collection):
-                if self.widget_interaction and self.drag_target == c_cut:
-                    interact = True
-                    #point1 = contour_utilities.get_com(c_cut.verts_simple)
-                    #point2 = c_cut.plane_com
-                    #point3 = c_cut.plane_com + c_cut.plane_no
-                
-                    #l_color = (settings.vert_rgb[0],settings.vert_rgb[1],settings.vert_rgb[2],1)
-                    #v_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
-                    #contour_utilities.draw_polyline_from_3dpoints(context, [point2,point1], l_color, settings.line_thick,"GL_LINE_STIPPLE")
-                    #contour_utilities.draw_polyline_from_3dpoints(context, [point2,point3], l_color, settings.line_thick,"GL_LINE_STIPPLE")
-                
-                    #contour_utilities.draw_3d_points(context, [point1,point2,point3], v_color, settings.vert_size)
 
-                else:
-                    interact = False
-                c_cut.draw(context, settings,three_dimensional = self.navigating, interacting = interact)
+    for i, c_cut in enumerate(self.cut_lines):
+        if self.widget_interaction and self.drag_target == c_cut:
+            interact = True
+        else:
+            interact = False
         
-                if c_cut.verts_simple != [] and settings.show_cut_indices:
-                    loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, c_cut.verts_simple[0])
-                    blf.position(0, loc[0], loc[1], 0)
-                    blf.draw(0, str(i))
+        c_cut.draw(context, settings,three_dimensional = self.navigating, interacting = interact)
 
-    if self.follow_lines != [] and settings.show_edges:
-        for follow in self.follow_lines:
-            contour_utilities.draw_polyline_from_3dpoints(context, follow, 
-                                                          (g_color[0], g_color[1], g_color[2], 1), 
-                                                          settings.line_thick,"GL_LINE_STIPPLE")
+        if c_cut.verts_simple != [] and settings.show_cut_indices:
+            loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, c_cut.verts_simple[0])
+            blf.position(0, loc[0], loc[1], 0)
+            blf.draw(0, str(i))
+
 
     if self.cut_line_widget and settings.draw_widget:
         self.cut_line_widget.draw(context)
@@ -1204,7 +1188,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     context.area.header_text_set(text = 'LOOP MODE: WAITING')
                     return {'RUNNING_MODAL'}
                     
+                elif  event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and self.hot_key:
+                    self.cut_line_widget.cancel_transform()
+                    
+                    
                 return {'RUNNING_MODAL'}
+            
+            
                 
                 
             return{'RUNNING_MODAL'}
@@ -1580,391 +1570,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 self.connect_valid_cuts_to_make_mesh()
                     
-    def insert_new_cut(self,new_cut, search_rad = 1/8):
-        print('beta testing')
-        
-        #the first cut
-        if len(self.valid_cuts) == 0:
-            print('welcome to the party')
-            self.valid_cuts.append(new_cut)
-            self.cut_lines.remove(new_cut)
-            
-            
-            
-        #make sure the cut is reasonably close
-        #and oriented with the other one.
-        elif len(self.valid_cuts) == 1:
-            print('It takes 2 to the tango')
-            established_cut = self.valid_cuts[0]
-            
-            insert = contour_utilities.com_mid_ray_test(new_cut, established_cut, 
-                                                        self.original_form,
-                                                        search_factor = self.settings.search_factor)
-            if insert:
-                self.valid_cuts.append(new_cut)
-                self.cut_lines.remove(new_cut)        
-                
-                
-        else:
-            
-            pt = new_cut.plane_com
-            no = new_cut.plane_no
-            
-            test_ends = True
-            #test in between to insert somewhere
-            for i in range(0,len(self.valid_cuts)-1):
-                
-                com1 = self.valid_cuts[i].plane_com
-                com2 = self.valid_cuts[i+1].plane_com
-                
-                
-                insert = contour_utilities.com_line_cross_test(com1, com2, pt, no, self.settings.intersect_factor)
-                
-                if insert:
-                    print('found a place to put it!')
-                    self.valid_cuts.insert(i + 1, new_cut)
-                    self.cut_lines.remove(new_cut)
-                    test_ends = False
-                    break
-            
-            #we didn't find a place to put it in between
-            #now we should check the ends
-            if test_ends:
-                print('to the end (or start) of the line')
-                insert_start = contour_utilities.com_mid_ray_test(new_cut, self.valid_cuts[0], 
-                                                            self.original_form,
-                                                            self.settings.search_factor)
-                
-                insert_end = contour_utilities.com_mid_ray_test(new_cut, self.valid_cuts[-1], 
-                                                            self.original_form,
-                                                            self.settings.search_factor)
-                
-                if insert_start and not insert_end:
-                    self.valid_cuts.insert(0, new_cut)
-                    
-                elif insert_end: #if it works for both ends....still put it at end
-                    self.valid_cuts.insert(len(self.valid_cuts) -1, new_cut)
-                    
-        print(self.cut_lines)
-        print(self.valid_cuts)
-                                      
-    def align_cut(self, cut, mode = 'BETWEEN', fine_grain = True):
-        
-        if len(self.valid_cuts) < 2:
-            print('nothing to align with')
-            return
-        
-        if cut not in self.valid_cuts:
-            print('this cut is not connected to anything yet')
-            return
-        
-        
-        ind = self.valid_cuts.index(cut)
-        ahead = ind + 1
-        behind = ind - 1
-                
-        if ahead != len(self.valid_cuts):
-            cut.align_to_other(self.valid_cuts[ahead], auto_align = fine_grain)
-            shift_a = cut.shift
-        else:
-            shift_a = False
-                    
-        if behind != -1:
-            cut.align_to_other(self.valid_cuts[behind], auto_align = fine_grain)
-            shift_b = cut.shift
-        else:
-            shift_b = False    
-        
-        
-        if mode == 'DIRECTION':
-            #this essentially just reverses the loop if it's got an anticlockwise rotation
-            if ahead != len(self.valid_cuts):
-                cut.align_to_other(self.valid_cuts[ahead], auto_align = False, direction_only = True)
-        
-                        
-            elif behind != -1:
-                cut.align_to_other(self.valid_cuts[behind], auto_align = False, direction_only = True)
-                
-            
-            
-        #align between
-        if mode == 'BETWEEN':      
-            if shift_a and shift_b:
-                #In some circumstances this may be a problem if there is
-                #an integer jump of verts around the ring
-                self.selected.shift = .5 * (shift_a + shift_b)
-                        
-            #align ahead anyway
-            elif shift_a:
-                self.selected.shift = shift_a
-            #align behind anyway
-            else:
-                self.selected.shift = shift_b
-    
-        #align ahead    
-        elif mode == 'FORWARD':
-            if shift_a:
-                self.selected.shift = shift_a
-                                
-        #align behind    
-        elif mode == 'BACKWARD':
-            if shift_b:
-                self.selected.shift = shift_b
 
-    def sort_cuts(self):
-        
-        if len(self.cut_lines) < 2:
-            print('waiting on other cut lines')
-            self.verts = []
-            self.edges = []
-            self.face = []
-            self.follow_lines = []
-            return
-        
-        imx = self.original_form.matrix_world.inverted()
-        
-        #first criteria is check for lines which have succesfully cut
-        #a mesh
-        valid_cuts = [c_line for c_line in self.cut_lines if c_line.verts != [] and c_line.verts_simple != []]
-        self.cut_lines = valid_cuts
-        if len(valid_cuts) < 2:
-            print('for some reason our cut lines dont add up')
-            
-            if self.existing_cut and len(valid_cuts) == 1:
-                print('however there is an existing cut to bridge to')
-                print('aligning existing cut')
-                self.valid_cuts = valid_cuts
-                self.existing_cut.align_to_other(valid_cuts[0], auto_align = False)
-            return
-        
-
-
-        #####order the cuts####
-        
-        #first make a list of the cut Center of Mass and normals
-        #in the same order as valid cuts
-        planes = [(cut.plane_com, cut.plane_no) for cut in valid_cuts]
-        
-        valid_pairs = []
-        #test validity of all pairs
-        #a pair is valid if the line segment crosses
-        #none of the other planes reasonably close to
-        #the plane origin.  This will fail in hairpin turns
-        #but that case should be relatively uncommon
-        
-        for i in range(0,len(valid_cuts)):
-            for m in range(i,len(valid_cuts)):
-                if m != i:
-                    pair = (i,m)
-                    
-                    #does this seem premature to append here?
-                    valid_pairs.append(pair)
-                    A = planes[i][0]  #the COM of the cut loop
-                    B = planes[m][0] #the COM of the other cut loop
-                    C = .5 * (A + B)  #the midpoint of the line between them
-                    
-                    #we know the plane_pt is ON the mesh
-                    #vs the COM of the loop which is inside the mesh (potentially)
-                    #TODO: make this way beeter
-                    
-                    n = math.floor(len(valid_cuts[i].verts_simple)/3)
-                    ray = A - valid_cuts[i].verts_simple[n]
-                    #ray1 = A - valid_cuts[i].plane_pt  #valid_cuts[i].plane_tan.world_position
-                    #ray2 = B - valid_cuts[m].plane_pt  #plane_tan.world_position
-                    #ray = ray1.lerp(ray2,.5).normalized()
-                    
-                    #TODO: make 100 here actually be the approx radius of the two cuts :-)
-                    hit = self.original_form.ray_cast(imx * (C + 100 * ray), imx * (C - 100 * ray))
-                    
-                    
-                    #iterate through all the other planes other than the two in the current pair
-                    for j, plane in enumerate(planes):
-                        if j != i and j != m:
-                            pt = plane[0]
-                            no = plane[1]
-                            
-                            #intersect the line between the two loops
-                            #with the other planes...most likely it will intersect
-                            v = intersect_line_plane(A,B,pt,no)
-                            if v:
-                                #if the distance between the intersection is less than
-                                #than 1/2 the distance between the current pair
-                                #than this pair is invalide because there is a loop
-                                #in between
-                                check = intersect_point_line(v,A,B)
-                                pair_length = (B - A).length/2
-                                inval_length = (v - pt).length
-                                if (check[1] >= 0 and check[1] <= 1 and inval_length < pair_length) or hit[2] == -1:
-                                    print('invalid pair %s' % str(pair))
-                                    print('the hit face index is value is %i' % hit[2])
-                                    
-                                    if pair in valid_pairs:
-                                        valid_pairs.remove(pair)
-        print('found valid pairs as follows')       
-        print(valid_pairs)
-        
-        #TODO disect and comment this code
-        if len(valid_pairs) == 0:
-            print('no valid pairs!!')
-        if len(valid_pairs) > 0:
-            #sort the pairs
-            new_order = []
-            new_order.append(valid_pairs[-1][0])
-            new_order.append(valid_pairs[-1][1])
-            valid_pairs.pop()
-            
-            tests = 0
-            max_tests = len(valid_pairs) + 2
-            while len(valid_pairs) and tests < max_tests:
-                tests += 1
-                for pair in valid_pairs:
-                    end = set(pair) & {new_order[-1]}
-                    beg = set(pair) & {new_order[0]}
-                    if end or beg:
-                        valid_pairs.remove(pair)
-                        if end:
-                            new_order.append(list(set(pair) - end)[0])
-                        else:
-                            new_order.insert(0, list(set(pair)-beg)[0])   
-                        break
-            
-            print('the new order is')            
-            print(new_order)     
-            
-            
-            #clean out bad connections
-            n_doubles = len(new_order) - len(set(new_order))
-            if n_doubles > 0 + 1*self.settings.cyclic:
-                print('we have some connectivity problems, doing our best')
-                doubles = []
-                for i in new_order:
-                    if new_order.count(i) > 1 and i not in doubles:
-                        doubles.append(i)
-                        
-                print(doubles)
-                for repeat in doubles:
-                    first = new_order.index(repeat)
-                    n = new_order.index(repeat,first+1)
-                    
-                    print('The offending location is %i' % n)
-                    #take out the 2nd occurence of the loop
-                    #as long it's not the beginning/end of the loop
-                    if n == len(new_order) - 1:
-                        if not self.settings.cyclic:
-                            new_order.pop(n)
-                    else:
-                        new_order.pop(n)
-                        
-                
-                #resort based on first stroke drawn
-                if 0 in new_order and new_order[0] != 0:
-                    print('preshifted')
-                    print(new_order)
-                    
-                    print('shifted verts')
-                    
-                    new_order = contour_utilities.list_shift(new_order, new_order.index(0))
-                    print(new_order)
-                        
-            cuts_copy = valid_cuts.copy()
-            valid_cuts = []
-            for i, n in enumerate(new_order):
-                
-                valid_cuts.append(cuts_copy[n])
-            
-            #guaranteed editmode for this to happen
-            #this makes sure we bridge the correct end
-            #when we are done
-            if self.sel_edges and len(self.sel_edges) and self.sel_verts and len(self.sel_verts) and self.existing_cut:
-                
-                #bridge_vert_vecs = [mx * v.co for v in self.sel_verts]
-                bridge_loop_location = contour_utilities.get_com(self.existing_cut.verts_simple)
-                
-                loop_0_loc = contour_utilities.get_com(valid_cuts[0].verts_simple)
-                loop_1_loc = contour_utilities.get_com(valid_cuts[-1].verts_simple)
-                
-                dist_0 = bridge_loop_location - loop_0_loc
-                dist_1 = bridge_loop_location - loop_1_loc
-                
-                if dist_1.length < dist_0.length:
-                    valid_cuts.reverse()
-                self.existing_cut.align_to_other(valid_cuts[0], auto_align = False)
-                    
-                    
-            del cuts_copy
-            self.valid_cuts = valid_cuts
-             
-    def connect_valid_cuts_to_make_mesh(self):
-        total_verts = []
-        total_edges = []
-        total_faces = []
-        
-        if len(self.valid_cuts) < 2:
-            print('waiting on other cut lines')
-            self.verts = []
-            self.edges = []
-            self.face = []
-            self.follow_lines = []
-            return
-        
-        imx = self.original_form.matrix_world.inverted()
-        n_rings = len(self.valid_cuts)
-        n_lines = len(self.valid_cuts[0].verts_simple)
-        
-        
-        #work out the connectivity edges
-        for i, cut_line in enumerate(self.valid_cuts):
-            for v in cut_line.verts_simple:
-                total_verts.append(imx * v)
-            for ed in cut_line.eds_simple:
-                total_edges.append((ed[0]+i*n_lines,ed[1]+i*n_lines))
-            
-            if i < n_rings - 1:
-                #make connections between loops
-                for j in range(0,n_lines):
-                    total_edges.append((i*n_lines + j, (i+1)*n_lines + j))
-        
-        cyclic = 0 in self.valid_cuts[0].eds_simple[-1]
-        
-        #work out the connectivity faces:
-        for j in range(0,n_rings - 1):
-            for i in range(0,n_lines-1):
-                ind0 = j * n_lines + i
-                ind1 = j * n_lines + (i + 1)
-                ind2 = (j + 1) * n_lines + (i + 1)
-                ind3 = (j + 1) * n_lines + i
-                total_faces.append((ind0,ind1,ind2,ind3))
-            
-            if cyclic:
-                ind0 = (j + 1) * n_lines - 1
-                ind1 = j * n_lines + int(math.fmod((j+1)*n_lines, n_lines))
-                ind2 = ind0 + 1
-                ind3 = ind0 + n_lines
-                total_faces.append((ind0,ind1,ind2,ind3))
-                
-
-        self.follow_lines = []
-        for i in range(0,len(self.valid_cuts[0].verts_simple)):
-            tmp_line = []
-            if self.existing_cut:
-                tmp_line.append(self.existing_cut.verts_simple[i])
-            for cut_line in self.valid_cuts:
-                tmp_line.append(cut_line.verts_simple[i])
-            self.follow_lines.append(tmp_line)
-
-
-        self.verts = total_verts
-        self.faces = total_faces
-        self.edges = total_edges
-        
-        self.write_to_cache('CUT_LINES')
   
     def invoke(self, context, event):
         #TODO Settings harmon CODE REVIEW
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         self.valid_cut_inds = []
-        
+        self.existing_loops = []
         #clear the undo cache
         contour_undo_cache = []
         
@@ -2216,19 +1829,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #has not been established.
         self.cut_lines = []
         
-        #these will be collections
+        #a list of all the cut paths (segments)
         self.cut_paths = []
+        #a list to store screen coords when drawing
         self.draw_cache = []
         
-        
-        #this is a list of valid, ordered cuts.
-        #TODO: Depricated now that cut order is handled on the segment level
-        self.valid_cuts = []
     
-        #this is a collection of verts used for open GL drawing the spans
-        #TODO: Depricated now that cut order is handled on the segment level
-        self.follow_lines = []
-        
         self.header_message = 'LMB: Select Stroke, RMB / X: Delete Sroke, , G: Translate, R: Rotate, A / Ctrl+A / Shift+A: Align, S: Cursor to Stroke, C: View to Cursor'
         context.area.header_text_set(self.header_message)
         if settings.recover:
