@@ -779,14 +779,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             self.selected.head = None
             self.selected.tail = None
             
-            
+            self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
             if self.cut_paths != []:
                 inserted = False
                 for path in self.cut_paths:
                     if path.insert_new_cut(context, self.original_form, self.bme, self.selected):
                         #the cut belongs to the series now
                         inserted = True
-                        self.cut_lines.remove(self.selected)
+                        
                         path.connect_cuts_to_make_mesh(self.original_form)
                         path.update_visibility(context, self.original_form)
                         path.lock = True
@@ -804,12 +804,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 for path in self.cut_paths:
                     path.select = False
                 
+                self.cut_lines.remove(self.selected)
                 self.cut_paths.append(path)
                 self.selected_path = path
                 path.select = True
 
                 print('made a new path from the new single cut')
-                
+      
             #TODO - Extension of existing geometry
     def widget_transform(self,context,settings, event):
         
@@ -865,6 +866,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected.simplify_cross(self.selected_path.ring_segments)
         
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+        self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
         self.selected_path.update_visibility(context, self.original_form)
             
     def loop_hotkey_modal(self,context,event):
@@ -877,6 +879,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                                         hotkey = self.hot_key)
         if self.hot_key == 'G':
             self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
+
+        
         elif self.hot_key == 'R':
             self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
         
@@ -1073,6 +1077,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #X, DEL -> DELETE
                     elif event.type == 'X' and event.value == 'PRESS':
+                        
+                        if len(self.selected_path.cuts) > 1:
+                            self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
+                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                            self.selected_path.update_visibility(context, self.original_form)
+                        
+                        else:
+                            self.cut_paths.remove(self.selected_path)
+                            self.selected_path = None
+                            
                         self.selected = None
                         context.area.header_text_set(text = self.mode + ': DELETE')
                     
@@ -1192,13 +1206,21 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     event.value == 'PRESS'):
                     #confirm transform
                     #recut, align, visibility?, and update the segment
+                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
                     self.modal_state = 'WAITING'
                     context.area.header_text_set(text = self.mode + ': WAITING')
                     return {'RUNNING_MODAL'}
                 
                 if (event.type in {'ESC', 'RIGHTMOUSE'} and
                     event.value == 'PRESS'):
-                    self.cut_line_widget.cancel_transform
+                    self.cut_line_widget.cancel_transform()
+                    self.selected.cut_object(context, self.original_form, self.bme)
+                    self.selected.simplify_cross(self.selected_path.ring_segments)
+                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
+                    self.selected.update_com()
+                    
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.update_visibility(context, self.original_form)
                     context.area.header_text_set(text = self.mode + ': WAITING')
                     self.modal_state = 'WAITING'
                     return {'RUNNING_MODAL'}
@@ -1224,12 +1246,18 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 #LEFTMOUSE event.value == 'RELEASE'
                     #Do all the necessary recutting, aligning, path stuff
                     self.modal_state = 'WAITING'
+                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
                     context.area.header_text_set(text = 'LOOP MODE: WAITING')
                     return {'RUNNING_MODAL'}
                     
                 elif  event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and self.hot_key:
                     self.cut_line_widget.cancel_transform()
+                    self.selected.cut_object(context, self.original_form, self.bme)
+                    self.selected.simplify_cross(self.selected_path.ring_segments)
+                    self.selected.update_com()
                     
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.update_visibility(context, self.original_form)
                     
                 return {'RUNNING_MODAL'}
             

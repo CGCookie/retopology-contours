@@ -424,6 +424,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         update just the segments of the backbone affected by a cut
         do this after it has been inserted and aligned or after
         it has been transformed
+        
+        DO NOT USE FOR CUT REMOVAL, remove_cut takes care of it on it's own.
         '''
         
         ind = self.cuts.index(cut)
@@ -1022,13 +1024,21 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     
         return inserted
     
-    def remove_cut(self,cut):
+    def remove_cut(self,context,ob, bme, cut):
         '''
         removes a cut from the sequence
         '''
-        
-        self.cuts.remove(cut)
-        
+        if len(self.cuts) > 0:
+            ind = self.cuts.index(cut)
+            self.cuts.remove(cut)
+            self.backbone.pop(ind)
+            if ind < len(self.cuts) - 1:
+                self.update_backbone(context, ob, bme, self.cuts[ind], insert = False)
+            else:
+                self.update_backbone(context, ob, bme, self.cuts[ind -1], insert = False)
+            
+        else:
+            self.cuts = []
         #update a ton of crap?
         
                   
@@ -3638,6 +3648,7 @@ class CutLineManipulatorWidget(object):
         self.vec_y = self.cut_line.vec_y.copy()
         self.initial_plane_no = self.cut_line.plane_no.copy()
         self.initial_seed = self.cut_line.seed_face_index
+        self.initial_shift = self.cut_line.shift
                 
         #find out where the cut is
         ind = cut_path.cuts.index(cut_line)
@@ -3782,8 +3793,7 @@ class CutLineManipulatorWidget(object):
                             
                             else:
                                 self.cancel_transform()
-                            print('DID WE DO IT RIGHT?')
-                            
+
                             return {'RECUT'}
                         
                         elif not self.b and world_vec.dot(vec_a_dir) < 0:
@@ -3826,10 +3836,13 @@ class CutLineManipulatorWidget(object):
                             
                             #TODO:  what if we don't get a proposed point?
                             proposed_point = contour_utilities.intersect_path_plane(self.path_behind, new_com, inter_no, mode = 'FIRST')[0]
-                            snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                            self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                            self.cut_line.seed_face_index = snap[2]
-                            print('DID WE DO IT B RIGHT?')
+                            if proposed_point:
+                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                                self.cut_line.seed_face_index = snap[2]
+                            
+                            else:
+                                self.cancel_transform()
                             return {'RECUT'}
                             
                         elif not self.a and world_vec.dot(vec_b_dir) < 0:
@@ -3925,10 +3938,10 @@ class CutLineManipulatorWidget(object):
                     self.cut_line.plane_no = new_no
                     
                     new_pt = contour_utilities.intersect_path_plane(self.path_ahead, self.initial_com, new_no, mode = 'FIRST')
-                    if not new_pt:
+                    if not new_pt[0]:
                         new_pt = contour_utilities.intersect_path_plane(self.path_behind, self.initial_com, new_no, mode = 'FIRST')
                     
-                    if new_pt:
+                    if new_pt[0]:
                         snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * new_pt[0])
                         self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
                         self.cut_line.seed_face_index = snap[2] 
@@ -4002,6 +4015,7 @@ class CutLineManipulatorWidget(object):
         self.cut_line.plane_com = self.initial_com
         self.cut_line.plane_no = self.initial_plane_no
         self.cut_line.plane_pt = self.initial_plane_pt
+        self.cut_line.shift = self.initial_shift
         self.cut_line.vec_x = self.vec_x
         self.cut_line.vec_y = self.vec_y
         self.cut_line.seed_face_index = self.initial_seed
