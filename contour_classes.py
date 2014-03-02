@@ -114,10 +114,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.raw_world.append(mx * hit[0])
                 
     def smooth_path(self,context, ob = None):
-        print('              ')
-
-        start_time = time.time()
-        print(self.raw_world[1])
+        
         #clear the world path if need be
         self.world_path = []
         
@@ -146,9 +143,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         segment[i] = mx * snap[0]
             
             self.world_path.extend(segment)
-        end_time = time.time()
-        print('smoothed and snapped %r in %f seconds' % (ob != None, end_time - start_time)) 
-        
+
         #resnap everthing we can to get normals an stuff
         #TODO do this the last time on the smooth factor duh
         self.snap_to_object(ob)
@@ -570,7 +565,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                
     def average_normals(self,context,ob,bme):
         
-
+        if self.lock:
+            self.cut_points = [cut.verts_simple[0] for cut in self.cuts]
+        
         avg_normal = Vector((0,0,0))
         for i, loc in enumerate(self.cut_points):
             
@@ -1040,8 +1037,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         else:
             self.cuts = []
         #update a ton of crap?
-        
-                  
+                     
     def align_cut(self, cut, mode = 'BETWEEN', fine_grain = True):
         '''
         will assess a cut with neighbors and attempt to
@@ -3668,7 +3664,7 @@ class CutLineManipulatorWidget(object):
             self.a_no = cut_path.cuts[ind+1].plane_no
         else:
             self.a = None
-            self.b_no = None
+            self.a_no = None
             
         self.wedge_1 = []
         self.wedge_2 = []
