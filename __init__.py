@@ -652,6 +652,37 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         else:
             return False
     
+    def hover_guide_mode(self,context, settings, event):
+        '''
+        handles mouse selection, hovering, highlighting
+        and snapping
+        '''
+        
+        #identify hover target for highlighting
+        if self.cut_paths != []:
+            
+            target_at_all = False
+            
+            breakout = False
+            for path in self.cut_paths:
+                if not path.select:
+                    path.unhighlight(settings)
+                for c_cut in path.cuts:                    
+                    h_target = c_cut.active_element(context,event.mouse_region_x,event.mouse_region_y)
+                    if h_target:
+                        path.highlight(settings)
+                        target_at_all = True
+                        self.hover_target = path
+                        breakout = True
+                        break
+                
+                if breakout:
+                    break
+                                  
+            if not target_at_all:
+                self.hover_target = None
+
+        
     def hover_loop_mode(self,context, settings, event):
         '''
         Handles mouse selection and hovering
@@ -661,20 +692,19 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             new_target = False
             target_at_all = False
-            prospective_targets = []
             
             for path in self.cut_paths:
                 for c_cut in path.cuts:
                     if not c_cut.select:
-                        c_cut.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1) 
+                        c_cut.unhighlight(settings) 
                     
                     h_target = c_cut.active_element(context,event.mouse_region_x,event.mouse_region_y)
                     if h_target:
-                        c_cut.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+                        c_cut.highlight(settings)
                         target_at_all = True
-                        new_target = h_target != self.hover_target
-                        if new_target:
-                            prospective_targets.append(h_target) #TODO: sort priority
+                         
+                        if (h_target != self.hover_target) or (h_target.select and not self.cut_line_widget):
+                            
                             self.hover_target = h_target
                             if self.hover_target.desc == 'CUT_LINE':
 
@@ -734,9 +764,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         return path
     
     def click_new_cut(self,context, settings, event):
-        
 
-            
         s_color = (settings.stroke_rgb[0],settings.stroke_rgb[1],settings.stroke_rgb[2],1)
         h_color = (settings.handle_rgb[0],settings.handle_rgb[1],settings.handle_rgb[2],1)
         g_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
@@ -751,9 +779,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         for path in self.cut_paths:
             for cut in path.cuts:
-                cut.select = False
+                cut.deselect(settings)
                 
-        new_cut.select = True
+        new_cut.do_select(settings)
         self.cut_lines.append(new_cut)
         
         return new_cut
@@ -796,6 +824,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.connect_cuts_to_make_mesh(self.original_form)
                             path.update_visibility(context, self.original_form)
                             path.lock = True
+                            path.do_select(settings)
+                            self.selected_path = path
+                            for other_path in self.cut_paths:
+                                if other_path != self.selected_path:
+                                    other_path.deselect(settings)
                             
                 if self.cut_paths == [] or not inserted or self.new:
                     print('making a new cut path')
@@ -811,11 +844,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     path.update_visibility(context, self.original_form)
                     
                     for other_path in self.cut_paths:
-                        other_path.select = False
+                        other_path.deselect(settings)
                     
                     self.cut_paths.append(path)
                     self.selected_path = path
-                    path.select = True
+                    path.do_select(settings)
                     
                     self.cut_lines.remove(self.selected)
             
@@ -1039,14 +1072,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         if not event.shift:
                             for path in self.cut_paths:
                                 for cut in path.cuts:
-                                        cut.select = False   
+                                        cut.deselect(settings)  
                                 if self.selected in path.cuts:
-                                    path.select = True
+                                    path.do_select(settings)
                                     self.selected_path = path
                                 else:
-                                    path.select = False
+                                    path.deselect(settings)
                         
-                        self.hover_target.select = True
+                        self.hover_target.do_select(settings)
                         
                     
                     elif self.hover_target  and self.hover_target == self.selected:
@@ -1324,27 +1357,34 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #self.snap_target = None
                     context.area.header_text_set(text = self.mode +': FORCE NEW')
                     return {'RUNNING_MODAL'}
-                #MOUSEMOVE
-                    #assess hovering
-                        #highlight appropriate things
+                
+                
+                elif event.type == 'MOUSEMOVE':
                     
-                    #if not force new
-                        #asses pixel proximity for snapping
-                        #self.snap_target ==
-                        #highlight/draw appropriate things
+                    self.hover_guide_mode(context, settings, event)
+                    
+                    return {'RUNNING_MODAL'}
+
                     
                 elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                    #if hover:
-                        #self.selected_path
-                    #else:
-                    self.modal_state = 'DRAWING'
-                    context.area.header_text_set(text = self.mode +': DRAWING')
+                    if self.hover_target and self.hover_target.desc == 'CUT SERIES':
+                        self.hover_target.do_select(settings)
+                        self.selected_path = self.hover_target
+                        
+                        for path in self.cut_paths:
+                            if path != self.hover_target:
+                                path.deselect(settings)
+                    else:
+                        self.modal_state = 'DRAWING'
+                        context.area.header_text_set(text = self.mode +': DRAWING')
+                    
                     return {'RUNNING_MODAL'}    
                 
                 if self.selected_path:
 
-                    if event.value in {'X', 'DEL'} and event.value == 'PRESS':
+                    if event.type in {'X', 'DEL'} and event.value == 'PRESS':
                         #delete the path
+                        print('DELETD!')
                         self.cut_paths.remove(self.selected_path)
                         self.selected_path = None
                         self.modal_state = 'WAITING'
@@ -1353,7 +1393,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
-                        
                         
                         self.guide_arrow_shift(context, event)
                           
@@ -1434,7 +1473,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     if len(self.draw_cache) > 10:
                     
-                        #wrap up all the functions into one thing
+                        
+                        for path in self.cut_paths:
+                            path.deselect(settings)
+                            
                         self.selected_path  = self.new_path_from_draw(context, settings)
                         
                         self.drag = False #TODO: is self.drag still needed?
@@ -1442,6 +1484,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.force_new = False
                     
                     self.draw_cache = []
+                    
+                    
                     self.modal_state = 'WAITING'
                     context.area.header_text_set(text = 'GUIDE MODE: WAITING')
                     return{'RUNNING_MODAL'}
@@ -1528,7 +1572,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #cut.verts = verts[i]
                     #cut.verts_simple = verts_simple[i]     
                      
-                    cut.select = False  
+                    cut.deselect(settings) 
                     self.cut_lines.append(cut)
                     self.valid_cuts.append(cut)
                     self.align_cut(cut, mode='DIRECTION', fine_grain=False)

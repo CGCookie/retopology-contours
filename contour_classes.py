@@ -47,7 +47,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         self.lock = False
-        self.select = False
+        self.select = True
         self.desc = 'CUT SERIES'
         self.cuts = []
         
@@ -86,7 +86,28 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.cull_factor = cull_factor
         self.smooth_factor = smooth_factor
         self.feature_factor = feature_factor
-           
+        
+        ###DRAWING SETTINGS###
+        self.geom_color =  (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
+        #self.geom_color =  (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        self.line_thickness = settings.line_thick + 1
+    
+    def do_select(self,settings):
+        self.select = True
+        self.highlight(settings)
+
+    def deselect(self,settings):
+        self.select = False
+        self.unhighlight(settings)
+         
+    def highlight(self,settings):
+        #self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        self.line_thickness = settings.line_thick + 1
+        
+    def unhighlight(self,settings):
+        self.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
+        self.line_thickness = settings.line_thick
+               
     def ray_cast_path(self,context, ob):
         
         region = context.region  
@@ -1168,8 +1189,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
                 for follow in self.follow_lines:
                     contour_utilities.draw_polyline_from_3dpoints(context, follow, 
-                                                          (self.cuts[0].geom_color[0], self.cuts[0].geom_color[1], self.cuts[0].geom_color[2], 1), 
-                                                          settings.line_thick,"GL_LINE_STIPPLE")
+                                                          self.geom_color, 
+                                                          self.line_thickness,"GL_LINE_STIPPLE")
 
             else:
                 
@@ -1177,8 +1198,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     for n in range(0,len(line)-1):
                         if self.follow_vis[i][n] and self.follow_vis[i][n+1]:
                             contour_utilities.draw_polyline_from_3dpoints(context, [line[n],line[n+1]], 
-                                                          (self.cuts[0].geom_color[0], self.cuts[0].geom_color[1], self.cuts[0].geom_color[2], 1), 
-                                                          settings.line_thick,"GL_LINE_STIPPLE")
+                                                          self.geom_color, 
+                                                          self.line_thickness,"GL_LINE_STIPPLE")
                 
 class SketchEndPoint(object):
     def __init__(self,context, parent, end, color = (.1,.2,.8,1), size = 4, mouse_radius = 10):
@@ -2831,6 +2852,22 @@ class ContourCutLine(object):
     def update_screen_coords(self,context):
         self.verts_screen = [location_3d_to_region_2d(context.region, context.space_data.region_3d, loc) for loc in self.verts]
         self.verts_simple_screen = [location_3d_to_region_2d(context.region, context.space_data.region_3d, loc) for loc in self.verts_simple]
+    
+    def highlight(self,settings):
+        self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        #adjust thickness?
+    
+    def unhighlight(self,settings):
+        self.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1) 
+                
+    def do_select(self,settings):
+        self.select = True
+        self.highlight(settings) 
+    
+    def deselect(self,settings):
+        self.select = False
+        self.unhighlight(settings)
+        
         
     def update_visibility(self,context,ob):
         
