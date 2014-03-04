@@ -638,7 +638,7 @@ def retopo_draw_callback(self,context):
             path.draw(context)
             
     if len(self.snap_circle):
-        contour_utilities.draw_polyline_from_points(context, self.snap_circle, (1,0,.5,1), 2, "GL_LINE_SMOOTH")
+        contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
         
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     '''Retopologize Forms with Contour Strokes'''
@@ -709,12 +709,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     if len(dists):
                         best = min(dists)
-                        if best < settings.extend_radius:
+                        if best < 2 * settings.extend_radius:
+
                             best_vert = screen_snaps[dists.index(best)]
                             view_z = rv3d.view_rotation * Vector((0,0,1))
                             if view_z.dot(end_cut.plane_no) > -.75 and view_z.dot(end_cut.plane_no) < .75:
-                                breakout = True
-                                snapped = True
+
                                 imx = rv3d.view_matrix.inverted()
                                 normal_3d = imx.transposed() * end_cut.plane_no
                                 if n == 1:
@@ -726,12 +726,21 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 self.snap = [path, end_cut]
                                 self.snap_circle = contour_utilities.pi_slice(best_vert[0],best_vert[1],settings.extend_radius,.25 * settings.extend_radius, left,right, 20,t_fan = True)
                                 self.snap_circle.append(self.snap_circle[0])
+                                breakout = True
+                                if best < settings.extend_radius:
+                                    snapped = True
+                                    self.snap_color = (1,0,0,1)
+                                    
+                                else:
+                                    alpha = 1 - best/(2*settings.extend_radius)
+                                    self.snap_color = (1,0,0,alpha)
+                                    
                                 break
                         
                     if breakout:
                         break
                     
-            if not snapped:
+            if not breakout:
                 self.snap = []
                 self.snap_circle = []
                     
@@ -1990,6 +1999,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #potential item for snapping in 
         self.snap = []
         self.snap_circle = []
+        self.snap_color = (1,0,0,1)
         
         #what is the mouse over top of currently
         self.hover_target = None
