@@ -3987,12 +3987,6 @@ class CutLineManipulatorWidget(object):
         rv3d = context.space_data.region_3d
         view_z = rv3d.view_rotation * Vector((0,0,1))
         if view_z.dot(self.initial_plane_no) > -.95 and view_z.dot(self.initial_plane_no) < .95:
-            #point_0 = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.cut_line.plane_com)
-            #point_1 = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.cut_line.plane_com + self.initial_plane_no.normalized())
-            #self.screen_no = point_1 - point_0
-            #if self.screen_no.dot(Vector((0,1))) < 0:
-                #self.screen_no = point_0 - point_1
-            #self.screen_no.normalize()
             
             imx = rv3d.view_matrix.inverted()
             #http://www.lighthouse3d.com/tutorials/glsl-tutorial/the-normal-matrix/
