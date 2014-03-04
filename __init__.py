@@ -401,6 +401,12 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max = 20,
             )
     
+    extend_radius = IntProperty(
+            name="Snap/Extend Radius",
+            default=20,
+            min=5,
+            max=100,
+            )
     sketch_color1 = FloatVectorProperty(name="sketch Color", description="Vert Color", min=0, max=1, default=(1,1,0), subtype="COLOR")
     sketch_color2 = FloatVectorProperty(name="sketch Color", description="Edge Color", min=0, max=1, default=(0,1,.1), subtype="COLOR")
     sketch_color3 = FloatVectorProperty(name="sketch Color", description="Tip Color", min=0, max=1, default=(0,.5,1), subtype="COLOR")
@@ -630,6 +636,9 @@ def retopo_draw_callback(self,context):
     if len(self.cut_paths):
         for path in self.cut_paths:
             path.draw(context)
+            
+    if len(self.snap_circle):
+        contour_utilities.draw_polyline_from_points(context, self.snap_circle, (1,0,.5,1), 2, "GL_LINE_SMOOTH")
         
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     '''Retopologize Forms with Contour Strokes'''
@@ -655,14 +664,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     def hover_guide_mode(self,context, settings, event):
         '''
         handles mouse selection, hovering, highlighting
-        and snapping
+        and snapping when the mouse moves in guide
+        mode
         '''
         
         #identify hover target for highlighting
         if self.cut_paths != []:
-            
             target_at_all = False
-            
             breakout = False
             for path in self.cut_paths:
                 if not path.select:
@@ -681,7 +689,53 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                   
             if not target_at_all:
                 self.hover_target = None
-
+        
+        #assess snap points
+        if self.cut_paths != [] and not self.new:
+            rv3d = context.space_data.region_3d
+            breakout = False
+            snapped = False
+            for path in self.cut_paths:
+                
+                for n, end_cut in enumerate([path.cuts[0], path.cuts[-1]]):
+                    
+                    #potential verts to snap to
+                    snaps = [v for i, v in enumerate(end_cut.verts_simple) if end_cut.verts_simple_visible[i]]
+                    #the screen versions os those
+                    screen_snaps = [location_3d_to_region_2d(context.region,rv3d,snap) for snap in snaps]
+                    
+                    mouse = Vector((event.mouse_region_x,event.mouse_region_y))
+                    dists = [(mouse - snap).length for snap in screen_snaps]
+                    
+                    if len(dists):
+                        best = min(dists)
+                        if best < settings.extend_radius:
+                            best_vert = screen_snaps[dists.index(best)]
+                            view_z = rv3d.view_rotation * Vector((0,0,1))
+                            if view_z.dot(end_cut.plane_no) > -.75 and view_z.dot(end_cut.plane_no) < .75:
+                                breakout = True
+                                snapped = True
+                                imx = rv3d.view_matrix.inverted()
+                                normal_3d = imx.transposed() * end_cut.plane_no
+                                if n == 1:
+                                    normal_3d = -1 * normal_3d
+                                screen_no = Vector((normal_3d[0],normal_3d[1]))
+                                angle = math.atan2(screen_no[1],screen_no[0]) - 1/2 * math.pi
+                                left = angle + math.pi
+                                right =  angle
+                                self.snap = [path, end_cut]
+                                self.snap_circle = contour_utilities.pi_slice(best_vert[0],best_vert[1],settings.extend_radius,.25 * settings.extend_radius, left,right, 20,t_fan = True)
+                                self.snap_circle.append(self.snap_circle[0])
+                                break
+                        
+                    if breakout:
+                        break
+                    
+            if not snapped:
+                self.snap = []
+                self.snap_circle = []
+                    
+                    
         
     def hover_loop_mode(self,context, settings, event):
         '''
@@ -1354,7 +1408,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 elif event.type == 'N' and event.value == 'PRESS':
                     self.force_new = True
                     #self.selected_path = None
-                    #self.snap_target = None
+                    #self.snap = None
                     context.area.header_text_set(text = self.mode +': FORCE NEW')
                     return {'RUNNING_MODAL'}
                 
@@ -1934,7 +1988,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.drag_target = None
         
         #potential item for snapping in 
-        self.snap = None
+        self.snap = []
+        self.snap_circle = []
         
         #what is the mouse over top of currently
         self.hover_target = None
