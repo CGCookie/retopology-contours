@@ -477,7 +477,7 @@ def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE)
     if LINE_TYPE == "GL_LINE_STIPPLE":  
         bgl.glDisable(bgl.GL_LINE_STIPPLE)  
         bgl.glEnable(bgl.GL_BLEND)  # back to uninterupted lines  
-      
+        bgl.glLineWidth(1)
     return
     
 def get_path_length(verts):
