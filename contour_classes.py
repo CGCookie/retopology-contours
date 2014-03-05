@@ -364,7 +364,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         #TODO...be able to change just one segment
         #TODO...cyclic segment
         
-        self.vertebra = []
+        self.backbone = []
         
         for i, cut in enumerate(self.cuts):
             
@@ -1163,6 +1163,61 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 weld_verts.extend([reto_bme.verts[n] for n in self.existing_tail.vert_inds_sorted])
         
             bmesh.ops.remove_doubles(reto_bme, verts = bmverts + weld_verts, dist = .0001)    
+    
+    def snap_merge_into_other(self, merge_series, merge_ring, context, ob, bme):
+        '''
+        Will assess other path, modify self and then place self data into the
+        merge_series
+        
+        Prerequisites: ray_cast_path, find knots, smooth path
+        '''
+        
+        #find closest point in snap ring to beginning of path
+        #by default, only originating extensions are eligible
+        #not paths which are drawn and terminate on a snap
+        #ring
+        
+        dists = [(self.raw_world[0] - v).length for v in merge_ring.verts_simple]
+        best_index = dists.index(min(dists))
+    
+        #snap the world path the that vert
+        
+        self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, merge_ring.verts_simple[best_index], self.raw_world[-1])
+        self.smooth_path(context, ob = ob)
+        
+        #establish the segment length
+        if len(merge_series.cuts) < 2:
+            segment_width = (merge_ring.verts_simple[1] -  merge_ring.verts_simple[0]).length
+    
+        else:
+            ind = merge_series.cuts.index(merge_ring)
+            if ind == 0:
+                segment_width = (merge_series.cuts[1].plane_com - merge_ring.plane_com).length
+            else:
+                segment_width = (merge_series.cuts[-2].plane_com - merge_ring.plane_com).length
+    
+        path_length = contour_utilities.get_path_length(self.world_path)
+        self.segments  = math.ceil(path_length/segment_width)
+    
+        self.create_cut_nodes(context, knots = False)
+        self.snap_to_object(ob, raw = False, world = False, cuts = True)
+        self.cuts_on_path(context,ob,bme)
+        self.cuts.pop(0)
+    
+        #do we add to tail or beginning
+        if ind == 0:
+            self.cuts.reverse()
+            merge_series.cuts = self.cuts + merge_series.cuts
+    
+        else:
+            merge_series.cuts.extend(self.cuts)
+    
+        #expensive recalculation of whole path
+        #TODO: make this process smarter
+        merge_series.backbone_from_cuts(context,ob,bme)
+        merge_series.connect_cuts_to_make_mesh(ob)
+        merge_series.update_visibility(context,ob)
+        
     def draw(self,context, path = True, nodes = True, rings = True, follows = True, backbone = True):
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences

@@ -691,7 +691,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 self.hover_target = None
         
         #assess snap points
-        if self.cut_paths != [] and not self.new:
+        if self.cut_paths != [] and not self.force_new:
             rv3d = context.space_data.region_3d
             breakout = False
             snapped = False
@@ -709,7 +709,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     if len(dists):
                         best = min(dists)
-                        if best < 2 * settings.extend_radius:
+                        if best < 2 * settings.extend_radius and best > 10: #TODO unify selection mouse pixel radius.
 
                             best_vert = screen_snaps[dists.index(best)]
                             view_z = rv3d.view_rotation * Vector((0,0,1))
@@ -808,13 +808,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         
         path.ray_cast_path(context, self.original_form)
-        if self.existing_loops != []:
+        path.find_knots()
+        
+        if self.existing_loops != [] and not self.force_new:
             for eloop in self.existing_loops:
                 used = path.snap_end_to_existing(eloop)
                 if used:
                     break
-                
-        path.find_knots()
+        
+        elif self.snap != [] and not self.force_new:
+            merge_series = self.snap[0]
+            merge_ring = self.snap[1]
+            
+            path.snap_merge_into_other(merge_series, merge_ring, context, self.original_form, self.bme)
+            
+            return merge_series
+
         path.smooth_path(context, ob = self.original_form)
         path.create_cut_nodes(context)
         path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
@@ -1415,10 +1424,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     return {'RUNNING_MODAL'}
                     
                 elif event.type == 'N' and event.value == 'PRESS':
-                    self.force_new = True
+                    self.force_new = self.force_new != True
                     #self.selected_path = None
                     #self.snap = None
-                    context.area.header_text_set(text = self.mode +': FORCE NEW')
+                    context.area.header_text_set(text = self.mode +': FORCE NEW: ' + str(self.force_new))
                     return {'RUNNING_MODAL'}
                 
                 
@@ -1543,7 +1552,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.selected_path  = self.new_path_from_draw(context, settings)
                         
                         self.drag = False #TODO: is self.drag still needed?
-                        
                         self.force_new = False
                     
                     self.draw_cache = []
