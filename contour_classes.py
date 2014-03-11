@@ -1181,7 +1181,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         best_index = dists.index(min(dists))
     
         #snap the world path the that vert
-        
         self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, merge_ring.verts_simple[best_index], self.raw_world[-1])
         self.smooth_path(context, ob = ob)
         
@@ -1204,12 +1203,24 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.cuts_on_path(context,ob,bme)
         self.cuts.pop(0)
     
-        #do we add to tail or beginning
+        #do we add to tail or beginning?
         if ind == 0:
+            
+            #TODO: Wasted effort in cuts on path because this does an alignment step as well!!
+            self.cuts[0].align_to_other(merge_series.cuts[0],auto_align = True, direction_only = False)
+            for i, cut in enumerate(self.cuts):
+                if i > 0:
+                    self.align_cut(cut, mode='BEHIND', fine_grain = True)
+            
             self.cuts.reverse()
             merge_series.cuts = self.cuts + merge_series.cuts
     
         else:
+            self.cuts[0].align_to_other(merge_series.cuts[-1],auto_align = True, direction_only = False)
+            for i, cut in enumerate(self.cuts):
+                if i > 0:
+                    self.align_cut(cut, mode='BEHIND', fine_grain = True)
+            
             merge_series.cuts.extend(self.cuts)
     
         #expensive recalculation of whole path
