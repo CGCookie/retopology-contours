@@ -177,7 +177,27 @@ class ContourToolsAddonPreferences(AddonPreferences):
             min = 0,
             max = 4,
             )
-
+    
+    show_backbone = BoolProperty(
+            name = "show_backbone",
+            description = "Show Cut Series Backbone",
+            default = False)
+    
+    show_nodes = BoolProperty(
+            name = "show_nodes",
+            description = "Show Cut Nodes",
+            default = False)
+    
+    show_ring_inds = BoolProperty(
+            name = "show_ring_inds",
+            description = "Show Ring Indices",
+            default = False)
+    
+    show_axes = BoolProperty(
+            name = "show_axes",
+            description = "Show Cut Axes",
+            default = False)
+    
     show_debug = BoolProperty(
             name="Show Debug Settings",
             description = "Show the debug settings, useful for troubleshooting",
@@ -462,10 +482,11 @@ class ContourToolsAddonPreferences(AddonPreferences):
         #Poly Sketch Settings
         box = layout.box().column(align=False)
         row = box.row()
-        row.label(text="Poly Sketch Settings")
+        row.label(text="Poly Sketch/Stroke Settings")
         
         
         row = box.row()
+        row.prop(self, "extend_radius", text="Snap Radius")
         row.prop(self, "cull_factor", text="Cull Factor")
         row.prop(self, "intersect_threshold", text="Intersection Threshold")
         row.prop(self, "density_factor", text="Density Factor")
@@ -529,6 +550,12 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row = box.row()
             row.prop(self, "show_verts", text="Show Raw Vertices")
             row.prop(self, "raw_vert_size")
+            
+            row = box.row()
+            row.prop(self, "show_backbone", text="Show Backbone")
+            row.prop(self, "show_nodes", text="Show Cut Nodes")
+            row.prop(self, "show_ring_indices", text="Show Ring Indices")
+            
         
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
     '''Retopologize Forms with Contour Strokes'''
@@ -635,7 +662,7 @@ def retopo_draw_callback(self,context):
         
     if len(self.cut_paths):
         for path in self.cut_paths:
-            path.draw(context)
+            path.draw(context, path = True, nodes = settings.show_nodes, rings = True, follows = True, backbone = settings.show_backbone    )
             
     if len(self.snap_circle):
         contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
