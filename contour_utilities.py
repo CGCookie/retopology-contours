@@ -763,6 +763,12 @@ def cross_edge(A,B,pt,no):
                 #now add all edges that have that point into the already checked list
                 #this takes care of poles
                 ret_val = ['POINT',v,None]
+                
+            elif abs(check[1]) < .003:
+                print('################################')
+                print('intersection given')
+                print('check apperas to say its bad')
+                print(check)
     
     return ret_val
 
@@ -2071,7 +2077,7 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         if total_tests-2 > max_tests:
             print('maxed out tests')
                    
-        print('completed %i tests in this seed search' % element_tests)
+        #print('completed %i tests in this seed search' % element_tests)
                         
     
     #this iterates the keys in verts
@@ -2079,14 +2085,14 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
     #verts
     if len(verts):
         
-        print('picking the shortest path by elements')
-        print('later we will return both paths to allow')
-        print('sorting by path length or by proximity to view')
+        #print('picking the shortest path by elements')
+        #print('later we will return both paths to allow')
+        #print('sorting by path length or by proximity to view')
         
         chains = [verts[key] for key in verts if len(verts[key]) > 2]
         if len(chains):
             sizes = [len(chain) for chain in chains]
-            print(sizes)
+            #print(sizes)
             best = min(sizes)
             ind = sizes.index(best)
         
@@ -2160,7 +2166,7 @@ def cross_section_seed(bme, mx,
             for f in new_faces:
                 if point_in_tri(pt, f.verts[0].co, f.verts[1].co, f.verts[2].co):
                     print('found the point int he tri')
-                    if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .001:
+                    if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .0000001:
                         seed_index = f.index
                         print('found a new index to start with')
                         break
@@ -2206,8 +2212,8 @@ def cross_section_seed(bme, mx,
             elif type(element) == bmesh.types.BMVert:
                 element = vert_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
                 
-        print('completed %i tests in this seed search' % element_tests)
-        print('%i vertices found so far' % len(verts))
+        #print('completed %i tests in this seed search' % element_tests)
+        #print('%i vertices found so far' % len(verts))
         
  
     #The following tests for a closed loop
@@ -2219,13 +2225,11 @@ def cross_section_seed(bme, mx,
     #enough information
     closed_loop = element_tests == 1 and len(seeds) == 2
     
-    print('walked around cross section in %i tests' % total_tests)
-    print('found this many vertices: %i' % len(verts))       
-                
+              
     if debug:
         n = len(times)
         times.append(time.time())
-        print('calced intersections %f sec' % (times[n]-times[n-1]))
+        #print('calced intersections %f sec' % (times[n]-times[n-1]))
        
     #iterate through smartly to create edge keys
     #no longer have to do this...verts are created in order
@@ -2255,7 +2259,7 @@ def cross_section_seed(bme, mx,
     if debug:
         n = len(times)
         times.append(time.time())
-        print('calced connectivity %f sec' % (times[n]-times[n-1]))
+        #print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
     if len(verts):
             
@@ -2307,8 +2311,7 @@ def cross_section_seed_direction(bme, mx,
     #return values
     verts =[]
     eds = []
-    
-    print('seed_index: %i ' % seed_index)                
+                   
     for ed in bme.faces[seed_index].edges:  #should be 3 or 4 edges
         prev_eds.append(ed.index)
         A = ed.verts[0].co
@@ -2383,9 +2386,6 @@ def cross_section_seed_direction(bme, mx,
                 prev_eds.pop()  #will need to retest this edge in case we come around a full loop
                 verts.pop()
                 verts.append(cross[1])
-    
-    print('walked around cross section in %i tests' % total_tests)
-    print('found this many vertices: %i' % len(verts))       
     
     #verts are created in order
     for i in range(0,len(verts)-1):

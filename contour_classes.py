@@ -318,6 +318,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut = ContourCutLine(0, 0, line_width = settings.line_thick, stroke_color = l_color, handle_color = h_color, geom_color = g_color, vert_color = v_color)
             cut.seed_face_index = self.cut_point_seeds[i]
             cut.plane_pt = loc
+            
+            if not loc:
+                print('no location')
+                print(self.cut_points)
 
             
             if i == 0:
@@ -3600,8 +3604,8 @@ class ContourCutLine(object):
                     #print(alignment_quality)
                     #print(alignment_quality_left)
                     #print(alignment_quality_right)
-                print('converged or didnt in %i iterations' % iterations)
-                print('final alignment quality is %f' % alignment_quality)
+                #print('converged or didnt in %i iterations' % iterations)
+                #print('final alignment quality is %f' % alignment_quality)
                 self.shift += self.int_shift
                 self.int_shift = 0
                 
