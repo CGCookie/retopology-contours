@@ -1400,8 +1400,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     return {'RUNNING_MODAL'}
                
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-                #LEFTMOUSE event.value == 'RELEASE'
-                    #Do all the necessary recutting, aligning, path stuff
+                    #destroy the widget
+                    self.cut_line_widget = None
                     self.modal_state = 'WAITING'
                     self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
                     context.area.header_text_set(text = 'LOOP MODE: WAITING')
