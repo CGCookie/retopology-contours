@@ -361,8 +361,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     
     def backbone_from_cuts(self,context,ob,bme):
         
-        #TODO...be able to change just one segment
-        #TODO...cyclic segment
+        #TODO: be able to change just one ring
+        #TODO: cyclic series
+        #TODO: redistribute backbone when number of cut segments is increased/decreased
         
         self.backbone = []
         
@@ -1203,9 +1204,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.cuts_on_path(context,ob,bme)
         self.cuts.pop(0)
     
-        #do we add to tail or beginning?
+        #need to handle joining the series and aligning them
         if ind == 0:
-            
             #TODO: Wasted effort in cuts on path because this does an alignment step as well!!
             self.cuts[0].align_to_other(merge_series.cuts[0],auto_align = True, direction_only = False)
             for i, cut in enumerate(self.cuts):
