@@ -1184,13 +1184,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         #snap the world path the that vert
         self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, merge_ring.verts_simple[best_index], self.raw_world[-1])
         self.smooth_path(context, ob = ob)
-        
+        ind = merge_series.cuts.index(merge_ring)
         #establish the segment length
         if len(merge_series.cuts) < 2:
             segment_width = (merge_ring.verts_simple[1] -  merge_ring.verts_simple[0]).length
     
         else:
-            ind = merge_series.cuts.index(merge_ring)
+            
             if ind == 0:
                 segment_width = (merge_series.cuts[1].plane_com - merge_ring.plane_com).length
             else:
@@ -3884,7 +3884,7 @@ class CutLineManipulatorWidget(object):
                             
                             intersect = contour_utilities.intersect_path_plane(self.path_ahead, new_com, inter_no, mode = 'FIRST')
                             
-                            if intersect:
+                            if intersect[0]:
                                 proposed_point = intersect[0]
                                 snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                                 self.cut_line.plane_pt = self.ob.matrix_world * snap[0]

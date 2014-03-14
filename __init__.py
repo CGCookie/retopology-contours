@@ -1533,6 +1533,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.selected_path.cuts_on_path(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
+                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                             #path.segments
                             #distribute cut points
                             #make new cuts
