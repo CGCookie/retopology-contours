@@ -631,7 +631,7 @@ def retopo_draw_callback(self,context):
     g_color = settings.geom_rgb
     v_color = settings.vert_rgb
 
-    if (self.post_update or self.navigating) and context.space_data.use_occlude_geometry:
+    if (self.post_update or self.modal_state == 'NAVIGATING') and context.space_data.use_occlude_geometry:
         for path in self.cut_paths:
             path.update_visibility(context, self.original_form)
             for cut_line in path.cuts:
@@ -913,7 +913,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 self.selected.tail = None
                 
                 self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
-                if self.cut_paths != [] and not self.new:
+                
+                if self.cut_paths != [] and not self.force_new:
                     inserted = False
                     for path in self.cut_paths:
                         if path.insert_new_cut(context, self.original_form, self.bme, self.selected):
@@ -925,11 +926,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.lock = True
                             path.do_select(settings)
                             self.selected_path = path
+                            self.cut_lines.remove(self.selected)
                             for other_path in self.cut_paths:
                                 if other_path != self.selected_path:
                                     other_path.deselect(settings)
                             
-                if self.cut_paths == [] or not inserted or self.new:
+                if self.cut_paths == [] or not inserted or self.force_new:
                     print('making a new cut path')
                     #create a blank segment
                     path = ContourCutSeries(context, [],
@@ -1521,7 +1523,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             if not self.selected_path.lock:
                                 self.selected_path.segments += 1
                         elif event.type in {'WHEELDOWNMOUSE', 'NUMPAD_MINUS'} and self.selected_path.segments > 3:
-                            if not self.selected_path.lock and self.selected_path.segments > 3:
+                            if not self.selected_path.lock:
                                 
                                 self.selected_path.segments -= 1
                     
@@ -2033,8 +2035,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #'DRAWING'
         
         
-        #is the user moving an existing entity or a new one.
-        self.new = False 
+        #does the user want to extend an existing cut or make a new segment
+        self.force_new = False
+        
         #is the mouse clicked and held down
         self.drag = False
         self.navigating = False
