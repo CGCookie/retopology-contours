@@ -1016,18 +1016,29 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
     def loop_hotkey_modal(self,context,event):
             
-        self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
+
+        if self.hot_key == 'G':
+            self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
                                                         self.original_form, self.bme,
                                                         self.selected,
                                                         self.selected_path,
                                                         event.mouse_region_x,event.mouse_region_y,
                                                         hotkey = self.hot_key)
-        if self.hot_key == 'G':
             self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
 
         
         elif self.hot_key == 'R':
+            #TODO...if CoM is off screen, then what?
+            screen_pivot = location_3d_to_region_2d(context.region,context.space_data.region_3d,self.selected.plane_com)
+            self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
+                                                        self.original_form, self.bme,
+                                                        self.selected,
+                                                        self.selected_path,
+                                                        screen_pivot[0],screen_pivot[1],
+                                                        hotkey = self.hot_key)
             self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
+            
+        
         
         self.cut_line_widget.initial_x = event.mouse_region_x
         self.cut_line_widget.initial_y = event.mouse_region_y
@@ -1255,7 +1266,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                           (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
                           
                         if not self.selected_path.lock:
-                            print('did we do the thaang')
                             old_segments = self.selected_path.ring_segments
                             self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE')
                             if self.selected_path.ring_segments < 3:
@@ -1271,9 +1281,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 print(new_shift - new_bulk_shift - new_fine_shift)
                                 cut.shift = new_shift
                                 cut.simplify_cross(self.selected_path.ring_segments)
-                                
+                            
+                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)    
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
+                            
                             #distribute cut points
                             #make new cuts
                             #alignment
