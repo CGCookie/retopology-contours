@@ -26,6 +26,7 @@ import bmesh
 import time
 import math
 import random
+from itertools import chain,combinations
 
 from collections import deque
 
@@ -2098,8 +2099,9 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
     else:
         print('failed to find connection in either direction...perhaps points arent coplanar')
         return []
-            
-def cross_section_seed(bme, mx, 
+
+
+def cross_section_seed_ver0(bme, mx, 
                        point, normal, 
                        seed_index, 
                        max_tests = 10000, debug = True):
@@ -2262,6 +2264,174 @@ def cross_section_seed(bme, mx,
         return (verts, eds)
     else:
         return (None, None)
+
+def find_bmedges_crossing_plane(pt, no, edges, epsilon=0.0000000001):
+    '''
+    returns list of edges that *cross* plane and corresponding intersection points
+    '''
+    
+    ret = []
+    for edge in edges:
+        v0,v1 = edge.verts
+        co0,co1 = v0.co, v1.co
+        s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
+        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+            continue
+        
+        i = intersect_line_plane(co0, co1, pt, no)
+        ret.append((edge,i))
+    return ret
+
+def cross_section_seed_ver1(bme, mx, 
+                       point, normal, 
+                       seed_index, 
+                       max_tests = 10000, debug = True):
+    
+    # data to be returned
+    verts,edges = [],[]
+    
+    # max distance a coplanar vertex can be from plane
+    # also used to test for near zero-length edges
+    epsilon = 0.000000001
+    
+    #convert plane defn (point and normal) into local coords
+    imx = mx.inverted()
+    pt  = imx * point
+    no  = (imx.to_3x3() * normal).normalized()
+    
+    
+    # find two farthest points
+    ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges)
+    assert len(ei_init) >= 2, 'found only one edge crossing plane?'
+    d_max, ei0_max, ei1_max = -1.0, None, None
+    for ei0,ei1 in combinations(ei_init, 2):
+        d = (ei0[1] - ei1[1]).length
+        if d > d_max: d_max,ei0_max,ei1_max = d,ei0,ei1
+    
+    ei0_connected, ei1_connected = (len(ei0_max[0].link_faces) > 1), (len(ei1_max[0].link_faces) > 1)
+    
+    # special case of single face?
+    if not ei0_connected and not ei1_connected:
+        verts = [ei0_max[1], ei1_max[1]]
+        edges = [(0,1)]
+        return (verts,edges)
+    
+    # find starting place
+    if not ei0_connected:
+        verts = [ei0_max[1]]
+        eind_from = ei1_max[0].index
+        co_from = ei1_max[1]
+        find_current = [f.index for f in ei1_max[0].link_faces if f.index != seed_index][0]
+    else:
+        verts = [ei1_max[1]]
+        eind_from = ei0_max[0].index
+        co_from = ei0_max[1]
+        find_current = [f.index for f in ei1_max[0].link_faces if f.index != seed_index][0]
+    
+    # start walking
+    finds_list = [seed_index]
+    finds_set = {seed_index}
+    looped = False
+    while True:
+        # find farthest point
+        ei_test = find_bmedges_crossing_plane(pt, no, bme.faces[find_current].edges)
+        d_max, ei_max = -1.0, None
+        for ei in ei_test:
+            if ei[0].index == eind_from: continue
+            d = (ei[1] - co_from).length
+            if d > d_max: d_max,ei_max = d,ei
+        assert ei_max, 'could not find maximum'
+        
+        verts += [ei_max[1]]
+        if len(ei_max[0].link_faces) == 1: break                                    # hit end?
+        
+        eind_from = ei_max[0].index
+        co_from = ei_max[1]
+        find_next = [f.index for f in ei_max[0].link_faces if f.index != find_current][0]
+        
+        if find_next in finds_set:                                                  # looped
+            looped = True
+            verts = verts[finds_list.index(find_next):]      # clip off tail
+            break
+        
+        finds_set.add(find_next)
+        finds_list.append(find_next)
+        find_current = find_next
+    
+    if looped:
+        nv = len(verts)
+        edges = [(i,(i+1)%nv) for i in range(nv)]
+        return (verts,edges)
+    
+    if not ei0_connected:
+        nv = len(verts)
+        edges = [(i,i+1) for i in range(nv-1)]
+        return (verts,edges)
+    
+    verts.reverse()
+    finds_list.reverse()
+    
+    eind_from = ei0_max[0].index
+    co_from = ei0_max[1]
+    find_current = [f.index for f in ei0_max[0].link_faces if f.index != seed_index][0]
+    
+    # start walking other direction
+    while True:
+        # find farthest point
+        ei_test = find_bmedges_crossing_plane(pt, no, bme.faces[find_current].edges)
+        d_max, ei_max = -1.0, None
+        for ei in ei_test:
+            if ei[0].index == eind_from: continue
+            d = (ei[1] - co_from).length
+            if d > d_max: d_max,ei_max = d,ei
+        assert ei_max, 'could not find maximum'
+        
+        verts += [ei_max[1]]
+        if len(ei_max[0].link_faces) == 1: break                                    # hit end?
+        
+        eind_from = ei_max[0].index
+        co_from = ei_max[1]
+        find_next = [f.index for f in ei_max[0].link_faces if f.index != find_current][0]
+        
+        if find_next in finds_set:                                              # looped
+            looped = True
+            verts = verts[finds_list.index(find_next):]      # clip off tail
+            break
+        
+        assert find_next not in finds_set, 'looped back?'
+        finds_set.add(find_next)
+        finds_list.append(find_next)
+        find_current = find_next
+    
+    if looped:
+        nv = len(verts)
+        edges = [(i,(i+1)%nv) for i in range(nv)]
+        return (verts,edges)
+    
+    nv = len(verts)
+    edges = [(i,i+1) for i in range(nv-1)]
+    return (verts,edges)
+
+def cross_section_seed(bme, mx, 
+                       point, normal, 
+                       seed_index, 
+                       max_tests = 10000, debug = True):
+    '''
+    Takes a mesh and associated world matrix of the object and returns a cross secion in local
+    space.
+    
+    Args:
+        bme: Blender BMesh
+        mx:   World matrix (type Mathutils.Matrix)
+        point: any point on the cut plane in world coords (type Mathutils.Vector)
+        normal:  plane normal direction (type Mathutisl.Vector)
+        seed_index: face index, typically achieved by raycast
+        self_stop: a normal vector which defines a plane to stop cutting
+        direction: Vector which the cut should start traveling.
+        exclude_edges: list of edge indices (usually already tested from previous iterations)
+    '''
+    #return cross_section_seed_ver0(bme, mx, point, normal, seed_index, max_tests, debug)
+    return cross_section_seed_ver1(bme, mx, point, normal, seed_index, max_tests, debug)
 
 def cross_section_seed_direction(bme, mx, 
                                  point, normal, 
