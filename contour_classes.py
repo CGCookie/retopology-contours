@@ -1443,7 +1443,7 @@ class ExistingVertList(object):
         
         eds_1 = other.eds_simple
         
-        print('testing alignment')
+        #print('testing alignment')
         if 0 in eds_1[-1]:
             cyclic = True
             print('cyclic vert chain')
@@ -3457,7 +3457,7 @@ class ContourCutLine(object):
         
         eds_1 = other.eds_simple
         
-        print('testing alignment')
+        #print('testing alignment')
         if 0 in eds_1[-1]:
             cyclic = True
             print('cyclic vert chain')
