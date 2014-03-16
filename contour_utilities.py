@@ -2265,7 +2265,7 @@ def cross_section_seed_ver0(bme, mx,
     else:
         return (None, None)
 
-def find_bmedges_crossing_plane(pt, no, edges, epsilon=0.0000000001):
+def find_bmedges_crossing_plane(pt, no, edges, epsilon):
     '''
     returns list of edges that *cross* plane and corresponding intersection points
     '''
@@ -2291,18 +2291,24 @@ def cross_section_seed_ver1(bme, mx,
     verts,edges = [],[]
     
     # max distance a coplanar vertex can be from plane
-    # also used to test for near zero-length edges
-    epsilon = 0.000000001
+    epsilon = 0.0000000001
     
     #convert plane defn (point and normal) into local coords
     imx = mx.inverted()
     pt  = imx * point
     no  = (imx.to_3x3() * normal).normalized()
     
+    # make sure that plane crosses face!
+    lco = [v.co for v in bme.faces[seed_index].verts]
+    ld = [no.dot(co - pt) for co in lco]
+    if all(d > epsilon for d in ld) or all(d < -epsilon for d in ld):               # does face cross plane?
+        # shift pt so plane crosses face
+        shift_dist = (min(ld)+epsilon) if ld[0] > epsilon else (max(ld)-epsilon)
+        pt += no * shift_dist
     
     # find two farthest points
-    ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges)
-    assert len(ei_init) >= 2, 'found only one edge crossing plane?'
+    ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges, epsilon)
+    assert len(ei_init) >= 2, 'could not find two or more edges crossing the plane?'
     d_max, ei0_max, ei1_max = -1.0, None, None
     for ei0,ei1 in combinations(ei_init, 2):
         d = (ei0[1] - ei1[1]).length
@@ -2334,7 +2340,7 @@ def cross_section_seed_ver1(bme, mx,
     looped = False
     while True:
         # find farthest point
-        ei_test = find_bmedges_crossing_plane(pt, no, bme.faces[find_current].edges)
+        ei_test = find_bmedges_crossing_plane(pt, no, bme.faces[find_current].edges, epsilon)
         d_max, ei_max = -1.0, None
         for ei in ei_test:
             if ei[0].index == eind_from: continue
