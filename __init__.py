@@ -1058,7 +1058,23 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         #Guide Mode
         #'DRAWING'
-        
+        if event.type == 'TIMER':
+            now = time.time()
+            if now - self.msg_start_time > self.msg_duration:
+                context.window_manager.event_timer_remove(self._timer)
+                self._timer = None
+                context.area.header_text_set(text = 'TEMPRARY MESSAGE OVER')
+                
+            
+        if event.type == 'T' and event.value == 'PRESS':
+            self.msg_start_time = time.time()
+            #see if there are any old timers
+            if self._timer:
+                context.window_manager.event_timer_remove(self._timer)
+                
+            self._timer = context.window_manager.event_timer_add(0.1, context.window)
+            context.area.header_text_set(text = 'TEMP HELP MESSAGE')
+                
         if self.modal_state == 'NAVIGATING':
             
             if (event.type in {'MOUSEMOVE',
@@ -2080,6 +2096,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             self.load_from_cache(context, 'CUT_LINES', settings.recover_clip)
         #add in the draw callback and modal method
         self._handle = bpy.types.SpaceView3D.draw_handler_add(retopo_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+        
+        #timer for temporary messages
+        self._timer = None
+        self.msg_start_time = time.time()
+        self.msg_duration = 2
+        
         context.window_manager.modal_handler_add(self)
         
         return {'RUNNING_MODAL'}
