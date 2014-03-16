@@ -763,13 +763,7 @@ def cross_edge(A,B,pt,no):
                 #now add all edges that have that point into the already checked list
                 #this takes care of poles
                 ret_val = ['POINT',v,None]
-                
-            elif abs(check[1]) < .003:
-                print('################################')
-                print('intersection given')
-                print('check apperas to say its bad')
-                print(check)
-    
+
     return ret_val
 
 def outside_loop_2d(loop):

@@ -28,9 +28,7 @@ import copy
 from mathutils import Vector, Quaternion
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import contour_utilities
-from bpy_extras.view3d_utils import location_3d_to_region_2d
-from bpy_extras.view3d_utils import region_2d_to_vector_3d
-from bpy_extras.view3d_utils import region_2d_to_location_3d
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 import bmesh
 import blf
 
@@ -113,25 +111,15 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         region = context.region  
         rv3d = context.space_data.region_3d
         self.raw_world = []
+        mx = ob.matrix_world
+        imx = mx.inverted()
         for v in self.raw_screen:
-            vec = region_2d_to_vector_3d(region, rv3d, v)
-            loc = region_2d_to_location_3d(region, rv3d, v, vec)
-
-            if rv3d.is_perspective:
-                #print('is perspe')
-                a = loc - 3000*vec
-                b = loc + 3000*vec
-            else:
-                #print('is not perspe')
-                b = loc - 3000 * vec
-                a = loc + 3000 * vec
-
-            mx = ob.matrix_world
-            imx = mx.inverted()
-            hit = ob.ray_cast(imx*a, imx*b)
+            view_vector = region_2d_to_vector_3d(region, rv3d, v)
+            ray_origin = region_2d_to_origin_3d(region, rv3d, v)
+            ray_target = ray_origin + (view_vector * 10000) #TODO: make a max ray depth or pull this depth from clip depth
+            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)  
                 
             if hit[2] != -1:
-            #if previous_hit[2] != -1:
                 self.raw_world.append(mx * hit[0])
                 
     def smooth_path(self,context, ob = None):
@@ -776,11 +764,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             eyevec.length = 100000
             eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
             view_loc = rv3d.view_location
-            #print('are the locations similar')
-            #print(eyeloc)
-            #print(view_loc)
-            
-            
+
             imx = ob.matrix_world.inverted()
             visibility_list = []
             for vert_list in self.follow_lines:
@@ -798,10 +782,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         else:
                             visible.append(True)
                             
-                        #if hit[0]:
-                        #    vno = -vno
-                        #    vco = self.findworldco(vert.co + vno)
-                        #    hit = self.scn.ray_cast(vco, eyevec)
                     else:
                         hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
                         if hit[2] != -1:
@@ -1668,38 +1648,17 @@ class PolySkecthLine(object):
         region = context.region  
         rv3d = context.space_data.region_3d
         self.raw_world = []
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        
         for v in self.raw_screen:
-            vec = region_2d_to_vector_3d(region, rv3d, v)
-            loc = region_2d_to_location_3d(region, rv3d, v, vec)
-
-            if rv3d.is_perspective:
-                #print('is perspe')
-                a = loc - 3000*vec
-                b = loc + 3000*vec
-            else:
-                #print('is not perspe')
-                b = loc - 3000 * vec
-                a = loc + 3000 * vec
-
-            mx = ob.matrix_world
-            imx = mx.inverted()
-            hit = ob.ray_cast(imx*a, imx*b)
-            previous_hit = hit
-            tests = 0
             
-            #a = imx * a
-            #b = imx * b
-            
-            #while hit[2] != -1 and tests < 10:
-                #tests += 1
-                #print('extra raycasts')
-                #previous_hit = hit
-                #if rv3d.is_perspective:
-                #    b = hit[0]
-                #else:
-                #    a = hit[0]
-                    
-                #hit = ob.ray_cast(a, b)
+            view_vector = region_2d_to_vector_3d(region, rv3d, v)
+            ray_origin = region_2d_to_origin_3d(region, rv3d, v)
+            ray_target = ray_origin + (view_vector * 10000) #TODO: make a max ray depth or pull this depth from clip depth
+
+            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)  
+            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)
                 
             if hit[2] != -1:
             #if previous_hit[2] != -1:
@@ -2780,10 +2739,7 @@ class PolySkecthLine(object):
                         else:
                             visible.append(True)
                             
-                        #if hit[0]:
-                        #    vno = -vno
-                        #    vco = self.findworldco(vert.co + vno)
-                        #    hit = self.scn.ray_cast(vco, eyevec)
+
                     else:
                         hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
                         if hit[2] != -1:
@@ -3142,19 +3098,13 @@ class ContourCutLine(object):
             self.vec_x = -1 * cut_vec.normalized()
             self.vec_y = self.plane_no.cross(self.vec_x)
             
-
-    
-            vec = region_2d_to_vector_3d(region, rv3d, screen_coord)
-            loc = region_2d_to_location_3d(region, rv3d, screen_coord, vec)
-    
-            #raycast what I think is the ray onto the object
-            #raycast needs to be in ob coordinates.
-            a = loc + 3000*vec
-            b = loc - 3000*vec
+            view_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
+            ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+            ray_target = ray_origin + (view_vector * 10000) #TODO: make a max ray depth or pull this depth from clip depth
 
             mx = ob.matrix_world
             imx = mx.inverted()
-            hit = ob.ray_cast(imx*a, imx*b)    
+            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)    
     
             if hit[2] != -1:
                 self.head.world_position = region_2d_to_location_3d(region, rv3d, (self.head.x, self.head.y), mx * hit[0])
@@ -3167,24 +3117,14 @@ class ContourCutLine(object):
                     
                     cut_vec = self.head.world_position - self.tail.world_position
                     cut_vec.normalize()
-                    self.plane_no = cut_vec.cross(vec).normalized()
+                    self.plane_no = cut_vec.cross(view_vector).normalized()
                     self.vec_x = -1 * cut_vec.normalized()
                     self.vec_y = self.plane_no.cross(self.vec_x)
-                    
-
                     
                 self.plane_x = self.plane_pt + self.vec_x
                 self.plane_y = self.plane_pt + self.vec_y
                 self.plane_z = self.plane_pt + self.plane_no
                     
-                                #we need to populate the 3 axis vectors
-            
-            
-
-                #self.plane_tan.world_position = self.plane_pt + self.vec_y
-                
-                
-                
             else:
                 self.plane_pt = None
                 self.seed_face_index = None
