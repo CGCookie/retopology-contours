@@ -2265,6 +2265,8 @@ def cross_section_seed_ver0(bme, mx,
     else:
         return (None, None)
 
+
+
 def find_bmedges_crossing_plane(pt, no, edges, epsilon):
     '''
     returns list of edges that *cross* plane and corresponding intersection points
@@ -2279,8 +2281,73 @@ def find_bmedges_crossing_plane(pt, no, edges, epsilon):
             continue
         
         i = intersect_line_plane(co0, co1, pt, no)
-        ret.append((edge,i))
+        ret += [(edge,i)]
     return ret
+
+def find_distant_bmedge_crossing_plane(pt, no, edges, epsilon, eind_from, co_from):
+    '''
+    returns the farthest edge that *crosses* plane and corresponding intersection point
+    '''
+    d_max,edge_max,i_max = -1.0,None,None
+    for edge in edges:
+        if edge.index == eind_from: continue
+        
+        v0,v1 = edge.verts
+        co0,co1 = v0.co, v1.co
+        s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
+        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+            continue
+        
+        i = intersect_line_plane(co0, co1, pt, no)
+        d = (co_from - i).length
+        if d > d_max: d_max,edge_max,i_max = d,edge,i
+    return (edge_max,i_max)
+
+def cross_section_walker(bme, pt, no, find_from, eind_from, co_from, epsilon):
+    '''
+    returns tuple (verts,looped) by walking around a bmesh near the given plane
+    verts is list of verts as the intersections of edges and cutting plane (in order)
+    looped is bool indicating if walk wrapped around bmesh
+    '''
+    
+    # returned values
+    verts,looped = [co_from],False
+    
+    # track what we've seen
+    finds_dict = {find_from: 0}
+    
+    find_current = next(f.index for f in bme.edges[eind_from].link_faces if f.index != find_from)
+    
+    while True:
+        # find farthest point
+        edge,i = find_distant_bmedge_crossing_plane(pt, no, bme.faces[find_current].edges, epsilon, eind_from, co_from)
+        
+        verts += [i]
+        
+        if len(edge.link_faces) == 1: break                                     # hit end?
+        
+        # get next face, edge, co
+        find_next = next(f.index for f in edge.link_faces if f.index != find_current)
+        eind_next = edge.index
+        co_next   = i
+        
+        if find_next in finds_dict:                                             # looped
+            looped = True
+            if finds_dict[find_next] != 0:
+                # loop is P-shaped (loop with a tail)
+                verts = verts[finds_dict[find_next]:]      # clip off tail
+            break
+        
+        # leave breadcrumb
+        finds_dict[find_next] = len(finds_dict)
+        
+        find_from = find_current
+        eind_from = eind_next
+        co_from   = co_next
+        
+        find_current = find_next
+    
+    return (verts,looped)
 
 def cross_section_seed_ver1(bme, mx, 
                        point, normal, 
@@ -2306,117 +2373,49 @@ def cross_section_seed_ver1(bme, mx,
         shift_dist = (min(ld)+epsilon) if ld[0] > epsilon else (max(ld)-epsilon)
         pt += no * shift_dist
     
-    # find two farthest points
+    # find intersections of edges and cutting plane
     ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges, epsilon)
-    assert len(ei_init) >= 2, 'could not find two or more edges crossing the plane?'
-    d_max, ei0_max, ei1_max = -1.0, None, None
-    for ei0,ei1 in combinations(ei_init, 2):
-        d = (ei0[1] - ei1[1]).length
-        if d > d_max: d_max,ei0_max,ei1_max = d,ei0,ei1
-    
-    ei0_connected, ei1_connected = (len(ei0_max[0].link_faces) > 1), (len(ei1_max[0].link_faces) > 1)
-    
-    # special case of single face?
-    if not ei0_connected and not ei1_connected:
-        verts = [ei0_max[1], ei1_max[1]]
-        edges = [(0,1)]
-        return (verts,edges)
-    
-    # find starting place
-    if not ei0_connected:
-        verts = [ei0_max[1]]
-        eind_from = ei1_max[0].index
-        co_from = ei1_max[1]
-        find_current = [f.index for f in ei1_max[0].link_faces if f.index != seed_index][0]
+    if len(ei_init) < 2:
+        print('warning: it should not reach here! len(ei_init) = %d' % len(ei_init))
+        return (None,None)
+    elif len(ei_init) == 2:
+        # simple case
+        ei0_max, ei1_max = ei_init
     else:
-        verts = [ei1_max[1]]
-        eind_from = ei0_max[0].index
-        co_from = ei0_max[1]
-        find_current = [f.index for f in ei1_max[0].link_faces if f.index != seed_index][0]
+        # convex polygon
+        # find two farthest points
+        d_max, ei0_max, ei1_max = -1.0, None, None
+        for ei0,ei1 in combinations(ei_init, 2):
+            d = (ei0[1] - ei1[1]).length
+            if d > d_max: d_max,ei0_max,ei1_max = d,ei0,ei1
     
-    # start walking
-    finds_list = [seed_index]
-    finds_set = {seed_index}
-    looped = False
-    while True:
-        # find farthest point
-        ei_test = find_bmedges_crossing_plane(pt, no, bme.faces[find_current].edges, epsilon)
-        d_max, ei_max = -1.0, None
-        for ei in ei_test:
-            if ei[0].index == eind_from: continue
-            d = (ei[1] - co_from).length
-            if d > d_max: d_max,ei_max = d,ei
-        assert ei_max, 'could not find maximum'
-        
-        verts += [ei_max[1]]
-        if len(ei_max[0].link_faces) == 1: break                                    # hit end?
-        
-        eind_from = ei_max[0].index
-        co_from = ei_max[1]
-        find_next = [f.index for f in ei_max[0].link_faces if f.index != find_current][0]
-        
-        if find_next in finds_set:                                                  # looped
-            looped = True
-            verts = verts[finds_list.index(find_next):]      # clip off tail
-            break
-        
-        finds_set.add(find_next)
-        finds_list.append(find_next)
-        find_current = find_next
+    # start walking one way around bmesh
+    verts0,looped = cross_section_walker(bme, pt, no, seed_index, ei0_max[0].index, ei0_max[1], epsilon)
     
     if looped:
+        # looped around on self, so we're done!
+        verts = verts0
         nv = len(verts)
         edges = [(i,(i+1)%nv) for i in range(nv)]
-        return (verts,edges)
+        return (verts, edges)
     
-    if not ei0_connected:
-        nv = len(verts)
-        edges = [(i,i+1) for i in range(nv-1)]
-        return (verts,edges)
-    
-    verts.reverse()
-    finds_list.reverse()
-    
-    eind_from = ei0_max[0].index
-    co_from = ei0_max[1]
-    find_current = [f.index for f in ei0_max[0].link_faces if f.index != seed_index][0]
-    
-    # start walking other direction
-    while True:
-        # find farthest point
-        ei_test = find_bmedges_crossing_plane(pt, no, bme.faces[find_current].edges)
-        d_max, ei_max = -1.0, None
-        for ei in ei_test:
-            if ei[0].index == eind_from: continue
-            d = (ei[1] - co_from).length
-            if d > d_max: d_max,ei_max = d,ei
-        assert ei_max, 'could not find maximum'
-        
-        verts += [ei_max[1]]
-        if len(ei_max[0].link_faces) == 1: break                                    # hit end?
-        
-        eind_from = ei_max[0].index
-        co_from = ei_max[1]
-        find_next = [f.index for f in ei_max[0].link_faces if f.index != find_current][0]
-        
-        if find_next in finds_set:                                              # looped
-            looped = True
-            verts = verts[finds_list.index(find_next):]      # clip off tail
-            break
-        
-        assert find_next not in finds_set, 'looped back?'
-        finds_set.add(find_next)
-        finds_list.append(find_next)
-        find_current = find_next
+    # did not loop around, so start walking the other way
+    verts1,looped = cross_section_walker(bme, pt, no, seed_index, ei1_max[0].index, ei1_max[1], epsilon)
     
     if looped:
+        # looped around on self!?
+        print('warning: looped one way but not the other')
+        verts = verts1
         nv = len(verts)
         edges = [(i,(i+1)%nv) for i in range(nv)]
-        return (verts,edges)
+        return (verts, edges)
     
+    # combine two walks
+    verts = list(reversed(verts0)) + verts1
     nv = len(verts)
     edges = [(i,i+1) for i in range(nv-1)]
-    return (verts,edges)
+    return (verts, edges)
+
 
 def cross_section_seed(bme, mx, 
                        point, normal, 
