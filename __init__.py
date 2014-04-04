@@ -929,6 +929,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             for other_path in self.cut_paths:
                                 if other_path != self.selected_path:
                                     other_path.deselect(settings)
+                        if inserted:
+                            # no need to search for more paths
+                            break
                             
                 if self.cut_paths == [] or not inserted or self.force_new:
                     #create a blank segment

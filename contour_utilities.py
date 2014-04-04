@@ -2182,7 +2182,7 @@ def cross_section_seed(bme, mx,
             
     if not len(seeds):
         print('cancelling until your programmer gets smarter')
-        return (None, None)
+        return None
         
     #we have found one edge that crosses, now, baring any terrible disconnections in the mesh,
     #we traverse through the link faces, wandering our way through....removing edges from our list
@@ -2259,7 +2259,7 @@ def cross_section_seed(bme, mx,
             
         return (verts, eds)
     else:
-        return (None, None)
+        return None
 
 def cross_section_seed_direction(bme, mx, 
                                  point, normal, 
