@@ -1151,6 +1151,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     bpy.ops.view3d.view_center_cursor()
                     return {'RUNNING_MODAL'}
                 
+                elif event.type == 'S' and event.value == 'PRESS':
+                    if self.selected:
+                        context.scene.cursor_location = self.selected.plane_com
+                
                 #NAVIGATION KEYS
                 elif (event.type in {'MIDDLEMOUSE', 
                                     'NUMPAD_2', 
@@ -1568,6 +1572,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             context.area.header_text_set(text = 'INTERPOLATE ENDPOINTS')
+                            
+                        else:
+                            half = math.floor(self.selected_path.segments/2)
+                            
+                            if math.fmod(self.selected_path.segments, 2):  #5 segments is 6 rings
+                                loc = 0.5 * (self.selected_path.cuts[half].plane_com + self.selected_path.cuts[half+1].plane_com)
+                            else:
+                                loc = self.selected_path.cuts[half].plane_com
+                            
+                            context.scene.cursor_location = loc
                     
                         return{'RUNNING_MODAL'}
                         
