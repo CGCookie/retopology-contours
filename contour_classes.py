@@ -44,7 +44,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
-        self.lock = False
+        self.seg_lock = False
+        self.ring_lock = False
         self.select = True
         self.desc = 'CUT SERIES'
         self.cuts = []
@@ -579,7 +580,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                
     def average_normals(self,context,ob,bme):
         
-        if self.lock:
+        if self.seg_lock:
             self.cut_points = [cut.verts_simple[0] for cut in self.cuts]
         
         avg_normal = Vector((0,0,0))

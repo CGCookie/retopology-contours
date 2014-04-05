@@ -858,7 +858,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         path.connect_cuts_to_make_mesh(self.original_form)
         path.backbone_from_cuts(context, self.original_form, self.bme)
         path.update_visibility(context, self.original_form)
+        path.cuts[-1].do_select(settings)
+        
         self.cut_paths.append(path)
+        
 
         return path
     
@@ -922,7 +925,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             inserted = True
                             path.connect_cuts_to_make_mesh(self.original_form)
                             path.update_visibility(context, self.original_form)
-                            path.lock = True
+                            path.seg_lock = True
                             path.do_select(settings)
                             self.selected_path = path
                             self.cut_lines.remove(self.selected)
@@ -938,7 +941,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     feature_factor = settings.feature_factor)
                     
                     path.insert_new_cut(context, self.original_form, self.bme, self.selected)
-                    path.lock = True  #for now
+                    path.seg_lock = True  #for now
                     path.connect_cuts_to_make_mesh(self.original_form)
                     path.update_visibility(context, self.original_form)
                     
@@ -1188,6 +1191,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 else:
                                     path.deselect(settings)
                         
+                        #select the ring
                         self.hover_target.do_select(settings)
                         
                     
@@ -1262,11 +1266,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         return {'RUNNING_MODAL'}
                         
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
-                          (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
+                          (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS') and event.ctrl):
                           
-                        if not self.selected_path.lock:
+                        if not self.selected_path.ring_lock:
                             old_segments = self.selected_path.ring_segments
-                            self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE')
+                            self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE' or event.type == 'NUMPAD_MINUS')
                             if self.selected_path.ring_segments < 3:
                                 self.selected_path.ring_segments = 3
                                 
@@ -1517,14 +1521,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         #TODO: path.locked
                         #TODO:  dont recalc the path when no change happens
                         if event.type in {'WHEELUPMOUSE','NUMPAD_PLUS'}:
-                            if not self.selected_path.lock:
+                            if not self.selected_path.seg_lock:
                                 self.selected_path.segments += 1
                         elif event.type in {'WHEELDOWNMOUSE', 'NUMPAD_MINUS'} and self.selected_path.segments > 3:
-                            if not self.selected_path.lock:
+                            if not self.selected_path.seg_lock:
                                 
                                 self.selected_path.segments -= 1
                     
-                        if not self.selected_path.lock:
+                        if not self.selected_path.seg_lock:
                             self.selected_path.create_cut_nodes(context)
                             self.selected_path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
                             self.selected_path.cuts_on_path(context, self.original_form, self.bme)
@@ -1589,6 +1593,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.deselect(settings)
                             
                         self.selected_path  = self.new_path_from_draw(context, settings)
+                        self.selected = self.selected_path.cuts[-1]
                         
                         self.drag = False #TODO: is self.drag still needed?
                         self.force_new = False
