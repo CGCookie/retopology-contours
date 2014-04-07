@@ -1080,6 +1080,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 self.post_update = True
                 context.area.header_text_set(text = 'WAITING')    
                 return {'PASS_THROUGH'}
+            
+            if (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'}):
+            
+                self.modal_state = 'WAITING'
+                self.post_update = True
+                context.area.header_text_set(text = 'WAITING')    
+                return {'PASS_THROUGH'}
         
         if self.mode == 'LOOP':
             
@@ -1166,6 +1173,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     'NUMPAD_5', 
                                     'NUMPAD_7',
                                     'NUMPAD_9'} and event.value == 'PRESS'):
+                    
+                    self.modal_state = 'NAVIGATING'
+                    self.post_update = True
+                    context.area.header_text_set(text = 'NAVIGATING')
+
+                    return {'PASS_THROUGH'}
+                elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'}):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
@@ -1444,6 +1458,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     'NUMPAD_5', 
                                     'NUMPAD_7',
                                     'NUMPAD_9'} and event.value == 'PRESS'):
+                    
+                    self.modal_state = 'NAVIGATING'
+                    self.post_update = True
+                    context.area.header_text_set(text = 'NAVIGATING')
+
+                    return {'PASS_THROUGH'}
+                
+                elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'}):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
