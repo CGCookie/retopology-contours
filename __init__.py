@@ -151,26 +151,26 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     show_edges = BoolProperty(
             name="Show Span Edges",
-            description = "Display the extracted mesh edges.  Usually only turned off for debugging",
+            description = "Display the extracted mesh edges. Usually only turned off for debugging",
             default=True,
             )
     
     show_cut_indices = BoolProperty(
             name="Show Cut Indices",
-            description = "Display the order the operator stores cuts.  Usually only turned on for debugging",
+            description = "Display the order the operator stores cuts. Usually only turned on for debugging",
             default=False,
             )
         
     
     show_ring_edges = BoolProperty(
             name="Show Ring Edges",
-            description = "Display the extracted mesh edges.  Usually only turned off for debugging",
+            description = "Display the extracted mesh edges. Usually only turned off for debugging",
             default=True,
             )
     
     draw_widget = BoolProperty(
             name="Draw Widget",
-            description = "Turn off to help make mockups or clean-up visualization ",
+            description = "Turn display of widget on or off",
             default=True,
             )
     
@@ -244,7 +244,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     live_update = BoolProperty(
             name="Live Update",
-            description = "Will live update the mesh preview when transforming cut lines.  Looks good, but can get slow on large meshes",
+            description = "Will live update the mesh preview when transforming cut lines. Looks good, but can get slow on large meshes",
             default=True,
             )
     
@@ -256,7 +256,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     use_perspective = BoolProperty(
             name="Use Perspective",
-            description = 'Will cause non parallel cuts from same view',
+            description = 'Make non parallel cuts project from the same view to improve expected outcome',
             default=True,
             )
     
@@ -323,7 +323,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     cyclic = BoolProperty(
             name = "Cyclic",
-            description = "Make Retopo Loops Cyclic",
+            description = "Make contour loops cyclic",
             default = False)
     
     recover = BoolProperty(
@@ -333,7 +333,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     recover_clip = IntProperty(
             name = "Recover Clip",
-            description = "Number of cuts to leave out, usually just 0 or 1",
+            description = "Number of cuts to leave out, usually set to 0 or 1",
             default=1,
             min = 0,
             max = 10,
@@ -341,7 +341,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     search_factor = FloatProperty(
             name = "Search Factor",
-            description = "percentage of object distance to search for new cuts",
+            description = "Percentage of object distance to search for new cuts",
             default=.2,
             min = 0,
             max = 1,
@@ -357,7 +357,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     merge_threshold = FloatProperty(
             name = "Intersect Factor",
-            description = "distance below which to snap strokes together",
+            description = "Distance below which to snap strokes together",
             default=1.,
             min = .000001,
             max = 1,
@@ -365,7 +365,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     density_factor = IntProperty(
             name = "Density Factor",
-            description = "Fraction of diagonal to start mesh density of poly sketch...bigger numbers = smaller quads",
+            description = "Fraction of diagonal to start mesh density of poly sketch. Bigger numbers = smaller quads",
             default=40,
             min = 1,
             max = 1000,
@@ -381,7 +381,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     smooth_factor = IntProperty(
             name = "Smooth Factor",
-            description = "Iterations to smooth drawn strokes",
+            description = "Number of iterations to smooth drawn strokes",
             default = 5,
             min = 1,
             max = 10,
@@ -521,6 +521,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
         
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
     '''Retopologize Forms with Contour Strokes'''
+    bl_category = "Retopology"
     bl_label = "Contour Retopolgy"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
@@ -537,22 +538,26 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         layout = self.layout
         box = layout.box()
         col = box.column()
-        col.operator("cgcookie.retop_contour", text="Draw Contours", icon='MESH_UVSPHERE')
-        col = box.column()
-        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
+        col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
         
         cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
+        
+        row = box.row()
+        row.prop(cgc_contour, "vertex_count")
+
         row = box.row()
         row.prop(cgc_contour, "cyclic")
-        row.prop(cgc_contour, "vertex_count")
         
         row = box.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
+
+        col = box.column()
+        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
         box = layout.box()
         row = box.row()
-        row.operator("cgcookie.retopo_poly_sketch", text="Sketch Poly Strips", icon='MESH_UVSPHERE')
+        row.operator("cgcookie.retopo_poly_sketch", icon='MESH_UVSPHERE')
         
         row = box.row()
         row.prop(cgc_contour, "density_factor")
@@ -567,13 +572,11 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
 
         layout.operator_context = 'INVOKE_DEFAULT'
 
-        layout.operator("cgcookie.retop_contour", text="Draw Contours")  
+        layout.operator("cgcookie.retop_contour")  
+        layout.operator("cgcookie.retopo_poly_sketch")
 
 class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
-    '''
-    Removes the temporary object and mesh data from the cache.
-    Do this if you have altered your original form in any way   
-    '''
+    '''Removes the temporary object and mesh data from the cache. Do this if you have altered your original form in any way'''
     bl_idname = "cgcookie.clear_cache"
     bl_label = "Clear Contour Cache" 
     
@@ -583,8 +586,6 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
         
         return {'FINISHED'}
         
-        
-
 
 def retopo_draw_callback(self,context):
     
@@ -661,9 +662,9 @@ def retopo_draw_callback(self,context):
     
 #Operator
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
-    '''Retopologize Forms with Contour Strokes'''
+    '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
     bl_idname = "cgcookie.retop_contour"
-    bl_label = "Contour Retopologize"    
+    bl_label = "Draw Contours"
     
     @classmethod
     def poll(cls,context):
@@ -2353,9 +2354,9 @@ def poly_sketch_draw_callback(self,context):
         contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
 
 class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
-    '''Sketch Toplogy on Forms with Contour Strokes'''
+    '''Draw Polygon Strips on Surface for Retopology'''
     bl_idname = "cgcookie.retopo_poly_sketch"
-    bl_label = "Contour Poly Sketch"    
+    bl_label = "Draw Poly Strips"    
     
     @classmethod
     def poll(cls,context):
@@ -2493,10 +2494,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             
             if self.draw:
-                message = "Stick draw on"
+                message = "Draw Mode Active: draw lines with LMB to generate poly strips"
                 
             else:
-                message = "Experimental poly_sketch tap 'D' to draw"
+                message = "Poly Strips: press 'D' to draw"
             context.area.header_text_set(text = message)    
             #else:
                 #self.draw = False
