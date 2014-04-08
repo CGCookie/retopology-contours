@@ -26,6 +26,7 @@ import bmesh
 import time
 import math
 import random
+from itertools import chain,combinations
 
 from collections import deque
 
@@ -35,18 +36,29 @@ from mathutils.geometry import intersect_line_plane, intersect_point_line, dista
 from bpy_extras.view3d_utils import location_3d_to_region_2d
 
 def callback_register(self, context):
-        if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
-            self._handle = bpy.types.SpaceView3D.draw_handler_add(self.menu.draw, (self, context), 'WINDOW', 'POST_PIXEL')
-        else:
-            self._handle = context.region.callback_add(self.menu.draw, (self, context), 'POST_PIXEL')
-        return None
+        #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
+    self._handle = bpy.types.SpaceView3D.draw_handler_add(self.menu.draw, (self, context), 'WINDOW', 'POST_PIXEL')
+        #else:
+            #self._handle = context.region.callback_add(self.menu.draw, (self, context), 'POST_PIXEL')
+        #return None
             
 def callback_cleanup(self, context):
-    if str(bpy.app.build_revision)[2:7].lower() == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
-        bpy.types.SpaceView3D.draw_handler_remove(self._handle, "WINDOW")
-    else:
-        context.region.callback_remove(self._handle)
-    return None
+    #if str(bpy.app.build_revision)[2:7].lower() == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
+    bpy.types.SpaceView3D.draw_handler_remove(self._handle, "WINDOW")
+    #else:
+        #context.region.callback_remove(self._handle)
+    #return None
+
+def bgl_col(rgb, alpha):
+    '''
+    takes a Vector of len 3 (eg, a color setting)
+    returns a 4 item tuple (r,g,b,a) for use with 
+    bgl drawing.
+    '''
+    #TODO Test variables for acceptability
+    color = (rgb[0], rgb[1], rgb[2], alpha)
+    
+    return color
 
 def draw_points(context, points, color, size):
     '''
@@ -146,7 +158,6 @@ def perp_vector_point_line(pt1, pt2, ptn):
     
     return alt_vect
 
-
 def altitude(point1, point2, pointn):
     edge1 = point2 - point1
     edge2 = pointn - point1
@@ -221,8 +232,6 @@ def simplify_RDP(splineVerts, error, method = 1):
     print('finished simplification with method %i in %f seconds' % (method, time.time() - start))
     return newVerts
 
-        
-
 def relax(verts, factor = .75, in_place = True):
     '''
     verts is a list of Vectors
@@ -256,9 +265,7 @@ def relax(verts, factor = .75, in_place = True):
             new_verts[i] += deltas[i]     
         
         return new_verts
-        
-    
-    
+           
 def pi_slice(x,y,r1,r2,thta1,thta2,res,t_fan = False):
     '''
     args: 
@@ -327,8 +334,7 @@ def arrow_primitive(x,y,ang,tail_l, head_l, head_w, tail_w):
         arrow[i] = T + rmatrix * loc
         
     return arrow
-    
-    
+       
 def arc_arrow(x,y,r1,thta1,thta2,res, arrow_size, arrow_angle, ccw = True):
     '''
     args: 
@@ -389,10 +395,6 @@ def simple_circle(x,y,r,res):
            
     return(points)     
     
-
-    
-
-
 def draw_3d_points(context, points, color, size):
     '''
     draw a bunch of dots
@@ -406,8 +408,13 @@ def draw_3d_points(context, points, color, size):
     bgl.glColor4f(*color)
     bgl.glPointSize(size)
     bgl.glBegin(bgl.GL_POINTS)
-    for coord in points_2d:  
-        bgl.glVertex2f(*coord)  
+    for coord in points_2d:
+        #TODO:  Debug this problem....perhaps loc_3d is returning points off of the screen.
+        if coord:
+            bgl.glVertex2f(*coord)  
+        else:
+            print('how the f did nones get in here')
+            print(coord)
     
     bgl.glEnd()   
     return
@@ -443,7 +450,6 @@ def draw_polyline_from_points(context, points, color, thickness, LINE_TYPE):
       
     return
 
-
 def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE):
     '''
     a simple way to draw a line
@@ -472,10 +478,9 @@ def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE)
     if LINE_TYPE == "GL_LINE_STIPPLE":  
         bgl.glDisable(bgl.GL_LINE_STIPPLE)  
         bgl.glEnable(bgl.GL_BLEND)  # back to uninterupted lines  
-      
+        bgl.glLineWidth(1)
     return
     
-
 def get_path_length(verts):
     '''
     sum up the length of a string of vertices
@@ -489,8 +494,7 @@ def get_path_length(verts):
         l_tot += d.length
         
     return l_tot
-
-    
+   
 def get_com(verts):
     '''
     args:
@@ -506,7 +510,6 @@ def get_com(verts):
 
     return COM
 
-
 def approx_radius(verts, COM):
     '''
     avg distance
@@ -520,7 +523,6 @@ def approx_radius(verts, COM):
     app_rad = 1/l * app_rad
     
     return app_rad    
-
 
 def verts_bbox(verts):
     xs = [v[0] for v in verts]
@@ -541,8 +543,7 @@ def diagonal_verts(verts):
     
     return diag
 
-# calculate a best-fit plane to the given vertices
-#modified from LoopTools addon
+
 #TODO: CREDIT
 #TODO: LINK
 def calculate_best_plane(locs):
@@ -703,7 +704,6 @@ def cross_section(bme, mx, point, normal, debug = True):
     else:
         return None
     
-
 def cross_edge(A,B,pt,no):
     '''
     wrapper of intersect_line_plane that limits intersection
@@ -764,10 +764,9 @@ def cross_edge(A,B,pt,no):
                 #now add all edges that have that point into the already checked list
                 #this takes care of poles
                 ret_val = ['POINT',v,None]
-    
+
     return ret_val
 
-#adapted from opendentalcad then to pie menus now here
 def outside_loop_2d(loop):
     '''
     args:
@@ -786,7 +785,43 @@ def outside_loop_2d(loop):
     bound = (1.1*maxx, 1.1*maxy)
     return bound
 
+def bound_box(verts):
+    '''
+    takes a list of vectors of any dimension
+    returns a list of (min,max) pairs
+    '''
+    if len(verts) < 4:
+        return verts
+    
+    dim = len(verts[0])
+    
+    bounds = []
+    for i in range(0,dim):
+        components = [v[i] for v in verts]
+        low = min(components)
+        high = max(components)
+        
+        bounds.append((low,high))
+        
+    return bounds
+
+def diagonal(bounds):
+    '''
+    returns the diagonal dimension of min/max
+    pairs of bounds.  Will generalize to N dimensions
+    however only really meaningful for 2 or 3 dim vectors
+    '''
+    diag = 0
+    for min_max in bounds:
+        l = min_max[1] - min_max[0]
+        diag += l * l
+        
+    diag = diag ** .5
+    
+    return diag
+    
 #adapted from opendentalcad then to pie menus now here
+
 def point_inside_loop2d(loop, point):
     '''
     args:
@@ -824,8 +859,6 @@ def point_inside_loop2d(loop, point):
         inside = True
     
     return inside
-
-
 
 def generic_axes_from_plane_normal(p_pt, no):
     '''
@@ -881,7 +914,7 @@ def generic_axes_from_plane_normal(p_pt, no):
     
     return (X_prime, Y_prime)
 
-def point_inside_loop_almost3D(pt, verts, no, p_pt = None, threshold = .01, debug = False):
+def point_inside_loop_almost3D(pt, verts, no, p_pt = None, threshold = .01, debug = False, bbox = False):
     '''
     http://blenderartists.org/forum/showthread.php?259085-Brainstorming-for-Virtual-Buttons&highlight=point+inside+loop
     args:
@@ -925,12 +958,22 @@ def point_inside_loop_almost3D(pt, verts, no, p_pt = None, threshold = .01, debu
         vx = v_trans.dot(X_prime)
         vy = v_trans.dot(Y_prime)
         verts_prime.append(Vector((vx, vy)))
-                           
+    
+    bounds = bound_box(verts_prime)
+    
+    bound_loop = [Vector((bounds[0][0],bounds[1][0])),
+                  Vector((bounds[0][1],bounds[1][0])),
+                  Vector((bounds[0][1],bounds[1][1])),
+                  Vector((bounds[0][0],bounds[1][1]))]                       
     #transform the test point into the new plane x,y space
     pt_trans = pt - p_pt
     pt_prime = Vector((pt_trans.dot(X_prime), pt_trans.dot(Y_prime)))
-                      
-    pt_in_loop = point_inside_loop2d(verts_prime, pt_prime)
+    
+    if bbox:
+        print('intersected the bbox')
+        pt_in_loop = point_inside_loop2d(bound_loop, pt_prime)
+    else:                  
+        pt_in_loop = point_inside_loop2d(verts_prime, pt_prime)
     
     return pt_in_loop
 
@@ -986,7 +1029,6 @@ def face_cycle(face, pt, no, prev_eds, verts):#, connection):
                     
                 return co_point
             
-                
 def vert_cycle(vert, pt, no, prev_eds, verts):#, connection):
     '''
     args:
@@ -1068,7 +1110,7 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
         segments - number of segments to divide path into
         shift - for cyclic verts chains, shifting the verts along 
                 the loop can provide better alignment with previous
-                loops.  This should be 0 to 1 representing a percentage of segment length.
+                loops.  This should be -1 to 1 representing a percentage of segment length.
                 Eg, a shift of .5 with 8 segments will shift the verts 1/16th of the loop length
                 
     return
@@ -1086,7 +1128,7 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
     #determine if cyclic or not, first vert same as last vert
     if 0 in edges[-1]:
         cyclic = True
-        #print('cyclic vert chain...oh well doesnt matter')
+        
     else:
         cyclic = False
         #zero out the shift in case the vert chain insn't cyclic
@@ -1096,7 +1138,7 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
    
     #calc_length
     arch_len = 0
-    cumulative_lengths = [0]#this is a list of the run sums
+    cumulative_lengths = [0]#TODO, make this the right size and dont append
     for i in range(0,len(verts)-1):
         v0 = verts[i]
         v1 = verts[i+1]
@@ -1105,9 +1147,6 @@ def space_evenly_on_path(verts, edges, segments, shift = 0, debug = False):  #pr
         cumulative_lengths.append(arch_len)
         
     if cyclic:
-        #print('cyclic check?')
-        #print(len(cumulative_lengths))
-        #print(len(verts))
         v0 = verts[-1]
         v1 = verts[0]
         V = v1-v0
@@ -1184,6 +1223,18 @@ def list_shift(seq, n):
     n = n % len(seq)
     return seq[n:] + seq[:n]
 
+def concatenate(*lists):
+    lengths = map(len,lists)
+    newlen = sum(lengths)
+    newlist = [None]*newlen
+    start = 0
+    end = 0
+    for l,n in zip(lists,lengths):
+        end+=n
+        newlist[start:end] = l
+        start+=n
+    return newlist
+
 def find_doubles(seq):
     seen = set()
     seen_add = seen.add
@@ -1191,7 +1242,6 @@ def find_doubles(seq):
     seen_twice = set(x for x in seq if x in seen or seen_add(x))
     # turn the set into a list (as requested)
     return list(seen_twice)
-
 
 def alignment_quality_perpendicular(verts_1, verts_2, eds_1, eds_2):
     '''
@@ -1241,9 +1291,6 @@ def alignment_quality_perpendicular(verts_1, verts_2, eds_1, eds_2):
     
     #average the two directions    
     ideal_direction = no_1.lerp(no_1,.5)
-
-
-    
     
 def point_in_tri(P, A, B, C):
     '''
@@ -1269,7 +1316,6 @@ def point_in_tri(P, A, B, C):
     
     #Check if point is in triangle
     return (u >= 0) & (v >= 0) & (u + v < 1)
-
 
 def com_mid_ray_test(new_cut, established_cut, obj, search_factor = .5):
     '''
@@ -1319,8 +1365,7 @@ def com_mid_ray_test(new_cut, established_cut, obj, search_factor = .5):
         return True
     else:
         return False
-    
-    
+        
 def com_line_cross_test(com1, com2, pt, no, factor = 2):
     '''
     test used to make sure a cut is reasoably between
@@ -1345,8 +1390,7 @@ def com_line_cross_test(com1, com2, pt, no, factor = 2):
         
         if in_between and test_length < invalid_length:
             return True
-
-    
+  
 def discrete_curl(verts, z): #Adapted from Open Dental CAD by Patrick Moore
     '''
     calculates the curl relative to the direction given.
@@ -1425,9 +1469,96 @@ def rot_between_vecs(v1,v2, factor = 1):
     
     return quat
 
+def circ(point1, point2, point3):
+    '''find the x,y and radius for the circle through the 3 points'''
+    ax = point1[0]
+    ay = point1[1]
+    ax = point1[0]
+    ay = point1[1]
+    bx = point2[0]
+    by = point2[1]
+    cx = point3[0]
+    cy = point3[1]
     
+    if (ax*by-ax*cy-cx*by+cy*bx-bx*ay+cx*ay) != 0:
+        x=.5*(-pow(ay, 2)*cy+pow(ay, 2)*by-ay*pow(bx, 2)\
+        -ay*pow(by, 2)+ay*pow(cy, 2)+ay*pow(cx, 2)-\
+        pow(cx, 2)*by+pow(ax, 2)*by+pow(bx, 2)*\
+        cy-pow(ax, 2)*cy-pow(cy, 2)*by+cy*pow(by, 2))\
+        /(ax*by-ax*cy-cx*by+cy*bx-bx*ay+cx*ay)
+        y=-.5*(-pow(ax, 2)*cx+pow(ax, 2)*bx-ax*pow(by, 2)\
+        -ax*pow(bx, 2)+ax*pow(cx, 2)+ax*pow(cy, 2)-\
+        pow(cy, 2)*bx+pow(ay, 2)*bx+pow(by, 2)*cx\
+        -pow(ay, 2)*cx-pow(cx, 2)*bx+cx*pow(bx, 2))\
+        /(ax*by-ax*cy-cx*by+cy*bx-bx*ay+cx*ay)
+    else:
+        return False
     
+    r=pow(pow(x-ax, 2)+pow(y-ay, 2), .5)
     
+    return x, y, r
+
+def findpoint(eq1, eq2, point1, point2):
+    '''find the centroid of the overlapping part of two circles
+    from their equations'''
+    thetabeg = math.acos((point1[0]-eq1[0])/eq1[2])
+    thetaend = math.acos((point2[0]-eq1[0])/eq1[2])
+    mid1x = eq1[2]*math.cos((thetabeg+thetaend)/2)+eq1[0]
+    thetaybeg = math.asin((point1[1]-eq1[1])/eq1[2])
+    thetayend = math.asin((point2[1]-eq1[1])/eq1[2])
+    mid1y = eq1[2]*math.sin((thetaybeg+thetayend)/2)+eq1[1]
+
+    thetabeg2 = math.acos((point1[0]-eq2[0])/eq2[2])
+    thetaend2 = math.acos((point2[0]-eq2[0])/eq2[2])
+    mid2x = eq2[2]*math.cos((thetabeg2+thetaend2)/2)+eq2[0]
+    thetaybeg2 = math.asin((point1[1]-eq2[1])/eq2[2])
+    thetayend2 = math.asin((point2[1]-eq2[1])/eq2[2])
+    mid2y = eq2[2]*math.sin((thetaybeg2+thetayend2)/2)+eq2[1]
+    return [(mid2x+mid1x)/2, (mid2y+mid1y)/2]
+
+def interp_curve(curve, iterations):
+    ''' Ordered list of points, the first and last affect the shape
+    of the curve but are not connected though drawn'''
+    
+    new_curve = curve.copy()
+    
+    for j in range(0, iterations):
+        newpoints = []
+        for i in range(0, len(new_curve)-3):
+            eq = circ(new_curve[i], new_curve[i+1], new_curve[i+2])
+            eq2 = circ(new_curve[i+1], new_curve[i+2], new_curve[i+3])
+            if eq == False or eq2 == False:
+                newpoints.append([(new_curve[i+1][0]+new_curve[i+2][0])/2, (new_curve[i+1][1]+new_curve[i+2][1])/2])
+            else:    
+                newpoints.append(findpoint(eq, eq2, new_curve[i+1], new_curve[i+2]))
+        for point in newpoints:
+            point[0] = int(round(point[0]))
+            point[1] = int(round(point[1]))
+        for m in range(0, len(newpoints)):
+            new_curve.insert(2*m+2, newpoints[m])
+                          
+def nearest_point(test_vert, vert_list):
+    '''
+    find the closest point to a test vert from a
+    list of vertices
+    
+    Brute force
+    Not fast
+    not smart
+    
+    return index in list
+    '''    
+    
+    lens = [None]*len(vert_list)
+    
+    for i,v in enumerate(vert_list):
+        R = test_vert - v
+        lens[i] = R.length
+        
+    smallest = min(lens)
+    n = lens.index(smallest)
+    
+    return n
     
 def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = .00001):
     '''
@@ -1440,7 +1571,11 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
     
     eg...if the 10th of path 1 intersectts with the 5th edge of path 2
     
-    return intersect_vert,  [10,5]
+    return [[intersection verst],[inds],[inds]]
+    
+    Special cases are not handled well.  Eg..dont instersect two
+    clover leaf paths!
+
     '''
     
     intersections = []
@@ -1464,9 +1599,6 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
             
             if intersect:
                 #make sure the intersection is within the segment
-                
-                
-                
                 inter_1 = intersect[0]
                 verif1 = intersect_point_line(inter_1, v1,v2)
                 
@@ -1509,9 +1641,7 @@ def intersect_paths(path1, path2, cyclic1 = False, cyclic2 = False, threshold = 
         intersections.pop(ind)
         
     return intersections, inds_1, inds_2
-            
-            
-            
+                        
 def  fit_path_to_endpoints(path,v0,v1):
     '''
     will rescale/rotate/tranlsate a path to fit between v0 and v1
@@ -1543,10 +1673,8 @@ def  fit_path_to_endpoints(path,v0,v1):
         
     return new_path
     
-
-
 def pole_detector(bme):
-    
+
     pole_inds = []
     
     for vert in bme.verts:
@@ -1554,8 +1682,7 @@ def pole_detector(bme):
             pole_inds.append(vert.index)
             
     return pole_inds
-        
-    
+            
 def mix_path(path1,path2,pct = .5):
     '''
     will produce a blended path between path1 and 2 by
@@ -1576,8 +1703,7 @@ def mix_path(path1,path2,pct = .5):
         new_path[i] = v + pct * (path2[i] - v)
         
     return new_path
-        
-        
+               
 def align_edge_loops(verts_1, verts_2, eds_1, eds_2):
     '''
     Modifies vert order and edge indices to  provide best
@@ -1691,13 +1817,142 @@ def align_edge_loops(verts_1, verts_2, eds_1, eds_2):
     if final_shift != 0:
         print("shifting verst by %i" % final_shift)
         verts_2 = list_shift(verts_2, final_shift)
-    
-    
-            
+                  
     return verts_2
     
+def cross_section_until_plane(bme, mx, point, normal, seed, pt_stop, normal_stop, max_tests = 10000, debug = True):
+    '''
+    Takes a mesh and associated world matrix of the object and returns a cross secion in local
+    space which stops when it intersects the plane defined by pt_stop, normal_stop
+    
+    Args:
+        bme: Blender BMesh
+        mx:   World matrix of the object to be cut(type Mathutils.Matrix)
+        point: any point on the cut plane in world coords (type Mathutils.Vector)
+        normal:  cut plane normal direction in world(type Mathutisl.Vector)
+        seed: face index, typically achieved by raycast.
+            a known face which intersects the cutplane.
+        pt_stop:  point on the plane defined to stop cutting.  World Coords
+                (type Mathutils.Vector)
+        normal_stop: normal direction of the plane defined to stop cutting.  World COORD
+        
+    Return:
+        list[Vector()]  in local coords
+    '''
+    
+    times = []
+    times.append(time.time())
+    
+    imx = mx.inverted()
+    pt = imx * point
+    pt_stop_local = imx * pt_stop
+    no = imx.to_3x3() * normal
+    normal_stop_local =  imx.to_3x3() * normal_stop
 
+    verts = {}
+    plane_hit = {}
+    
+    seeds = []
+    prev_eds = []
+    
+    #the simplest expected result is that we find 2 edges
+    for ed in bme.faces[seed].edges:         
+        prev_eds.append(ed.index)
+        
+        A = ed.verts[0].co
+        B = ed.verts[1].co
+        result = cross_edge(A, B, pt, no)
+        
+        if result[0] and result[0] != 'CROSS':
+            print('got an anomoly')
+            print(result[0])
 
+        #here we are only tesing the good cases
+        if result[0] == 'CROSS':
+            #create a list to hold the verst we find from this seed
+            #start with the a point....go toward b
+            #TODO: CODE REVIEW...this looks like stupid code.
+            potential_faces = [face for face in ed.link_faces if face.index != seed]
+            if len(potential_faces):
+                f = potential_faces[0]
+                seeds.append(f)
+                verts[f.index] = [pt, result[1]]
+
+    #TODO:  debug and return values?
+    if len(seeds) == 0:
+        print('failure to find a direction to start with')
+        return None
+    
+    total_tests = 0
+    for initial_element in seeds:
+        element_tests = 0
+        element = initial_element
+        stop_test = None
+        while element and total_tests < max_tests and not stop_test:
+            total_tests += 1
+            element_tests += 1
+
+            if type(element) == bmesh.types.BMFace:
+                element = face_cycle(element, pt, no, prev_eds, verts[initial_element.index])
+                 
+            elif type(element) == bmesh.types.BMVert:
+                print('do we ever use the vert cycle?')
+                element = vert_cycle(element, pt, no, prev_eds, verts[initial_element.index])
+                
+            if element:
+                A = verts[initial_element.index][-2]
+                B = verts[initial_element.index][-1]
+                cross = cross_edge(A, B, pt_stop_local, normal_stop_local)
+                stop_test = cross[0]
+                if stop_test:
+                    prev_eds.pop()  #will need to retest this edge in case we come around a full loop
+                    verts[initial_element.index].pop()
+                    verts[initial_element.index].append(cross[1])
+                    plane_hit[initial_element.index] = True
+                    
+            else:
+                plane_hit[initial_element.index] = False
+      
+        if total_tests-2 > max_tests:
+            print('maxed out tests')
+                   
+        print('completed %i tests in this seed search' % element_tests)
+                        
+    
+    #this iterates the keys in verts
+    if len(verts):
+        plane_chains = [verts[key] for key in verts if len(verts[key]) >= 2 and plane_hit[key]]
+        loose_chains = [verts[key] for key in verts if len(verts[key]) >= 2 and not plane_hit[key]]
+        
+        print('%i chains hit the plane' % len(plane_chains))
+        print('%i chains did not hit the plane' % len(loose_chains))
+        
+        
+        #loose chains only
+        if len(plane_chains) == 0 and len(loose_chains):
+            if len(loose_chains) == 1:
+                print('one loose chain')
+                return loose_chains[0]
+            else:
+                print('best loose chain')
+                return min(loose_chains, key=lambda x: distance_point_to_plane(x[-1], pt_stop_local, normal_stop_local))
+                
+                
+        if len(plane_chains) == 1:
+            print('single plane chain')
+            return plane_chains[0]
+        
+        
+        if len(plane_chains) > 1:
+            print('best plane chain')
+            return min(plane_chains, key=lambda x: get_path_length(x))
+        #if one of each:
+        #return the one what hit the plane
+        #plane chains only
+        #pick the shortest one    
+    else:
+        print('failed to find a cut that hit the plane...perhaps we dont intersect that plane')
+        return None
 
 def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed_index_b, max_tests = 10000, debug = True):
     '''
@@ -1750,10 +2005,10 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         result = cross_edge(A, B, pt, no)
         
         
-        if result[0] != 'CROSS':
+        if result[0] and result[0] != 'CROSS':
             print('got an anomoly')
             print(result[0])
-            
+            print('that is the result ^')
         #here we are only tesing the good cases
         if result[0] == 'CROSS':
             #create a list to hold the verst we find from this seed
@@ -1817,7 +2072,7 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
         if total_tests-2 > max_tests:
             print('maxed out tests')
                    
-        print('completed %i tests in this seed search' % element_tests)
+        #print('completed %i tests in this seed search' % element_tests)
                         
     
     #this iterates the keys in verts
@@ -1825,14 +2080,14 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
     #verts
     if len(verts):
         
-        print('picking the shortes path by elements')
-        print('later we will return both paths to allow')
-        print('sorting by path length or by proximity to view')
+        #print('picking the shortest path by elements')
+        #print('later we will return both paths to allow')
+        #print('sorting by path length or by proximity to view')
         
         chains = [verts[key] for key in verts if len(verts[key]) > 2]
         if len(chains):
             sizes = [len(chain) for chain in chains]
-            print(sizes)
+            #print(sizes)
             best = min(sizes)
             ind = sizes.index(best)
         
@@ -1844,10 +2099,12 @@ def cross_section_2_seeds(bme, mx, point, normal, pt_a, seed_index_a, pt_b, seed
     else:
         print('failed to find connection in either direction...perhaps points arent coplanar')
         return []
-            
-            
 
-def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
+
+def cross_section_seed_ver0(bme, mx, 
+                       point, normal, 
+                       seed_index, 
+                       max_tests = 10000, debug = True):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
     space.
@@ -1857,35 +2114,28 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         mx:   World matrix (type Mathutils.Matrix)
         point: any point on the cut plane in world coords (type Mathutils.Vector)
         normal:  plane normal direction (type Mathutisl.Vector)
-        seed: face index, typically achieved by raycast
+        seed_index: face index, typically achieved by raycast
+        self_stop: a normal vector which defines a plane to stop cutting
+        direction: Vector which the cut should start traveling.
         exclude_edges: list of edge indices (usually already tested from previous iterations)
     '''
     
     times = []
     times.append(time.time())
-    #bme = bmesh.new()
-    #bme.from_mesh(me)
-    #bme.normal_update()
-    
-    #if debug:
-        #n = len(times)
-        #times.append(time.time())
-        #print('succesfully created bmesh in %f sec' % (times[n]-times[n-1]))
+
     verts =[]
     eds = []
     
     #convert point and normal into local coords
-    #in the mesh into world space.This saves 2*(Nverts -1) matrix multiplications
     imx = mx.inverted()
     pt = imx * point
     no = imx.to_3x3() * normal  #local normal
-    
+
     #edge_mapping = {}  #perhaps we should use bmesh becaus it stores the great cycles..answer yup
     
     #first initial search around seeded face.
     #if none, we may go back to brute force
     #but prolly not :-)
-    seed_edge = None
     seed_search = 0
     prev_eds = []
     seeds =[]
@@ -1902,8 +2152,8 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         
         #we should never get to this point because we are pre
         #triangulating the ngons before this function in the
-        #final work flow but this leaves not chance and keeps
-        #options to reuse this for later.        
+        #final work flow but this leaves no chance and keeps
+        #options to reuse this in later work      
         if len(ngons):
             new_geom = bmesh.ops.triangulate(bme, faces = ngons, use_beauty = True)
             new_faces = new_geom['faces']
@@ -1911,17 +2161,12 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
             #now we must find a new seed index since we have added new geometry
             for f in new_faces:
                 if point_in_tri(pt, f.verts[0].co, f.verts[1].co, f.verts[2].co):
-                    print('found the point inthe tri')
-                    if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .001:
+                    print('found the point int he tri')
+                    if distance_point_to_plane(pt, f.verts[0].co, f.normal) < .0000001:
                         seed_index = f.index
                         print('found a new index to start with')
                         break
-            
-            
-    #if len(bme.faces[seed_index].edges) > 4:
-        #print('no NGon Support for initial seed yet! try again')
-        #return None
-    
+
     for ed in bme.faces[seed_index].edges:
         seed_search += 1        
         prev_eds.append(ed.index)
@@ -1930,30 +2175,27 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         B = ed.verts[1].co
         result = cross_edge(A, B, pt, no)
         if result[0] == 'CROSS':
-            #add the point, add the mapping move forward
-            #edge_mapping[len(verts)] = [f.index for f in ed.link_faces]
-            verts.append(result[1])
             potential_faces = [face for face in ed.link_faces if face.index != seed_index]
+                
             if len(potential_faces):
-                seeds.append(potential_faces[0])
-                seed_edge = True
-            else:
-                seed_edge = False
-        
-    if not seed_edge:
-        print('failed to find a good face to start with, cancelling until your programmer gets smarter')
-        return None    
+                f = potential_faces[0]
+                verts.append(result[1])
+                seeds.append(f)
+            
+    if not len(seeds):
+        print('cancelling until your programmer gets smarter')
+        return None
         
     #we have found one edge that crosses, now, baring any terrible disconnections in the mesh,
     #we traverse through the link faces, wandering our way through....removing edges from our list
-
     total_tests = 0
     
-    #by the way we append the verts in the first face...we find A then B then start at A... so there is a little  reverse in teh vert order at the middle.
+    #We find A then B then start at A... so there is a
+    #reverse in the vert order at the middle.
     verts.reverse()
     for element in seeds: #this will go both ways if they dont meet up.
         element_tests = 0
-        while element and total_tests < 10000:
+        while element and total_tests < max_tests:
             total_tests += 1
             element_tests += 1
             #first, we know that this face is not coplanar..that's good
@@ -1966,8 +2208,8 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
             elif type(element) == bmesh.types.BMVert:
                 element = vert_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
                 
-        print('completed %i tests in this seed search' % element_tests)
-        print('%i vertices found so far' % len(verts))
+        #print('completed %i tests in this seed search' % element_tests)
+        #print('%i vertices found so far' % len(verts))
         
  
     #The following tests for a closed loop
@@ -1975,15 +2217,15 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
     #will only get one try, and find no new crosses
     #trivially, mast make sure that the first seed we found wasn't
     #on a non manifold edge, which should never happen
+    #TODO:  find a better way to determine this. Currently we dont preserve
+    #enough information
     closed_loop = element_tests == 1 and len(seeds) == 2
     
-    print('walked around cross section in %i tests' % total_tests)
-    print('found this many vertices: %i' % len(verts))       
-                
+              
     if debug:
         n = len(times)
         times.append(time.time())
-        print('calced intersections %f sec' % (times[n]-times[n-1]))
+        #print('calced intersections %f sec' % (times[n]-times[n-1]))
        
     #iterate through smartly to create edge keys
     #no longer have to do this...verts are created in order
@@ -2004,9 +2246,7 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
         seed_1_verts = verts[:len(verts)-(element_tests)] #yikes maybe this index math is right
         seed_2_verts = verts[len(verts)-(element_tests):]
         seed_2_verts.reverse()
-        
         seed_2_verts.extend(seed_1_verts)
-        
         
         for i in range(0,len(seed_1_verts)-1):
             eds.append((i,i+1))
@@ -2015,18 +2255,369 @@ def cross_section_seed(bme, mx, point, normal, seed_index, debug = True):
     if debug:
         n = len(times)
         times.append(time.time())
-        print('calced connectivity %f sec' % (times[n]-times[n-1]))
+        #print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
     if len(verts):
-        #new_me = bpy.data.meshes.new('Cross Section')
-        #new_me.from_pydata(verts,eds,[])
-        
-    
-        #if debug:
-            #n = len(times)
-            #times.append(time.time())
-            #print('Total Time: %f sec' % (times[-1]-times[0]))
             
         return (verts, eds)
     else:
         return None
+
+
+
+def find_bmedges_crossing_plane(pt, no, edges, epsilon):
+    '''
+    returns list of edges that *cross* plane and corresponding intersection points
+    '''
+    
+    ret = []
+    for edge in edges:
+        v0,v1 = edge.verts
+        co0,co1 = v0.co, v1.co
+        s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
+        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+            continue
+        
+        i = intersect_line_plane(co0, co1, pt, no)
+        ret += [(edge,i)]
+    return ret
+
+def find_distant_bmedge_crossing_plane(pt, no, edges, epsilon, eind_from, co_from):
+    '''
+    returns the farthest edge that *crosses* plane and corresponding intersection point
+    '''
+    d_max,edge_max,i_max = -1.0,None,None
+    for edge in edges:
+        if edge.index == eind_from: continue
+        
+        v0,v1 = edge.verts
+        co0,co1 = v0.co, v1.co
+        s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
+        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+            continue
+        
+        i = intersect_line_plane(co0, co1, pt, no)
+        d = (co_from - i).length
+        if d > d_max: d_max,edge_max,i_max = d,edge,i
+    return (edge_max,i_max)
+
+def cross_section_walker(bme, pt, no, find_from, eind_from, co_from, epsilon):
+    '''
+    returns tuple (verts,looped) by walking around a bmesh near the given plane
+    verts is list of verts as the intersections of edges and cutting plane (in order)
+    looped is bool indicating if walk wrapped around bmesh
+    '''
+    
+    # returned values
+    verts,looped = [co_from],False
+    
+    # track what we've seen
+    finds_dict = {find_from: 0}
+    
+    find_current = next(f.index for f in bme.edges[eind_from].link_faces if f.index != find_from)
+    
+    while True:
+        # find farthest point
+        edge,i = find_distant_bmedge_crossing_plane(pt, no, bme.faces[find_current].edges, epsilon, eind_from, co_from)
+        
+        verts += [i]
+        
+        if len(edge.link_faces) == 1: break                                     # hit end?
+        
+        # get next face, edge, co
+        find_next = next(f.index for f in edge.link_faces if f.index != find_current)
+        eind_next = edge.index
+        co_next   = i
+        
+        if find_next in finds_dict:                                             # looped
+            looped = True
+            if finds_dict[find_next] != 0:
+                # loop is P-shaped (loop with a tail)
+                verts = verts[finds_dict[find_next]:]      # clip off tail
+            break
+        
+        # leave breadcrumb
+        finds_dict[find_next] = len(finds_dict)
+        
+        find_from = find_current
+        eind_from = eind_next
+        co_from   = co_next
+        
+        find_current = find_next
+    
+    return (verts,looped)
+
+def cross_section_seed_ver1(bme, mx, 
+                       point, normal, 
+                       seed_index, 
+                       max_tests = 10000, debug = True):
+    
+    # data to be returned
+    verts,edges = [],[]
+    
+    # max distance a coplanar vertex can be from plane
+    epsilon = 0.0000000001
+    
+    #convert plane defn (point and normal) into local coords
+    imx = mx.inverted()
+    pt  = imx * point
+    no  = (imx.to_3x3() * normal).normalized()
+    
+    # make sure that plane crosses face!
+    lco = [v.co for v in bme.faces[seed_index].verts]
+    ld = [no.dot(co - pt) for co in lco]
+    if all(d > epsilon for d in ld) or all(d < -epsilon for d in ld):               # does face cross plane?
+        # shift pt so plane crosses face
+        shift_dist = (min(ld)+epsilon) if ld[0] > epsilon else (max(ld)-epsilon)
+        pt += no * shift_dist
+    
+    # find intersections of edges and cutting plane
+    ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges, epsilon)
+    if len(ei_init) < 2:
+        print('warning: it should not reach here! len(ei_init) = %d' % len(ei_init))
+        return (None,None)
+    elif len(ei_init) == 2:
+        # simple case
+        ei0_max, ei1_max = ei_init
+    else:
+        # convex polygon
+        # find two farthest points
+        d_max, ei0_max, ei1_max = -1.0, None, None
+        for ei0,ei1 in combinations(ei_init, 2):
+            d = (ei0[1] - ei1[1]).length
+            if d > d_max: d_max,ei0_max,ei1_max = d,ei0,ei1
+    
+    # start walking one way around bmesh
+    verts0,looped = cross_section_walker(bme, pt, no, seed_index, ei0_max[0].index, ei0_max[1], epsilon)
+    
+    if looped:
+        # looped around on self, so we're done!
+        verts = verts0
+        nv = len(verts)
+        edges = [(i,(i+1)%nv) for i in range(nv)]
+        return (verts, edges)
+    
+    # did not loop around, so start walking the other way
+    verts1,looped = cross_section_walker(bme, pt, no, seed_index, ei1_max[0].index, ei1_max[1], epsilon)
+    
+    if looped:
+        # looped around on self!?
+        print('warning: looped one way but not the other')
+        verts = verts1
+        nv = len(verts)
+        edges = [(i,(i+1)%nv) for i in range(nv)]
+        return (verts, edges)
+    
+    # combine two walks
+    verts = list(reversed(verts0)) + verts1
+    nv = len(verts)
+    edges = [(i,i+1) for i in range(nv-1)]
+    return (verts, edges)
+
+
+def cross_section_seed(bme, mx, 
+                       point, normal, 
+                       seed_index, 
+                       max_tests = 10000, debug = True, method = False):
+    '''
+    Takes a mesh and associated world matrix of the object and returns a cross secion in local
+    space.
+    
+    Args:
+        bme: Blender BMesh
+        mx:   World matrix (type Mathutils.Matrix)
+        point: any point on the cut plane in world coords (type Mathutils.Vector)
+        normal:  plane normal direction (type Mathutisl.Vector)
+        seed_index: face index, typically achieved by raycast
+        self_stop: a normal vector which defines a plane to stop cutting
+        direction: Vector which the cut should start traveling.
+        exclude_edges: list of edge indices (usually already tested from previous iterations)
+    '''
+    
+    start = time.time()
+    
+    if not method:
+        ret = cross_section_seed_ver0(bme, mx, point, normal, seed_index, max_tests, debug)
+
+    else:
+        ret = cross_section_seed_ver1(bme, mx, point, normal, seed_index, max_tests, debug)
+    
+    calc_time = time.time()
+    
+    print('the new method was used: %r' % method)
+    print('%i verts were found in %f seconds' % (len(ret[0]), (calc_time - start)))
+
+    
+    return ret
+
+def cross_section_seed_direction(bme, mx, 
+                                 point, normal, 
+                                 seed_index, direction, 
+                                 stop_plane = None,
+                                 max_tests = 10000,
+                                 debug = True):
+    '''
+    Takes a bmesh and associated world matrix of the object and 
+    returns a cross secion in local space.  
+    bmesh should not have any ngons (tris and quads only).  
+    If original bmesh has ngons, triangulate the bmesh
+    or a copy of the bmesh first.
+    
+    Args:
+        bme: Blender BMesh
+        mx:   World matrix (type Mathutils.Matrix)
+        point: any point on the cut plane in world coords (type Mathutils.Vector)
+        normal:  plane normal direction (type Mathutisl.Vector)
+        seed_index: face index, typically achieved by raycast
+        direction: Vector which the cut should start traveling.
+        
+        stop_plane = [stop_pt, stop_no]  a 2 item list of 2 vectors defining a plane to stop at
+    '''
+    
+    times = []
+    times.append(time.time())
+
+    #convert point and normal directoin into local coords
+    imx = mx.inverted()
+    pt = imx * point
+    no = imx.to_3x3() * normal  #local normal
+    direct = imx.to_3x3() * direction
+    direct.normalize()
+
+    if stop_plane:
+        stop_pt = imx * stop_plane[0]
+        stop_no = imx.to_3x3() * stop_plane[1]
+
+    prev_eds = []
+    seeds = {}  #a list of 0,1, or 2 edges.
+    
+    #return values
+    verts =[]
+    eds = []
+                   
+    for ed in bme.faces[seed_index].edges:  #should be 3 or 4 edges
+        prev_eds.append(ed.index)
+        A = ed.verts[0].co
+        B = ed.verts[1].co
+        result = cross_edge(A, B, pt, no)
+        if result[0] == 'CROSS':
+            
+            verts.append(result[1])
+            potential_faces = [face for face in ed.link_faces if face.index != seed_index]
+               
+            if len(potential_faces):
+
+                f = potential_faces[0]
+                seeds[len(verts)-1] = f
+
+            else:
+                seeds[len(verts)-1] = None
+                print('seed face is an edge of mesh face')
+ 
+    if len(verts) < 2:
+        print('critical error, probably machine error')
+        #TODO: debug and dump relevant info
+        return (None, None)
+    
+    elif len(verts) > 2:
+        print('critial error probably concave ngong or something')
+        #TODO: debug and dump relevant info
+        return (None, None) 
+      
+    else:
+        headed = verts[0] - verts[1]
+        headed.normalize()
+       
+        if headed.dot(direct) > .1:
+            element = seeds[0]
+            verts.pop(1)
+            verts.insert(0,pt)
+            
+            if not element:
+                return (verts,[(0,1)])
+        else:
+            element = seeds[1]
+            verts.pop(0)
+            verts.insert(0,pt)
+            
+            if not element:
+                return (verts,[(0,1)])
+            
+    total_tests = 0
+    stop_test = False
+    
+    while element and total_tests < max_tests and not stop_test:
+        total_tests += 1
+        #first, we know that this face is not coplanar..that's good
+        #if new_face.no.cross(no) == 0:
+            #print('coplanar face, stopping calcs until your programmer gets smarter')
+            #return None
+        if type(element) == bmesh.types.BMFace:
+            element = face_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
+        
+        elif type(element) == bmesh.types.BMVert:
+            #TODO: I would like to debug if we hit a
+            #vert
+            element = vert_cycle(element, pt, no, prev_eds, verts)#, edge_mapping)
+
+        if element and stop_plane and total_tests > 1:
+            A = verts[-2]
+            B = verts[-1]
+            cross = cross_edge(A, B, stop_pt, stop_no)
+            stop_test = cross[0]
+            if stop_test:
+                prev_eds.pop()  #will need to retest this edge in case we come around a full loop
+                verts.pop()
+                verts.append(cross[1])
+    
+    #verts are created in order
+    for i in range(0,len(verts)-1):
+        eds.append((i,i+1))
+        
+    if debug:
+        n = len(times)
+        times.append(time.time())
+        print('calced connectivity %f sec' % (times[n]-times[n-1]))
+        
+    if len(verts):  
+        return (verts, eds)
+    else:
+        return (None, None)
+    
+    
+def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
+    '''
+    Inds the intersection of a vert chain with a plane
+    for cyclic vert paths duplicate end vert..
+    may add cyclic  test later.
+    mode will determine if only the first intersection is returned
+    or all the intersections of a path with a plane.
+    
+    args:
+        verts:  list of vectors type mathutils.Vector
+        pt: plane pt
+        no: plane normal for intersection
+        mode:  enum in 'FIRST', 'ALL'
+        
+    return:
+        a list of intersections or None
+    '''
+    
+    #TODO:  input quality checks for variables
+    
+    intersects = []
+    n = len(verts)
+    
+    for i in range(0,n-1):
+        cross = cross_edge(verts[i], verts[i+1], pt, no)
+        
+        if cross[0]:
+            intersects.append(cross[1])
+            
+            if mode == 'FIRST':
+                break
+            
+    if len(intersects) == 0:
+        intersects = [None]
+        
+    return intersects
