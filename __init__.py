@@ -277,6 +277,12 @@ class ContourToolsAddonPreferences(AddonPreferences):
             default=True,
             )
     
+    new_method = BoolProperty(
+            name="New Method",
+            description = "Use robust cutting, may be slower, more accurate on dense meshes",
+            default=False,
+            )
+    
     #TODO  Theme this out nicely :-) 
     widget_color = FloatVectorProperty(name="Widget Color", description="Choose Widget color", min=0, max=1, default=(0,0,1), subtype="COLOR")
     widget_color2 = FloatVectorProperty(name="Widget Color", description="Choose Widget color", min=0, max=1, default=(1,0,0), subtype="COLOR")
@@ -541,7 +547,9 @@ class ContourToolsAddonPreferences(AddonPreferences):
         
         if self.show_debug:
             row = box.row()
+            row.prop(self, "new_method")
             row.prop(self, "debug")
+            
             
             row = box.row()
             row.prop(self, "vert_inds", text="Show Vertex Indices")

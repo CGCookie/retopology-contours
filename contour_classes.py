@@ -3445,8 +3445,10 @@ class ContourCutLine(object):
         pt = self.plane_pt
         pno = self.plane_no
         indx = self.seed_face_index
+        
+        meth = context.user_preferences.addons['cgc-retopology'].preferences.new_method
         if pt and pno:
-            cross = contour_utilities.cross_section_seed(bme, mx, pt, pno, indx, debug = True)   
+            cross = contour_utilities.cross_section_seed(bme, mx, pt, pno, indx, debug = True, method = meth)   
             if cross:
                 self.verts = [mx*v for v in cross[0]]
                 self.edges = cross[1]   

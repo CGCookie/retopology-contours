@@ -2418,7 +2418,7 @@ def cross_section_seed_ver1(bme, mx,
 def cross_section_seed(bme, mx, 
                        point, normal, 
                        seed_index, 
-                       max_tests = 10000, debug = True):
+                       max_tests = 10000, debug = True, method = False):
     '''
     Takes a mesh and associated world matrix of the object and returns a cross secion in local
     space.
@@ -2433,8 +2433,22 @@ def cross_section_seed(bme, mx,
         direction: Vector which the cut should start traveling.
         exclude_edges: list of edge indices (usually already tested from previous iterations)
     '''
-    #return cross_section_seed_ver0(bme, mx, point, normal, seed_index, max_tests, debug)
-    return cross_section_seed_ver1(bme, mx, point, normal, seed_index, max_tests, debug)
+    
+    start = time.time()
+    
+    if not method:
+        ret = cross_section_seed_ver0(bme, mx, point, normal, seed_index, max_tests, debug)
+
+    else:
+        ret = cross_section_seed_ver1(bme, mx, point, normal, seed_index, max_tests, debug)
+    
+    calc_time = time.time()
+    
+    print('the new method was used: %r' % method)
+    print('%i verts were found in %f seconds' % (len(ret[0]), (calc_time - start)))
+
+    
+    return ret
 
 def cross_section_seed_direction(bme, mx, 
                                  point, normal, 
