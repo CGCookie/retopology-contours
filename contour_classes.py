@@ -208,8 +208,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             if tail_v.length < thresh:
                 snap_tail = existing_loop.verts_simple.index(v)
                 thresh = tail_v.length
-                
-        
+
         if snap_tip:
             self.existing_head = existing_loop
             print('snap tip to existing')
@@ -234,11 +233,12 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         of the drawn path and the feature factor, which is a property
         of the cut path.
         '''
-        print('find those knots')
-        box_diag = contour_utilities.diagonal_verts(self.raw_world)
-        error = 1/self.feature_factor * box_diag
         
-        self.knots = contour_utilities.simplify_RDP(self.raw_world, error)
+        if len(self.raw_world):
+            box_diag = contour_utilities.diagonal_verts(self.raw_world)
+            error = 1/self.feature_factor * box_diag
+        
+            self.knots = contour_utilities.simplify_RDP(self.raw_world, error)
         
     def create_cut_nodes(self,context, knots = False):
         '''
@@ -298,6 +298,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         for i, loc in enumerate(self.cut_points):
             
+            #leave out the first or last if connecting to
+            #existing geom
             if i == 0 and self.existing_head:
                 continue
             
@@ -339,6 +341,15 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut.plane_no = final_no
             cut.cut_object(context, ob, bme)
             cut.simplify_cross(self.ring_segments)
+            
+            if (i == 0 and not self.existing_head) or (i == 1 and self.existing_head):
+                #make sure the first loop is right handed
+                if contour_utilities.discrete_curl(cut.verts_simple, cut.plane_no) < 0:
+                    #in this case, we reverse the verts and keep the no
+                    #because the no is derived from the drawn path direction
+                    cut.verts.reverse()
+                    cut.verts_simple.reverse()
+                    
             cut.update_com()
             cut.generic_3_axis_from_normal()
             self.cuts.append(cut)
@@ -360,6 +371,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         self.backbone = []
         
+            
         for i, cut in enumerate(self.cuts):
             
             pt = cut.verts_simple[0]
@@ -371,7 +383,15 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             if i == 0:
                 #shoot a cut out the back
                 cut_no = surface_no.cross(cut.plane_no)
-                vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                
+                if self.existing_head:
+                    vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                          pt,cut_no, seed, 
+                                                                          -1 * cut.plane_no,
+                                                                          stop_plane = [self.existing_head.plane_com, self.existing_head.plane_no],
+                                                                          max_tests=1000)[0]
+                else:
+                    vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
                                                                           pt,cut_no, seed, 
                                                                           -1 * cut.plane_no,
                                                                           stop_plane = [cut.plane_com, cut.plane_no],
@@ -573,6 +593,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut.plane_no = normals[i]
             cut.cut_object(context, ob,  bme)
             cut.simplify_cross(self.ring_segments)
+            if i == 0 and self.existing_head:
+                self.cuts[0].align_to_other(self.existing_head)
             if i > 0:
                 self.align_cut(cut, mode='BEHIND', fine_grain='TRUE')
             cut.update_com()
@@ -614,6 +636,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut.plane_no = avg_normal
             cut.cut_object(context, ob,  bme)
             cut.simplify_cross(self.ring_segments)
+            if i == 0 and self.existing_head:
+                self.cuts[0].align_to_other(self.existing_head)
             if i > 0:
                 self.align_cut(cut, mode='BEHIND', fine_grain='TRUE')
             cut.update_com()
@@ -639,35 +663,51 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             start = 0
             end = len(self.cuts) - 1
             
-        
-        no_initial = self.cuts[start].plane_no
+        if self.existing_head and not cut1:
+            no_initial = self.existing_head.plane_no
+        else:
+            no_initial = self.cuts[start].plane_no
+            
         no_final = self.cuts[end].plane_no
         
         interps = end - start - 2
         
+        if self.existing_head:
+            self.cuts[0].align_to_other(self.existing_head)
+        
+        if start != 0:
+            self.align_cut(self.cuts[start], mode='BEHIND', fine_grain='TRUE')
+            
         for i in range(0,interps):
             print((i+1)/(end-start))
             self.cuts[start + i+1].plane_no = no_initial.lerp(no_final, (i+1)/(end-start))
             self.cuts[start + i+1].cut_object(context, ob,  bme)
             self.cuts[start + i+1].simplify_cross(self.ring_segments)
-            if i > 0:
+            
+
+                    
+            if start + i+1 > 0:
                 self.align_cut(self.cuts[start + i+1], mode='BEHIND', fine_grain='TRUE')
             self.cuts[start + i+1].update_com()
-          
+            
+        
+        self.align_cut(self.cuts[end-1], mode='BEHIND', fine_grain='TRUE')
+        self.align_cut(self.cuts[end], mode='BEHIND', fine_grain='TRUE')
+        
     def connect_cuts_to_make_mesh(self, ob):
         '''
         This also takes care of bridging to existing vert loops
         At the end..a simple doubles removal solidifies the bridge
         
         Eventually, I will get smart enough to bridge a loop to existing
-        geom by using the index math, but it's prbably an hour chore and
-        there are other higher priority items at the momen.
+        geom by using the index math, but it's probably an hour chore and
+        there are other higher priority items at the moment.
         '''
         total_verts = []
         total_edges = []
         total_faces = []
         
-        if len(self.cuts) < 2:
+        if len(self.cuts) < 2 and not (self.existing_head or self.existing_tail):
             print('waiting on other cut lines')
             self.verts = []
             self.edges = []
@@ -683,7 +723,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if self.existing_tail != None:
             n_rings += 1
             
-        n_lines = len(self.cuts[0].verts_simple)
+        
+        if len(self.cuts):
+            n_lines = len(self.cuts[0].verts_simple)
+        elif self.existing_head:
+            n_lines = len(self.existing_head.verts_simple)
         
         if self.existing_head != None:
             for v in self.existing_head.verts_simple:
@@ -705,8 +749,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             for v in self.existing_tail.verts_simple:
                 total_verts.append(imx * v)
                 
-                
-        cyclic = 0 in self.cuts[0].eds_simple[-1]
+        
+        if len(self.cuts):        
+            cyclic = 0 in self.cuts[0].eds_simple[-1]
+        elif self.existing_head:
+            cyclic = 0 in self.existing_head.eds_simple[-1]
+        elif self.existing_tail:
+            cyclic = 0 in self.existing_tail.eds_simple[-1]
         
         #work out the connectivity faces:
         for j in range(0,n_rings - 1):
@@ -726,7 +775,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
 
         self.follow_lines = []
-        for i in range(0,len(self.cuts[0].verts_simple)):
+        for i in range(0,n_lines):
             tmp_line = []
             if self.existing_head:
                 tmp_line.append(self.existing_head.verts_simple[i])
@@ -750,6 +799,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         #update the individual rings
         for cut in self.cuts:
             cut.update_visibility(context, ob)
+            
+        if self.existing_head:
+            self.existing_head.update_visibility(context, ob)
+        if self.existing_tail:
+            self.existing_tail.update_visibility(context, ob)
         
         #update connecting edges between ring
         if context.space_data.use_occlude_geometry:
@@ -1155,6 +1209,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         Will assess other path, modify self and then place self data into the
         merge_series
         
+        merg_ring can be a CutLine or ExistingVertList
+        
         Prerequisites: ray_cast_path, find knots, smooth path
         '''
         
@@ -1169,27 +1225,54 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         #snap the world path the that vert
         self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, merge_ring.verts_simple[best_index], self.raw_world[-1])
         self.smooth_path(context, ob = ob)
-        ind = merge_series.cuts.index(merge_ring)
-        #establish the segment length
-        if len(merge_series.cuts) < 2:
+        self.ring_segments = merge_series.ring_segments
+        
+        if merge_ring.desc == 'EXISTING_VERT_LIST':
+            
+            #this can only happen with a cut series that just
+            #has an existing head.
             segment_width = (merge_ring.verts_simple[1] -  merge_ring.verts_simple[0]).length
-    
+            ind = None
         else:
             
-            if ind == 0:
-                segment_width = (merge_series.cuts[1].plane_com - merge_ring.plane_com).length
+            ind = merge_series.cuts.index(merge_ring)
+        
+            #establish the segment length
+            if len(merge_series.cuts) < 2:
+                segment_width = (merge_ring.verts_simple[1] -  merge_ring.verts_simple[0]).length
+                    
             else:
-                segment_width = (merge_series.cuts[-2].plane_com - merge_ring.plane_com).length
+            
+                if ind == 0:
+                    segment_width = (merge_series.cuts[1].plane_com - merge_ring.plane_com).length
+                else:
+                    segment_width = (merge_series.cuts[-2].plane_com - merge_ring.plane_com).length
     
         path_length = contour_utilities.get_path_length(self.world_path)
         self.segments  = math.ceil(path_length/segment_width)
     
         self.create_cut_nodes(context, knots = False)
+        
+        if not self.existing_head and ind == 0 and len(merge_series.cuts) == 1:
+            p_dir = self.cut_points[1] - self.cut_points[0]
+            p_dir.normalize
+            if merge_ring.plane_no.dot(p_dir) < 0:
+                merge_ring.verts_simple.reverse()
+                merge_ring.verts.reverse()
+                merge_ring.verts_simple_visible.reverse()
+                merge_ring.verts_simple_visible = contour_utilities.list_shift(merge_ring.verts_simple_visible,-1)
+                
+                merge_ring.verts = contour_utilities.list_shift(merge_ring.verts,-1)
+                merge_ring.verts_simple = contour_utilities.list_shift(merge_ring.verts_simple,-1)
+                merge_ring.shift *= -1
+                merge_ring.plane_no = -1 * merge_ring.plane_no
+                
+        
         self.snap_to_object(ob, raw = False, world = False, cuts = True)
         self.cuts_on_path(context,ob,bme)
         self.cuts.pop(0)
     
-        #need to handle joining the series and aligning them
+        #join the series and align them
         if ind == 0:
             #TODO: Wasted effort in cuts on path because this does an alignment step as well!!
             self.cuts[0].align_to_other(merge_series.cuts[0],auto_align = True, direction_only = False)
@@ -1197,9 +1280,17 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 if i > 0:
                     self.align_cut(cut, mode='BEHIND', fine_grain = True)
             
-            self.cuts.reverse()
-            merge_series.cuts = self.cuts + merge_series.cuts
+            if len(merge_series.cuts) > 1:
+                print('really?')
+                self.cuts.reverse()
+                
+            merge_series.cuts.extend(self.cuts)
     
+        elif not ind: #we are snapping to an existing vert list
+            print('aligned other cut?')
+            merge_ring.align_to_other(self.cuts[0]) #we already popped off the first one
+            merge_series.cuts.extend(self.cuts)
+            
         else:
             self.cuts[0].align_to_other(merge_series.cuts[-1],auto_align = True, direction_only = False)
             for i, cut in enumerate(self.cuts):
@@ -1226,9 +1317,16 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if nodes and len(self.cut_points):
             contour_utilities.draw_3d_points(context, self.cut_points, (0,1,.5,1), 2)
          
-        if rings and len(self.cuts):
-            for cut in self.cuts:
-                cut.draw(context, settings, three_dimensional = True, interacting = False)
+        if rings:
+            if len(self.cuts):
+                for cut in self.cuts:
+                    cut.draw(context, settings, three_dimensional = True, interacting = False)
+                    
+            if self.existing_head:
+                self.existing_head.draw(context, settings, three_dimensional = True, interacting = False)
+                
+            if self.existing_tail:
+                self.existing_tail.draw(context, settings, three_dimensional = True, interacting = False)
         
         if backbone and len(self.backbone):
             for vertebra3d in self.backbone:
@@ -1317,7 +1415,7 @@ class ContourControlPoint(object):
             self.world_position = region_2d_to_location_3d(region, rv3d, (self.x, self.y),self.world_position)
 
 class ExistingVertList(object):
-    def __init__(self, verts, keys, mx, key_type = 'EDGES'):
+    def __init__(self, context, verts, keys, mx, key_type = 'EDGES'):
         '''
         verts - list of bmesh verts, not nesessarily in order
         
@@ -1330,7 +1428,16 @@ class ExistingVertList(object):
         key_type - enum in {'EDGES', 'INDS'}
         
         '''
-        
+        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        gc = settings.geom_rgb
+        lc = settings.stroke_rgb
+        vc = settings.vert_rgb
+        hc = settings.handle_rgb
+                
+        self.geom_color = (gc[0],gc[1],gc[2],1)
+        self.line_color = (lc[0],lc[1],lc[2],1)
+        self.vert_color = (vc[0],vc[1],vc[2],1)
+        self.h_color = (hc[0],hc[1],hc[2],1)
         
         self.desc = 'EXISTING_VERT_LIST'
         
@@ -1375,10 +1482,18 @@ class ExistingVertList(object):
         for i in vert_inds_sorted:
             v = verts[self.vert_inds_unsorted.index(i)]
             self.verts_simple.append(mx * v.co)
+        
+        self.verts_simple_visible = [True] * len(self.verts_simple)
          
         self.plane_no = None  #TODO best fit plane?
         self.vert_inds_sorted = vert_inds_sorted
-            
+        
+        self.derive_normal()
+    
+    def generic_3_axis_from_normal(self):
+        
+        (self.vec_x, self.vec_y) = contour_utilities.generic_axes_from_plane_normal(self.plane_com, self.plane_no)
+                
     def derive_normal(self):
         
         if self.verts_simple != []:
@@ -1389,6 +1504,8 @@ class ExistingVertList(object):
         
         if contour_utilities.discrete_curl(self.verts_simple, self.plane_no) < 0:
             self.plane_no = -1 * self.plane_no
+        
+        self.generic_3_axis_from_normal()
                     
     def connectivity_analysis(self,other):
         
@@ -1420,14 +1537,14 @@ class ExistingVertList(object):
         Modifies vert order of self to  provide best
         bridge between self verts and other loop
         '''
+        if not self.plane_no:
+            self.derive_normal()
+            
         verts_1 = other.verts_simple
-        
         eds_1 = other.eds_simple
         
-        #print('testing alignment')
         if 0 in eds_1[-1]:
             cyclic = True
-            print('cyclic vert chain')
         else:
             cyclic = False
         
@@ -1438,31 +1555,12 @@ class ExistingVertList(object):
             return
             
         if cyclic:
-
-            V1_0 = verts_1[1] - verts_1[0]
-            V1_1 = verts_1[2] - verts_1[1]
-            
-            V2_0 = self.verts_simple[1] - self.verts_simple[0]
-            V2_1 = self.verts_simple[2] - self.verts_simple[1]
-            
-            no_1 = V1_0.cross(V1_1)
-            no_1.normalize()
-            no_2 = V2_0.cross(V2_1)
-            no_2.normalize()
-            
-            if no_1.dot(no_2) < 0:
-                no_2 = -1 * no_2
-            
-            #average the two directions    
-            ideal_direction = no_1.lerp(no_1,.5)
-        
-            curl_1 = contour_utilities.discrete_curl(verts_1, ideal_direction)
-            curl_2 = contour_utilities.discrete_curl(self.verts_simple, ideal_direction)
-            
-            if curl_1 * curl_2 < 0:
+            if other.plane_no.dot(self.plane_no) < 0:
+                print('reversing the raw loop')
+                self.plane_no = -1* self.plane_no
                 self.verts_simple.reverse()
                 self.vert_inds_unsorted.reverse()
-                
+            
 
             edge_len_dict = {}
             for i in range(0,len(verts_1)):
@@ -1501,6 +1599,143 @@ class ExistingVertList(object):
                 print('reversing path 2')
                 self.verts_simple.reverse()
                 self.vert_inds_unsorted.reverse()
+                
+    def update_visibility(self,context,ob):
+          
+        rv3d = context.space_data.region_3d
+        
+        if context.space_data.use_occlude_geometry:
+            rv3d = context.space_data.region_3d
+            eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
+            view_dir = rv3d.view_rotation * Vector((0,0,1))
+            
+            #print('are these vectors similar?')
+            #print(eyevec)
+            #print(view_dir)
+            
+            
+            eyevec.length = 100000
+            eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
+            view_loc = rv3d.view_location
+            #print('are the locations similar')
+            #print(eyeloc)
+            #print(view_loc)
+            
+            
+            imx = ob.matrix_world.inverted()
+            
+            self.visible_poly = []
+            self.visible_u = []
+            self.visible_d = []
+            #self.visible_world = []
+            
+            visible = []
+            for vert in self.verts_simple:
+                
+                if rv3d.is_perspective:
+                    hit = ob.ray_cast(imx  * eyeloc, imx * (vert - .001 * view_dir))
+                    if hit[2] != -1:
+                        hit = ob.ray_cast(imx  * eyeloc, imx * (vert + .001 * view_dir))
+                        
+                    if hit[2] != -1:
+                        visible.append(False)
+                    
+                    else:
+                        visible.append(True)
+                        
+                    #if hit[0]:
+                    #    vno = -vno
+                    #    vco = self.findworldco(vert.co + vno)
+                    #    hit = self.scn.ray_cast(vco, eyevec)
+                else:
+                    hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
+                    if hit[2] != -1:
+                        hit = ob.ray_cast(imx * (vert + .001 * view_dir), imx * (vert - 10000 * view_dir))
+                    
+                    if hit[2] != -1:
+                        visible.append(True)
+                    
+                    else:
+                        visible.append(False)
+            
+            self.verts_simple_visible = visible
+            
+        else:
+            self.verts_simple_visible = [True] * len(self.verts_simple)
+            
+            
+    def draw(self,context, settings, three_dimensional = True, interacting = False):
+            '''
+            setings are the addon preferences for contour tools
+            '''
+            
+            debug = settings.debug
+            #settings = context.user_preferences.addons['cgc-retopology'].preferences
+            
+       
+            if debug > 1:
+                if self.plane_com:
+                    com_2d = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.plane_com)
+                    
+                    contour_utilities.draw_3d_points(context, [self.plane_com], (0,1,0,1), 4)
+                    
+                    rv3d = context.space_data.region_3d
+                    imx = rv3d.view_matrix.inverted()
+                    screen_z = rv3d.view_matrix.to_3x3() * Vector((0,0,1))
+                    if self.vec_x and debug > 2:
+                        vec_screen = imx.transposed() * self.vec_x
+                        
+                        factor = (1 - abs(self.vec_x.dot(screen_z)))
+                        screen_pt_x = com_2d + factor * 40 * vec_screen.to_2d().normalized()
+                        contour_utilities.draw_polyline_from_points(context, [com_2d, screen_pt_x],(1,0,0,1), 2, 'GL_LINE_STRIP')
+
+                    if self.vec_y and debug > 2:
+                        
+                        vec_screen = imx.transposed() * self.vec_y
+                        factor = (1 - abs(self.vec_y.dot(screen_z)))
+                        screen_pt_x = com_2d + factor * 40 * vec_screen.to_2d().normalized()
+                        contour_utilities.draw_polyline_from_points(context, [com_2d, screen_pt_x],(0,1,0,1), 2, 'GL_LINE_STRIP')
+    
+                    if self.plane_no:
+                        vec_screen = imx.transposed() * self.plane_no
+                        factor = (1 - abs(self.plane_no.dot(screen_z)))
+                        screen_pt_x = com_2d + factor* 40 * vec_screen.to_2d().normalized()
+                        contour_utilities.draw_polyline_from_points(context, [com_2d, screen_pt_x],(0,0,1,1), 2, 'GL_LINE_STRIP')
+                        
+            if False not in self.verts_simple_visible:
+                    contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
+                    contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
+                    
+                    if 0 in self.eds_simple[-1]:
+                        contour_utilities.draw_polyline_from_3dpoints(context, 
+                                                                      [self.verts_simple[-1],self.verts_simple[0]], 
+                                                                      self.geom_color,  
+                                                                      settings.line_thick, 
+                                                                      'GL_LINE_STIPPLE')
+     
+            else:
+                for i, v in enumerate(self.verts_simple):
+                    if self.verts_simple_visible[i]:
+                        contour_utilities.draw_3d_points(context, [v], self.vert_color, settings.vert_size)
+                            
+                        if i < len(self.verts_simple) - 1 and self.verts_simple_visible[i+1]:
+                            contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], self.geom_color, settings.line_thick, 'GL_LINE_STIPPLE')
+            
+                if 0 in self.eds_simple[-1] and self.verts_simple_visible[0] and self.verts_simple_visible[-1]:
+                        contour_utilities.draw_polyline_from_3dpoints(context, 
+                                                                      [self.verts_simple[-1],self.verts_simple[0]], 
+                                                                      self.geom_color,  
+                                                                      settings.line_thick, 
+                                                                      'GL_LINE_STIPPLE')
+            
+                    
+            if debug:
+                    
+                if settings.simple_vert_inds:    
+                    for i, point in enumerate(self.verts_simple):
+                        loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, point)
+                        blf.position(0, loc[0], loc[1], 0)
+                        blf.draw(0, str(i))    
                       
 class PolySkecthLine(object):
     
@@ -2982,23 +3217,31 @@ class ContourCutLine(object):
                 com_2d = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.plane_com)
                 
                 contour_utilities.draw_3d_points(context, [self.plane_com], (0,1,0,1), 4)
-                if self.vec_x:
-                    pt_x = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.plane_com + self.vec_x)
-                    screen_vec_x = pt_x - com_2d
-                    screen_pt_x = com_2d + 40 * screen_vec_x.normalized()
-                    contour_utilities.draw_points(context, [pt_x], (1,1,0,1), 6)
+                
+                
+                rv3d = context.space_data.region_3d
+                imx = rv3d.view_matrix.inverted()
+                screen_z = rv3d.view_matrix.to_3x3() * Vector((0,0,1))
+                if self.vec_x and debug > 2:
+                    vec_screen = imx.transposed() * self.vec_x
                     
-                if self.vec_y:
-                    pt_y = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.plane_com + self.vec_y)
-                    screen_vec_y = pt_y - com_2d
-                    screen_pt_y = com_2d + 40 * screen_vec_y.normalized()
-                    contour_utilities.draw_points(context, [pt_y], (0,1,1,1), 6)
+                    factor = (1 - abs(self.vec_x.dot(screen_z)))
+                    screen_pt_x = com_2d + factor * 40 * vec_screen.to_2d().normalized()
+                    contour_utilities.draw_polyline_from_points(context, [com_2d, screen_pt_x],(1,1,0,1), 2, 'GL_LINE_STRIP')
+
+                if self.vec_y and debug > 2:
+                    
+                    vec_screen = imx.transposed() * self.vec_y
+                    factor = (1 - abs(self.vec_y.dot(screen_z)))
+                    screen_pt_x = com_2d + factor * 40 * vec_screen.to_2d().normalized()
+                    contour_utilities.draw_polyline_from_points(context, [com_2d, screen_pt_x],(0,1,1,1), 2, 'GL_LINE_STRIP')
 
                 if self.plane_no:
-                    pt_z = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.plane_com + self.plane_no)
-                    screen_vec_z = pt_z - com_2d
-                    screen_pt_z = com_2d + 40 * screen_vec_z.normalized()
-                    contour_utilities.draw_points(context, [pt_z], (1,0,1,1), 6)
+                    vec_screen = imx.transposed() * self.plane_no
+                    factor = (1 - abs(self.plane_no.dot(screen_z)))
+                    screen_pt_x = com_2d + factor* 40 * vec_screen.to_2d().normalized()
+                    contour_utilities.draw_polyline_from_points(context, [com_2d, screen_pt_x],(1,0,1,1), 2, 'GL_LINE_STRIP')
+
                     
         
         #draw connecting line

@@ -554,7 +554,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row = box.row()
             row.prop(self, "show_backbone", text="Show Backbone")
             row.prop(self, "show_nodes", text="Show Cut Nodes")
-            row.prop(self, "show_ring_indices", text="Show Ring Indices")
+            row.prop(self, "show_ring_inds", text="Show Ring Indices")
             
         
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
@@ -724,7 +724,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             snapped = False
             for path in self.cut_paths:
                 
-                for n, end_cut in enumerate([path.cuts[0], path.cuts[-1]]):
+                end_cuts = []
+                if not path.existing_head and len(path.cuts):
+                    end_cuts.append(path.cuts[0])
+                if not path.existing_tail and len(path.cuts):
+                    end_cuts.append(path.cuts[-1])
+                    
+                if path.existing_head and not len(path.cuts):
+                    end_cuts.append(path.existing_head)
+                    
+                for n, end_cut in enumerate(end_cuts):
                     
                     #potential verts to snap to
                     snaps = [v for i, v in enumerate(end_cut.verts_simple) if end_cut.verts_simple_visible[i]]
@@ -736,7 +745,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     if len(dists):
                         best = min(dists)
-                        if best < 2 * settings.extend_radius and best > 10: #TODO unify selection mouse pixel radius.
+                        if best < 2 * settings.extend_radius and best > 4: #TODO unify selection mouse pixel radius.
 
                             best_vert = screen_snaps[dists.index(best)]
                             view_z = rv3d.view_rotation * Vector((0,0,1))
@@ -744,15 +753,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
 
                                 imx = rv3d.view_matrix.inverted()
                                 normal_3d = imx.transposed() * end_cut.plane_no
-                                if n == 1:
+                                if n == 1 or len(end_cuts) == 1:
                                     normal_3d = -1 * normal_3d
                                 screen_no = Vector((normal_3d[0],normal_3d[1]))
                                 angle = math.atan2(screen_no[1],screen_no[0]) - 1/2 * math.pi
                                 left = angle + math.pi
                                 right =  angle
                                 self.snap = [path, end_cut]
-                                self.snap_circle = contour_utilities.pi_slice(best_vert[0],best_vert[1],settings.extend_radius,.25 * settings.extend_radius, left,right, 20,t_fan = True)
-                                self.snap_circle.append(self.snap_circle[0])
+                                
+                                if end_cut.desc == 'CUT_LINE' and len(path.cuts) > 1:
+    
+                                    self.snap_circle = contour_utilities.pi_slice(best_vert[0],best_vert[1],settings.extend_radius,.1 * settings.extend_radius, left,right, 20,t_fan = True)
+                                    self.snap_circle.append(self.snap_circle[0])
+                                else:
+                                    self.snap_circle = contour_utilities.simple_circle(best_vert[0], best_vert[1], settings.extend_radius, 20)
+                                    self.snap_circle.append(self.snap_circle[0])
+                                    
                                 breakout = True
                                 if best < settings.extend_radius:
                                     snapped = True
@@ -835,15 +851,18 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         
         path.ray_cast_path(context, self.original_form)
+        if len(path.raw_world) == 0:
+            print('NO RAW PATH')
+            return None
         path.find_knots()
         
-        if self.existing_loops != [] and not self.force_new:
-            for eloop in self.existing_loops:
-                used = path.snap_end_to_existing(eloop)
-                if used:
-                    break
+        #if self.existing_loops != [] and not self.force_new:
+        #    for eloop in self.existing_loops:
+        #        used = path.snap_end_to_existing(eloop)
+        #        if used:
+        #            break
         
-        elif self.snap != [] and not self.force_new:
+        if self.snap != [] and not self.force_new:
             merge_series = self.snap[0]
             merge_ring = self.snap[1]
             
@@ -1241,10 +1260,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #X, DEL -> DELETE
                     elif event.type == 'X' and event.value == 'PRESS':
                         
-                        if len(self.selected_path.cuts) > 1:
+                        if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) ==1 and path.existing_head):
                             self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
+                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                         
                         else:
                             self.cut_paths.remove(self.selected_path)
@@ -1831,6 +1851,17 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         self.valid_cut_inds = []
         self.existing_loops = []
+        
+        #This is a cache for any cut line whose connectivity
+        #has not been established.
+        self.cut_lines = []
+        
+        #a list of all the cut paths (segments)
+        self.cut_paths = []
+        #a list to store screen coords when drawing
+        self.draw_cache = []
+        
+        
         #clear the undo cache
         contour_undo_cache = []
         
@@ -1879,21 +1910,49 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if len(ed_inds):
                 vert_loops = contour_utilities.edge_loops_from_bmedges(self.dest_bme, ed_inds)
                 
-                print('there are %i edge loops selected' % len(vert_loops))
-                for loop in vert_loops:
-                    
-                    if loop[-1] != loop[0] and len(list(set(loop))) != len(loop):
-                        self.report({'WARNING'},'Edge loop selection has extra parts!  Excluding this loop')
-                        
-                    else:
-                        lverts = [self.dest_bme.verts[i] for i in loop]
-                        
-                        self.existing_loops.append(ExistingVertList(lverts, 
-                                                     loop, 
-                                                     self.destination_ob.matrix_world,
-                                                     key_type = 'INDS'))
                 
-
+                
+                if len(vert_loops) > 1:
+                    self.report('WARNING', 'Only one edge loop will be used for extension')
+                print('there are %i edge loops selected' % len(vert_loops))
+                
+                #for loop in vert_loops:
+                #until multi loops are supported, do this    
+                loop = vert_loops[0]
+                if loop[-1] != loop[0] and len(list(set(loop))) != len(loop):
+                    self.report({'WARNING'},'Edge loop selection has extra parts!  Excluding this loop')
+                    
+                else:
+                    lverts = [self.dest_bme.verts[i] for i in loop]
+                    
+                    existing_loop =ExistingVertList(context,
+                                                    lverts, 
+                                                    loop, 
+                                                    self.destination_ob.matrix_world,
+                                                    key_type = 'INDS')
+                    
+                    #make a blank path with just an existing head
+                    path = ContourCutSeries(context, [],
+                                    cull_factor = settings.cull_factor, 
+                                    smooth_factor = settings.smooth_factor,
+                                    feature_factor = settings.feature_factor)
+                
+                    
+                    path.existing_head = existing_loop
+                    path.seg_lock = True
+                    path.ring_lock = True
+                    path.ring_segments = len(existing_loop.verts_simple)
+                    path.connect_cuts_to_make_mesh(target)
+                    path.update_visibility(context, target)
+                
+                    #path.update_visibility(context, self.original_form)
+                    
+                    
+                    self.cut_paths.append(path)
+                    
+                    self.existing_loops.append(existing_loop)
+                    
+                    
         elif context.mode == 'OBJECT':
             
             #make the irrelevant variables None
@@ -2039,19 +2098,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         self.modal_state = 'WAITING'
         
-        #Loop and Guide Mode
-        #'WAITING'
-        #'NAVIGATING'
-        
-        #Loop Mode
-        #'WIDGET TRANSFORM'
-        #'CUTTING'
-        #'HOTKEY TRANSFORM'
-        
-        #Guide Mode
-        #'DRAWING'
-        
-        
         #does the user want to extend an existing cut or make a new segment
         self.force_new = False
         
@@ -2081,14 +2127,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.draw = False  #Being in the state of drawing a guide stroke
         
         
-        #This is a cache for any cut line whose connectivity
-        #has not been established.
-        self.cut_lines = []
-        
-        #a list of all the cut paths (segments)
-        self.cut_paths = []
-        #a list to store screen coords when drawing
-        self.draw_cache = []
+
         
     
         self.header_message = 'LMB: Select Stroke, RMB / X: Delete Sroke, , G: Translate, R: Rotate, A / Ctrl+A / Shift+A: Align, S: Cursor to Stroke, C: View to Cursor'
