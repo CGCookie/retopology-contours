@@ -218,7 +218,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
         if snap_tail:
             self.existing_tail = existing_loop
-            print('snap tail to exising')
+            print('snap tail to existing')
             v1 = existing_loop.verts_simple[snap_tail]
         else:
             v1 = self.raw_world[-1]
@@ -956,6 +956,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         
         if self.existing_head and len(self.cuts) > 0:
+            
             A = self.existing_head.plane_com
             B = self.cuts[0].plane_com
             C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
@@ -1033,87 +1034,97 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             #Check the enpoints
             #TODO: Unless there is an existing vert loop endpoint
             
+        
+        if len(self.cuts) > 1:
             spine = self.backbone[1:-1]
             spine_length = sum([contour_utilities.get_path_length(vertebra) for vertebra in spine])
-            fraction = 5 * spine_length /  (len(self.cuts) - 1)
+            fraction = 5 * spine_length /  (len(self.cuts) - 1 + 1 * (self.existing_head != None))
+        
+        elif self.existing_head and len(self.cuts) == 1:
+            fraction = 4 * (self.existing_head.plane_com - self.cuts[0].plane_com).length  
+        
+        print('fraction: %f' % fraction)
+        
+        if not inserted and not self.existing_head:
+            
+            # B -> A is pointed backward out the tip of the line
+            A = self.cuts[0].plane_com
+            B = self.cuts[1].plane_com
+            
+            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
+            
+            if C:
+                #this verifies the cut is "upstream"
+                test1 = self.cuts[0].plane_no.dot(C-A) < 0
+                test2 = (C - A).length < fraction
+                
+                #this doesn't work for shapes that the COM isn't inside the loop!!
+                #Will check the bounding plane!!
+                
+                valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
+                if valid and test1 and test2:
+                    print('inserted the new cut at the beginning')
+                
+                
+                    if new_cut.plane_no.dot(B-A) < 0:
+                        new_cut.plane_no = -1 * new_cut.plane_no
+                    
+                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                    if spin < 0:
+                        new_cut.verts_simple.reverse()
+                        new_cut.verts.reverse()
+                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                        new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
+                        
+                        
+                    
+                    self.cuts.insert(0, new_cut)
+                    self.segments += 1
+                    new_cut.simplify_cross(self.ring_segments)
+                    self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
+                    self.update_backbone(context, ob, bme, new_cut, insert = True)
+                    inserted = True
+                    
+        if not inserted:
+
+            if self.existing_head and len(self.cuts) == 1:
+                cut_behind = self.existing_head
+            else:
+                cut_behind = self.cuts[-2]
+                
+            
+            A = self.cuts[-1].plane_com
+            B = cut_behind.plane_com
+            
+            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
             
             
-            if not inserted and not self.existing_head:
+            if C:
+                test1 = self.cuts[-1].plane_no.dot(C-A) > 0
+                test2 = (C - A).length < fraction
+                valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
+                if valid and test1 and test2:
+                    print('inserted the new cut at the end')
                 
-                # B -> A is pointed backward out the tip of the line
-                A = self.cuts[0].plane_com
-                B = self.cuts[1].plane_com
                 
-                C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
-                
-                
-                if C:
-                    #this verifies the cut is "upstream"
-                    test1 = self.cuts[0].plane_no.dot(C-A) < 0
-                    test2 = (C - A).length < fraction
+                    if new_cut.plane_no.dot(A-B) < 0:
+                        print('normal reversal to fit path')
+                        new_cut.plane_no = -1 * new_cut.plane_no
                     
-                    #this doesn't work for shapes that the COM isn't inside the loop!!
-                    #Will check the bounding plane!!
+                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                    if spin < 0:
+                        new_cut.verts_simple.reverse()
+                        new_cut.verts.reverse()
+                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                        new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
+                        print('loop reversal to fit into new path')
                     
-                    valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
-                    if valid and test1 and test2:
-                        print('inserted the new cut at the beginning')
-                    
-                    
-                        if new_cut.plane_no.dot(B-A) < 0:
-                            new_cut.plane_no = -1 * new_cut.plane_no
-                        
-                        spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
-                        if spin < 0:
-                            new_cut.verts_simple.reverse()
-                            new_cut.verts.reverse()
-                            new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
-                            new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
-                            
-                            
-                        
-                        self.cuts.insert(0, new_cut)
-                        self.segments += 1
-                        new_cut.simplify_cross(self.ring_segments)
-                        self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
-                        self.update_backbone(context, ob, bme, new_cut, insert = True)
-                        inserted = True
-                        
-            if not inserted:
-    
-                #Vector pointing B to A is pointed out the tail
-                A = self.cuts[-1].plane_com
-                B = self.cuts[-2].plane_com
-                
-                C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
-                
-                
-                if C:
-                    test1 = self.cuts[-1].plane_no.dot(C-A) > 0
-                    test2 = (C - A).length < fraction
-                    valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
-                    if valid and test1 and test2:
-                        print('inserted the new cut at the end')
-                    
-                    
-                        if new_cut.plane_no.dot(A-B) < 0:
-                            print('normal reversal to fit path')
-                            new_cut.plane_no = -1 * new_cut.plane_no
-                        
-                        spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
-                        if spin < 0:
-                            new_cut.verts_simple.reverse()
-                            new_cut.verts.reverse()
-                            new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
-                            new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
-                            print('loop reversal to fit into new path')
-                        
-                        self.cuts.append(new_cut)
-                        self.segments += 1
-                        new_cut.simplify_cross(self.ring_segments)
-                        self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
-                        self.update_backbone(context, ob, bme, new_cut, insert = True)
-                        inserted = True
+                    self.cuts.append(new_cut)
+                    self.segments += 1
+                    new_cut.simplify_cross(self.ring_segments)
+                    self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
+                    self.update_backbone(context, ob, bme, new_cut, insert = True)
+                    inserted = True
     
         return inserted
     
