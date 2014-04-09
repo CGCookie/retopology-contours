@@ -2090,7 +2090,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 print('Ngons or modifiers detected this is a real hassle just so you know')
                 
                 if len(ngons):
-                    new_geom = bmesh.ops.triangulate(self.bme, faces = ngons, use_beauty = True)
+                    #new_geom = bmesh.ops.triangulate(self.bme, faces = ngons, use_beauty = True)
+                    new_geom = bmesh.ops.triangulate(bmesh, faces = ngons, quad_method=0, ngon_method=1)
                     new_faces = new_geom['faces']
                     
                     
@@ -2987,7 +2988,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             if len(ngons):
                 print('Ngons detected, this is a real hassle just so you know')
                 print('Ngons detected, this will probably double operator initial startup time')
-                new_geom = bmesh.ops.triangulate(self.bme, faces = ngons, use_beauty = True)
+                #new_geom = bmesh.ops.triangulate(self.bme, faces = ngons, use_beauty = True)
+                new_geom = bmesh.ops.triangulate(bmesh, faces = ngons, quad_method=0, ngon_method=0)
                 new_faces = new_geom['faces']
                 new_me = bpy.data.meshes.new('tmp_recontour_mesh')
                 self.bme.to_mesh(new_me)
