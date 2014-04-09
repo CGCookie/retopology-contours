@@ -1304,7 +1304,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #X, DEL -> DELETE
                     elif event.type == 'X' and event.value == 'PRESS':
                         
-                        if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) ==1 and path.existing_head):
+                        if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) == 1 and self.selected_path.existing_head):
                             self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)

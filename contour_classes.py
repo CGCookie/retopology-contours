@@ -868,9 +868,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         bounding box diag of the existing cut in the segment
         '''
         
+        
         inserted = False
         
-        if len(self.cuts) == 0:
+        #no cuts, this is a trivial case
+        if len(self.cuts) == 0 and not self.existing_head:
             self.cuts.append(new_cut)
             self.world_path.append(new_cut.verts_simple[0])
             if self.ring_segments != len(new_cut.verts_simple): #TODO: Nomenclature consistency
@@ -883,7 +885,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             return inserted
         
         
-        if len(self.cuts) == 1:
+        if (len(self.cuts) == 1 and not self.existing_head) or (self.existing_head and len(self.cuts) == 0):
             
             #How do we decide how close it shoud be?
             #for now 4x the bounding box diag of the first cut
@@ -891,7 +893,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             #perhaps a visualized circle would be nice?
             #should this be a setting?  Should we just pick one and go with it
             
-            bounds = contour_utilities.bound_box(self.cuts[0].verts_simple)
+            if len(self.cuts) == 1:
+                cut = self.cuts[0]
+            else:
+                cut = self.existing_head 
+            
+            
+            bounds = contour_utilities.bound_box(cut.verts_simple)
             
             diag = 0
             for min_max in bounds:
@@ -901,62 +909,92 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             diag = diag ** .5 
             thresh = 4 * diag  #TODO: Come to a decision on how to determine distance
             
-            vec_between = new_cut.plane_com - self.cuts[0].plane_com
+            vec_between = new_cut.plane_com - cut.plane_com
             
             if vec_between.length < thresh:
-                print('the new_cut is close enough, for now this is all that is required')
                 
                 self.segments += 1
                 self.cuts.append(new_cut)
                 
-                #establish path direction
-                direction = self.cuts[1].plane_com - self.cuts[0].plane_com
+                #establish path direction, order of drawn cuts
+                direction = new_cut.plane_com - cut.plane_com
                 
                 #the original cut has no knowledge of the intended
                 #cut path
-                if self.cuts[0].plane_no.dot(direction) < 0:
-                    print('normal reversal to fit path')
-                    self.cuts[0].plane_no = -1 * new_cut.plane_no
+                if cut.plane_no.dot(direction) < 0:
+                    cut.plane_no = -1 * cut.plane_no
                         
-                    spin = contour_utilities.discrete_curl(self.cuts[0].verts_simple, self.cuts[0].plane_no)
-                    if spin < 0:
-                        self.cuts[0].verts_simple.reverse()
-                        self.cuts[0].verts.reverse()
-                        #TODO: cyclic vs not cyclic
-                        self.cuts[0].verts = contour_utilities.list_shift(self.cuts[0].verts,-1)
-                        self.cuts[0].verts_simple = contour_utilities.list_shift(self.cuts[0].verts_simple,-1)
-                        print('origianl loop reversal to fit established path direction')
-                
-                        for vertebra in self.backbone:
-                            vertebra.reverse()    
-                        self.backbone.reverse()
-                    #self.cuts.reverse()
+                spin = contour_utilities.discrete_curl(cut.verts_simple,cut.plane_no)
+                if spin < 0:
+                    cut.verts_simple.reverse()
+                    cut.verts_simple = contour_utilities.list_shift(cut.verts_simple,-1)
                     
+                    if cut.desc != 'EXISTING_VERT_LIST':
+                        cut.verts.reverse()
+                        #TODO: cyclic vs not cyclic
+                        cut.verts = contour_utilities.list_shift(cut.verts,-1)
+
                 #neither does the new cut.
                 if new_cut.plane_no.dot(direction) < 0:
-                    print('normal reversal to fit path')
                     new_cut.plane_no = -1 * new_cut.plane_no
+                
                         
-                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
-                    if spin < 0:
-                        new_cut.verts_simple.reverse()
-                        new_cut.verts.reverse()
-                        #TODO: Cyclic vs not cyclic
-                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
-                        new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
+                spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                if spin < 0:
+                    new_cut.verts.reverse()
+                    #TODO: Cyclic vs not cyclic
+                    new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                    
+                #make sure the new cut has the appropriate number of cuts
+                new_cut.simplify_cross(self.ring_segments)    
 
-                        print('loop reversal to fit into new path')
-                        
                 #align the cut, update the backbone etc
                 self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
-                self.update_backbone(context, ob, bme, new_cut, insert = True)
+                self.backbone_from_cuts(context, ob, bme)
                 inserted = True
                 return inserted
         
+        
+        if self.existing_head and len(self.cuts) > 0:
+            A = self.existing_head.plane_com
+            B = self.cuts[0].plane_com
+            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
+            
+            test1 = self.existing_head.plane_no.dot(C-A) > 0
+            test2 = self.cuts[0].plane_no.dot(C-B) < 0
+            if C and test1 and test2:
+                valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
+                if valid:
+                    print('found an intersection between existing head and first loop')
+            
+                    #check the plane normal
+                    if new_cut.plane_no.dot(B-A) < 0:
+                        new_cut.plane_no = -1 * new_cut.plane_no
+                    
+                    #check the spin    
+                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                    if spin < 0:
+                        new_cut.verts.reverse()
+                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                       
+                        
+                    self.cuts.insert(0, new_cut)
+                    self.segments += 1
+                    
+                    new_cut.simplify_cross(self.ring_segments)
+                    self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
+                    
+                    self.backbone_from_cuts(context, ob, bme)
+                    inserted = True
+                    
+                    return inserted
+                    
+                    
         #Assume the cuts in the series are in order
         #Check in between all the cuts
         for i in range(0,len(self.cuts) -1):
  
+
             A = self.cuts[i].plane_com
             B = self.cuts[i+1].plane_com
             
@@ -970,9 +1008,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 if valid:
                     print('found an intersection at the %i loop' % i)
                     
-                    
                     if new_cut.plane_no.dot(B-A) < 0:
-                        print('normal reversal to fit path')
+                        
                         new_cut.plane_no = -1 * new_cut.plane_no
                         
                     spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
@@ -981,7 +1018,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                         new_cut.verts.reverse()
                         new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
                         new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
-                        print('loop reversal to fit into new path')
                         
                     self.cuts.insert(i+1, new_cut)
                     self.segments += 1
@@ -1002,7 +1038,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             fraction = 5 * spine_length /  (len(self.cuts) - 1)
             
             
-            if not inserted:
+            if not inserted and not self.existing_head:
                 
                 # B -> A is pointed backward out the tip of the line
                 A = self.cuts[0].plane_com
@@ -1025,6 +1061,42 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     
                     
                         if new_cut.plane_no.dot(B-A) < 0:
+                            new_cut.plane_no = -1 * new_cut.plane_no
+                        
+                        spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                        if spin < 0:
+                            new_cut.verts_simple.reverse()
+                            new_cut.verts.reverse()
+                            new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                            new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
+                            
+                            
+                        
+                        self.cuts.insert(0, new_cut)
+                        self.segments += 1
+                        new_cut.simplify_cross(self.ring_segments)
+                        self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
+                        self.update_backbone(context, ob, bme, new_cut, insert = True)
+                        inserted = True
+                        
+            if not inserted:
+    
+                #Vector pointing B to A is pointed out the tail
+                A = self.cuts[-1].plane_com
+                B = self.cuts[-2].plane_com
+                
+                C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
+                
+                
+                if C:
+                    test1 = self.cuts[-1].plane_no.dot(C-A) > 0
+                    test2 = (C - A).length < fraction
+                    valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
+                    if valid and test1 and test2:
+                        print('inserted the new cut at the end')
+                    
+                    
+                        if new_cut.plane_no.dot(A-B) < 0:
                             print('normal reversal to fit path')
                             new_cut.plane_no = -1 * new_cut.plane_no
                         
@@ -1035,50 +1107,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                             new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
                             new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
                             print('loop reversal to fit into new path')
-                            
                         
-                        self.cuts.insert(0, new_cut)
+                        self.cuts.append(new_cut)
                         self.segments += 1
                         new_cut.simplify_cross(self.ring_segments)
-                        self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
+                        self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
                         self.update_backbone(context, ob, bme, new_cut, insert = True)
                         inserted = True
-                        
-                if not inserted:
-        
-                    #Vector pointing B to A is pointed out the tail
-                    A = self.cuts[-1].plane_com
-                    B = self.cuts[-2].plane_com
-                    
-                    C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
-                    
-                    
-                    if C:
-                        test1 = self.cuts[-1].plane_no.dot(C-A) > 0
-                        test2 = (C - A).length < fraction
-                        valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
-                        if valid and test1 and test2:
-                            print('inserted the new cut at the end')
-                        
-                        
-                            if new_cut.plane_no.dot(A-B) < 0:
-                                print('normal reversal to fit path')
-                                new_cut.plane_no = -1 * new_cut.plane_no
-                            
-                            spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
-                            if spin < 0:
-                                new_cut.verts_simple.reverse()
-                                new_cut.verts.reverse()
-                                new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
-                                new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
-                                print('loop reversal to fit into new path')
-                            
-                            self.cuts.append(new_cut)
-                            self.segments += 1
-                            new_cut.simplify_cross(self.ring_segments)
-                            self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
-                            self.update_backbone(context, ob, bme, new_cut, insert = True)
-                            inserted = True
     
         return inserted
     
@@ -1104,7 +1139,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         will assess a cut with neighbors and attempt to
         align it
         '''
-        if len(self.cuts) < 2:
+        if len(self.cuts) < 2 and not self.existing_head:
             print('nothing to align with')
             return
         
@@ -1123,19 +1158,22 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         else:
             shift_a = False
                     
-        if behind != -1:
+        if behind > -1:
             cut.align_to_other(self.cuts[behind], auto_align = fine_grain)
             shift_b = cut.shift
+        elif behind == -1 and self.existing_head:
+            print('aligned to head?')
+            cut.align_to_other(self.existing_head, auto_align = fine_grain)
+            shift_b = cut.shift
         else:
-            shift_b = False    
+            shift_b = False   
         
         
         if mode == 'DIRECTION':
             #this essentially just reverses the loop if it's got an anticlockwise rotation
             if ahead != len(self.cuts):
                 cut.align_to_other(self.cuts[ahead], auto_align = False, direction_only = True)
-        
-                        
+                    
             elif behind != -1:
                 cut.align_to_other(self.cuts[behind], auto_align = False, direction_only = True)
             
@@ -1581,12 +1619,12 @@ class ExistingVertList(object):
                    
             final_shift = shift_lengths.index(min(shift_lengths))
             if final_shift != 0:
-                print('pre rough shift alignment % f' % self.connectivity_analysis(other))
-                print("rough shifting verts by %i segments" % final_shift)
+                #print('pre rough shift alignment % f' % self.connectivity_analysis(other))
+                #print("rough shifting verts by %i segments" % final_shift)
                 self.int_shift = final_shift
                 self.verts_simple = contour_utilities.list_shift(self.verts_simple, final_shift)
                 self.vert_inds_unsorted = contour_utilities.list_shift(self.vert_inds_unsorted, final_shift)
-                print('post rough shift alignment % f' % self.connectivity_analysis(other))    
+                #print('post rough shift alignment % f' % self.connectivity_analysis(other))    
                 
         
         else:
@@ -1596,7 +1634,7 @@ class ExistingVertList(object):
             Vtotal_2 = self.verts_simple[-1] - self.verts_simple[0]
     
             if Vtotal_1.dot(Vtotal_2) < 0:
-                print('reversing path 2')
+                #print('reversing path 2')
                 self.verts_simple.reverse()
                 self.vert_inds_unsorted.reverse()
                 
@@ -3730,11 +3768,11 @@ class ContourCutLine(object):
                    
             final_shift = shift_lengths.index(min(shift_lengths))
             if final_shift != 0:
-                print('pre rough shift alignment % f' % self.connectivity_analysis(other))
-                print("rough shifting verts by %i segments" % final_shift)
+                #print('pre rough shift alignment % f' % self.connectivity_analysis(other))
+                #print("rough shifting verts by %i segments" % final_shift)
                 self.int_shift = final_shift
                 self.verts_simple = contour_utilities.list_shift(self.verts_simple, final_shift)
-                print('post rough shift alignment % f' % self.connectivity_analysis(other))
+                #print('post rough shift alignment % f' % self.connectivity_analysis(other))
             
             if auto_align and cyclic:
                 alignment_quality = self.connectivity_analysis(other)

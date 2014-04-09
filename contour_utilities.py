@@ -688,7 +688,7 @@ def cross_section(bme, mx, point, normal, debug = True):
     if debug:
         n = len(times)
         times.append(time.time())
-        print('calced connectivity %f sec' % (times[n]-times[n-1]))
+        #print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
     if len(verts):
         #new_me = bpy.data.meshes.new('Cross Section')
@@ -2577,7 +2577,7 @@ def cross_section_seed_direction(bme, mx,
     if debug:
         n = len(times)
         times.append(time.time())
-        print('calced connectivity %f sec' % (times[n]-times[n-1]))
+        #print('calced connectivity %f sec' % (times[n]-times[n-1]))
         
     if len(verts):  
         return (verts, eds)
