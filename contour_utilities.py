@@ -2288,6 +2288,19 @@ def find_distant_bmedge_crossing_plane(pt, no, edges, epsilon, eind_from, co_fro
     '''
     returns the farthest edge that *crosses* plane and corresponding intersection point
     '''
+    
+    if(len(edges)==3):
+        # shortcut (no need to find farthest... just find first)
+        for edge in edges:
+            if edge.index == eind_from: continue
+            v0,v1 = edge.verts
+            co0,co1 = v0.co,v1.co
+            s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
+            no_cross = not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon))
+            if no_cross: continue
+            i = intersect_line_plane(co0, co1, pt, no)
+            return (edge,i)
+    
     d_max,edge_max,i_max = -1.0,None,None
     for edge in edges:
         if edge.index == eind_from: continue
@@ -2311,23 +2324,24 @@ def cross_section_walker(bme, pt, no, find_from, eind_from, co_from, epsilon):
     '''
     
     # returned values
-    verts,looped = [co_from],False
+    verts = [co_from]
+    looped = False
     
     # track what we've seen
     finds_dict = {find_from: 0}
     
-    find_current = next(f.index for f in bme.edges[eind_from].link_faces if f.index != find_from)
+    f_cur = next(f for f in bme.edges[eind_from].link_faces if f.index != find_from)
+    find_current = f_cur.index
     
     while True:
         # find farthest point
-        edge,i = find_distant_bmedge_crossing_plane(pt, no, bme.faces[find_current].edges, epsilon, eind_from, co_from)
-        
+        edge,i = find_distant_bmedge_crossing_plane(pt, no, f_cur.edges, epsilon, eind_from, co_from)
         verts += [i]
-        
         if len(edge.link_faces) == 1: break                                     # hit end?
         
         # get next face, edge, co
-        find_next = next(f.index for f in edge.link_faces if f.index != find_current)
+        f_next = next(f for f in edge.link_faces if f.index != find_current)
+        find_next = f_next.index
         eind_next = edge.index
         co_next   = i
         
@@ -2345,6 +2359,7 @@ def cross_section_walker(bme, pt, no, find_from, eind_from, co_from, epsilon):
         eind_from = eind_next
         co_from   = co_next
         
+        f_cur = f_next
         find_current = find_next
     
     return (verts,looped)
@@ -2375,6 +2390,7 @@ def cross_section_seed_ver1(bme, mx,
     
     # find intersections of edges and cutting plane
     ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges, epsilon)
+    
     if len(ei_init) < 2:
         print('warning: it should not reach here! len(ei_init) = %d' % len(ei_init))
         return (None,None)
@@ -2397,6 +2413,7 @@ def cross_section_seed_ver1(bme, mx,
         verts = verts0
         nv = len(verts)
         edges = [(i,(i+1)%nv) for i in range(nv)]
+        
         return (verts, edges)
     
     # did not loop around, so start walking the other way
@@ -2408,12 +2425,14 @@ def cross_section_seed_ver1(bme, mx,
         verts = verts1
         nv = len(verts)
         edges = [(i,(i+1)%nv) for i in range(nv)]
+        
         return (verts, edges)
     
     # combine two walks
     verts = list(reversed(verts0)) + verts1
     nv = len(verts)
     edges = [(i,i+1) for i in range(nv-1)]
+    
     return (verts, edges)
 
 
