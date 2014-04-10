@@ -62,6 +62,7 @@ from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, Fl
 from bpy.types import Operator, AddonPreferences
 
 
+
 #a place to store stokes for later
 global contour_cache 
 contour_cache = {}
@@ -848,7 +849,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if not target_at_all:
                 self.hover_target = None
                 self.cut_line_widget = None
-                context.area.header_text_set(self.header_message)
                 
     def new_path_from_draw(self,context,settings):
         '''
@@ -947,8 +947,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
                 
+                inserted = False
                 if self.cut_paths != [] and not self.force_new:
-                    inserted = False
+                    
                     for path in self.cut_paths:
                         if path.insert_new_cut(context, self.original_form, self.bme, self.selected):
                             #the cut belongs to the series now
@@ -1027,8 +1028,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
         self.selected_path.update_visibility(context, self.original_form)
             
-        #shift single ring
-        context.area.header_text_set(text = self.mode +': Shift ' + str(self.selected.shift))
+
+        self.temporary_message_start(context, self.mode +': Shift ' + str(self.selected.shift))
                                                 
     def loop_align_modal(self,context, event):
         if not event.ctrl and not event.shift:
@@ -1048,6 +1049,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
         self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
         self.selected_path.update_visibility(context, self.original_form)
+        self.temporary_message_start(context, 'Align Loop: %s' % act)
             
     def loop_hotkey_modal(self,context,event):
             
@@ -1078,38 +1080,32 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.cut_line_widget.initial_x = event.mouse_region_x
         self.cut_line_widget.initial_y = event.mouse_region_y
         self.cut_line_widget.derive_screen(context)
-                                             
+    
+    
+    def temporary_message_start(self,context, message):
+        self.msg_start_time = time.time()
+        if not self._timer:
+            self._timer = context.window_manager.event_timer_add(0.1, context.window)
+        
+        context.area.header_text_set(text = message)    
+                                                 
+    
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
-        #Loop and Guide Mode
-        #'WAITING'
-        #'NAVIGATING'
-        
-        #Loop Mode
-        #'WIDGET TRANSFORM'
-        #'CUTTING'
-        #'HOTKEY TRANSFORM'
-        
-        #Guide Mode
-        #'DRAWING'
+        #check messages
         if event.type == 'TIMER':
             now = time.time()
             if now - self.msg_start_time > self.msg_duration:
                 context.window_manager.event_timer_remove(self._timer)
                 self._timer = None
-                context.area.header_text_set(text = 'TEMPRARY MESSAGE OVER')
                 
-            
-        if event.type == 'T' and event.value == 'PRESS':
-            self.msg_start_time = time.time()
-            #see if there are any old timers
-            if self._timer:
-                context.window_manager.event_timer_remove(self._timer)
+                if self.mode == 'GUIDE':
+                    context.area.header_text_set(text = self.guide_msg)
+                else:
+                    context.area.header_text_set(text = self.loop_msg)
                 
-            self._timer = context.window_manager.event_timer_add(0.1, context.window)
-            context.area.header_text_set(text = 'TEMP HELP MESSAGE')
                 
         if self.modal_state == 'NAVIGATING':
             
@@ -1127,14 +1123,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
                 self.modal_state = 'WAITING'
                 self.post_update = True
-                context.area.header_text_set(text = 'WAITING')    
+                self.temporary_message_start(context, self.mode + ': NAVIGATING')
                 return {'PASS_THROUGH'}
             
             if (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
             
                 self.modal_state = 'WAITING'
-                self.post_update = True
-                context.area.header_text_set(text = 'WAITING')    
+                self.post_update = True 
                 return {'PASS_THROUGH'}
         
         if self.mode == 'LOOP':
@@ -1146,6 +1141,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     context.area.header_text_set()
                     contour_utilities.callback_cleanup(self,context)
+                    if self._timer:
+                        context.window_manager.event_timer_remove(self._timer)
+                        
                     return {'CANCELLED'}
                 
                 elif (event.type == 'TAB' and 
@@ -1153,7 +1151,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.mode = 'GUIDE'
                     self.selected = None
-                    context.area.header_text_set(text = 'GUIDE MODE')
+                    
+                elif event.type == 'N' and event.value == 'PRESS':
+                    self.force_new = self.force_new != True
+                    #self.selected_path = None
+                    self.snap = None
+                    
+                    self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
+                    return {'RUNNING_MODAL'}
                 
                 elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
                     event.value == 'PRESS'):
@@ -1191,6 +1196,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             
                     context.area.header_text_set()
                     contour_utilities.callback_cleanup(self,context)
+                    if self._timer:
+                        context.window_manager.event_timer_remove(self._timer)
 
                     return {'FINISHED'}
                 
@@ -1205,11 +1212,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                       event.value == 'PRESS'):
                     
                     bpy.ops.view3d.view_center_cursor()
+                    self.temporary_message_start(context, 'Center View to Cursor')
                     return {'RUNNING_MODAL'}
                 
                 elif event.type == 'S' and event.value == 'PRESS':
                     if self.selected:
                         context.scene.cursor_location = self.selected.plane_com
+                        self.temporary_message_start(context, 'Cursor to selected loop or segment')
                 
                 #NAVIGATION KEYS
                 elif (event.type in {'MIDDLEMOUSE', 
@@ -1225,14 +1234,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
-                    context.area.header_text_set(text = 'NAVIGATING')
+                    self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
                 elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
-                    context.area.header_text_set(text = 'NAVIGATING')
+                    self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
                 
@@ -1277,8 +1286,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         
                     else:
                         self.modal_state = 'CUTTING'
-                        context.area.header_text_set(text = self.mode + ': CUTTING')
-                        
+                        self.temporary_message_start(context, self.mode + ': CUTTING')
                         #make a new cut and handle it with self.selected
                         self.selected = self.click_new_cut(context, settings, event)
                         
@@ -1293,12 +1301,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'G'
                         self.loop_hotkey_modal(context,event)
+                        self.temporary_message_start(context, self.mode + ':Hotkey Grab')
                         return {'RUNNING_MODAL'}
                     #R -> HOTKEY
                     if event.type == 'R' and event.value == 'PRESS':
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'R'
                         self.loop_hotkey_modal(context,event)
+                        self.temporary_message_start(context, self.mode + ':Hotkey Rotate')
                         return {'RUNNING_MODAL'}
                     
                     #X, DEL -> DELETE
@@ -1315,7 +1325,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.selected_path = None
                             
                         self.selected = None
-                        context.area.header_text_set(text = self.mode + ': DELETE')
+                        self.temporary_message_start(context, self.mode + ': DELETE')
                     
                     #S -> CURSOR SELECTED CoM
                     
@@ -1330,7 +1340,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     elif event.type == 'A' and event.value == 'PRESS':
                     
                         self.loop_align_modal(context,event)
-                        
+                         
                         return {'RUNNING_MODAL'}
                         
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
@@ -1357,14 +1367,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
                             
-                            #distribute cut points
-                            #make new cuts
-                            #alignment
-                            #etc
+                            self.temporary_message_start(context, self.mode +': RING SEGMENTS %i' %self.selected_path.ring_segments)
+                            self.msg_start_time = time.time()
+                        else:
+                            self.temporary_message_start(context, self.mode +': RING SEGMENTS: Can not be changed.  Path Locked')
+                            
                         #else:
                             #let the user know the path is locked
                             #header message set
-                        context.area.header_text_set(text = self.mode +': RING SEGMENTS')
+
                         return {'RUNNING_MODAL'}
                     #if hover == selected:
                         #LEFTCLICK -> WIDGET
@@ -1398,7 +1409,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #we return to waiting
                     self.modal_state = 'WAITING'
-                    context.area.header_text_set(text = self.mode + ': WAITING')
                     return {'RUNNING_MODAL'}
             
             
@@ -1416,7 +1426,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     x = str(event.mouse_region_x)
                     y = str(event.mouse_region_y)
                     message  = self.mode + ": " + action + ": X: " +  x + '  Y:  ' +  y
-                    context.area.header_text_set(text = message)
+                    self.temporary_message_start(context, message)
 
                     #widget.user_interaction
                     self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
@@ -1436,7 +1446,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #recut, align, visibility?, and update the segment
                     self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
                     self.modal_state = 'WAITING'
-                    context.area.header_text_set(text = self.mode + ': WAITING')
                     return {'RUNNING_MODAL'}
                 
                 if (event.type in {'ESC', 'RIGHTMOUSE'} and
@@ -1449,7 +1458,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                     self.selected_path.update_visibility(context, self.original_form)
-                    context.area.header_text_set(text = self.mode + ': WAITING')
                     self.modal_state = 'WAITING'
                     return {'RUNNING_MODAL'}
                 
@@ -1465,9 +1473,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     
                     self.widget_transform(context, settings, event)
-                    
-                    message = self.modal_state
-                    context.area.header_text_set(text = message)
                     return {'RUNNING_MODAL'}
                
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
@@ -1475,7 +1480,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     self.cut_line_widget = None
                     self.modal_state = 'WAITING'
                     self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
-                    context.area.header_text_set(text = 'LOOP MODE: WAITING')
+                    
                     return {'RUNNING_MODAL'}
                     
                 elif  event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and self.hot_key:
@@ -1511,7 +1516,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
-                    context.area.header_text_set(text = 'NAVIGATING')
+                    self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
                 
@@ -1519,7 +1524,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
-                    context.area.header_text_set(text = 'NAVIGATING')
+                    self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
                 
@@ -1528,24 +1533,25 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         (event.ctrl or event.shift)):
                     
                     self.post_update = True
-                    context.area.header_text_set(text = self.mode + ': ZOOM')
+                    self.temporary_message_start(context, 'ZOOM')
                     return{'PASS_THROUGH'}
                 
                 elif event.type == 'TAB' and event.value == 'PRESS':
                     self.mode = 'LOOP'
-                    context.area.header_text_set(text = self.mode +':  WAITING')
                     return {'RUNNING_MODAL'}
                 
                 elif event.type == 'C' and event.value == 'PRESS':
                     #center cursor
                     bpy.ops.view3d.view_center_cursor()
+                    self.temporary_message_start(context, 'Center View to Cursor')
                     return {'RUNNING_MODAL'}
                     
                 elif event.type == 'N' and event.value == 'PRESS':
                     self.force_new = self.force_new != True
                     #self.selected_path = None
-                    #self.snap = None
-                    context.area.header_text_set(text = self.mode +': FORCE NEW: ' + str(self.force_new))
+                    self.snap = None
+                    
+                    self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
                     return {'RUNNING_MODAL'}
                 
                 
@@ -1566,19 +1572,18 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 path.deselect(settings)
                     else:
                         self.modal_state = 'DRAWING'
-                        context.area.header_text_set(text = self.mode +': DRAWING')
+                        self.temporary_message_start(context, 'DRAWING')
                     
                     return {'RUNNING_MODAL'}    
                 
                 if self.selected_path:
 
                     if event.type in {'X', 'DEL'} and event.value == 'PRESS':
-                        #delete the path
-                        print('DELETD!')
                         self.cut_paths.remove(self.selected_path)
                         self.selected_path = None
                         self.modal_state = 'WAITING'
-                        context.area.header_text_set(text = self.mode +': WAITING')
+                        self.temporary_message_start(context, 'DELETED PATH')
+                        
                         return {'RUNNING_MODAL'}
                     
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
@@ -1587,7 +1592,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.guide_arrow_shift(context, event)
                           
                         #shift entire segment
-                        context.area.header_text_set(text = self.mode +': Shift ')
+                        self.temporary_message_start(context, 'Shift entire segment')
                         return {'RUNNING_MODAL'}
                         
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
@@ -1611,18 +1616,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
                             self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                            #path.segments
-                            #distribute cut points
-                            #make new cuts
-                            #alignment
-                            #etc
-                        #else:
-                            #let the user know the path is locked
-                            #header message set
-                            context.area.header_text_set(text = self.mode +': PATH SEGMENTS')
+     
+                            self.temporary_message_start(context, 'PATH SEGMENTS: %i' % self.selected_path.segments)
+                            
                             
                         else:
-                            context.area.header_text_set(text = self.mode +': Path is locked, cannot adjuste # of segments')
+                            self.temporary_message_start(context, 'PATH SEGMENTS: Path is locked, cannot adjust segments')
                         return {'RUNNING_MODAL'}
                    
                     elif event.type == 'S' and event.value == 'PRESS':
@@ -1631,19 +1630,20 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             #path.smooth_normals
                             self.selected_path.average_normals(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            context.area.header_text_set(text = 'SMOOTH NORMALS')
+                            self.temporary_message_start(context, 'Smooth normals based on drawn path')
                             
                         elif event.ctrl:
                             #smooth CoM path
-                            context.area.header_text_set(text = 'SMOOTH CoM')
+                            self.temporary_message_start(context, 'Smooth normals based on CoM path')
                             self.selected_path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             
                         elif event.alt:
                             #path.interpolate_endpoints
+                            self.temporary_message_start(context, 'Smoothly interpolate normals between the endpoints')
                             self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            context.area.header_text_set(text = 'INTERPOLATE ENDPOINTS')
+                            
                             
                         else:
                             half = math.floor(self.selected_path.segments/2)
@@ -1663,9 +1663,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     action = 'GUIDE MODE: Drawing'
                     x = str(event.mouse_region_x)
                     y = str(event.mouse_region_y)
-                    message = action + ": X: " +  x + '  Y:  ' +  y
-                    context.area.header_text_set(text = message)
-                    
                     #record screen drawing
                     self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))   
                     
@@ -1686,9 +1683,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.draw_cache = []
                     
-                    
                     self.modal_state = 'WAITING'
-                    context.area.header_text_set(text = 'GUIDE MODE: WAITING')
                     return{'RUNNING_MODAL'}
                 
                 
@@ -2179,12 +2174,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.hot_key = None  #Keep track of which hotkey was pressed
         self.draw = False  #Being in the state of drawing a guide stroke
         
+        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, RMB / X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor'
+        self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments'
+        context.area.header_text_set(self.loop_msg)
         
-
-        
-    
-        self.header_message = 'LMB: Select Stroke, RMB / X: Delete Sroke, , G: Translate, R: Rotate, A / Ctrl+A / Shift+A: Align, S: Cursor to Stroke, C: View to Cursor'
-        context.area.header_text_set(self.header_message)
         if settings.recover:
             print('loading cache!')
             print(contour_cache['CUT_LINES'])
