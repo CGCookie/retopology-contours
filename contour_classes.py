@@ -371,6 +371,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         self.backbone = []
         
+        if len(self.cuts) == 0:
+            return
             
         for i, cut in enumerate(self.cuts):
             
@@ -1138,8 +1140,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             self.backbone.pop(ind)
             if ind < len(self.cuts) - 1:
                 self.update_backbone(context, ob, bme, self.cuts[ind], insert = False)
-            else:
-                self.update_backbone(context, ob, bme, self.cuts[ind -1], insert = False)
+            elif ind == 1 and len(self.cuts) == 1:
+                self.backbone_from_cuts(context, ob, bme)
             
         else:
             self.cuts = []
@@ -3863,19 +3865,20 @@ class ContourCutLine(object):
             active_self = False
             for ed in self.eds_simple:
                 
-                a = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.verts_simple[ed[0]])
-                b = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.verts_simple[ed[1]])
+                if self.verts_simple_visible[ed[0]] and self.verts_simple_visible[ed[1]]:
+                    a  = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.verts_simple[ed[0]])
+                    b = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.verts_simple[ed[1]])
                 
-                if a and b:
+                    if a and b:
                 
-                    intersect = intersect_point_line(mouse_loc, a, b)
+                        intersect = intersect_point_line(mouse_loc, a, b)
                     
-                    if intersect:
-                        dist = (intersect[0] - mouse_loc).length_squared
-                        bound = intersect[1]
-                        if (dist < 100) and (bound < 1) and (bound > 0):
-                            active_self = True
-                            break
+                        if intersect:
+                            dist = (intersect[0] - mouse_loc).length_squared
+                            bound = intersect[1]
+                            if (dist < 100) and (bound < 1) and (bound > 0):
+                                active_self = True
+                                break
             
         else:
             active_self = False
