@@ -162,8 +162,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         mx = ob.matrix_world
         imx = mx.inverted()
-        
-        print('made to snap...is this the problem or the solution?')
         if raw and len(self.raw_world):
             for i, vert in enumerate(self.raw_world):
                 snap = ob.closest_point_on_mesh(imx * vert)
@@ -211,14 +209,12 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
 
         if snap_tip:
             self.existing_head = existing_loop
-            print('snap tip to existing')
             v0 = existing_loop.verts_simple[snap_tip]
         else:
             v0 = self.raw_world[0]
             
         if snap_tail:
             self.existing_tail = existing_loop
-            print('snap tail to existing')
             v1 = existing_loop.verts_simple[snap_tail]
         else:
             v1 = self.raw_world[-1]
@@ -247,7 +243,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         '''
         self.cut_points = [] 
         if self.segments <= 1:
-            print('not worth it')
             self.cut_points = [self.world_path[0],self.world_path[-1]]
             return
         
@@ -289,7 +284,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.cuts = []
         
         if not len(self.cut_points) or len(self.cut_points) < 3:
-            print('no cut points or not enough')
             return
         
         rv3d = context.space_data.region_3d
@@ -311,7 +305,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             cut.plane_pt = loc
             
             if not loc:
-                print('no location')
                 print(self.cut_points)
 
             
@@ -1213,6 +1206,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         elif mode == 'BACKWARD':
             if shift_b:
                 cut.shift = shift_b
+                
+        
   
     def sort_cuts(self):
         '''
@@ -1612,7 +1607,6 @@ class ExistingVertList(object):
                 self.verts_simple.reverse()
                 self.vert_inds_unsorted.reverse()
             
-
             edge_len_dict = {}
             for i in range(0,len(verts_1)):
                 for n in range(0,len(self.verts_simple)):
@@ -4142,10 +4136,12 @@ class CutLineManipulatorWidget(object):
                             self.cut_line.plane_com = self.initial_com + translate
                             proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
                             if proposed_point:
+                                
                                 snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                                 self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
                                 self.cut_line.seed_face_index = snap[2]
                             else:
+                                
                                 self.cancel_transform()
                             return {'RECUT'}
                     
@@ -4198,24 +4194,26 @@ class CutLineManipulatorWidget(object):
                                 self.cancel_transform()
                     
                     if not self.a and not self.b:
+                        
                         translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                         self.cut_line.plane_com = self.initial_com + translate
                         
                         proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
                         if not proposed_point:
+                            
                             proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
-                            if proposed_point:
-                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                                self.cut_line.seed_face_index = snap[2]
-                            else:
-                                self.cancel_transform()
+                        if proposed_point:        
+                            snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                            self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                            self.cut_line.seed_face_index = snap[2]
+                        else:
+                            self.cancel_transform()
+                        
                         return {'RECUT'}
                     
                     return {'DO_NOTHING'}
 
                 if self.transform_mode == 'NORMAL_TRANSLATE':
-                    print('translating')
                     #the pixel distance used to scale the translation
                     screen_dist = mouse_wrt_widget.length - self.inner_radius
                     
@@ -4234,9 +4232,7 @@ class CutLineManipulatorWidget(object):
                     
                     axis_2 = self.initial_plane_no.cross(axis_1)
                     axis_2.normalize()
-                    
 
-                    
                     #identify which quadrant we are in
                     screen_angle = math.atan2(mouse_wrt_widget[1], mouse_wrt_widget[0])
                     
@@ -4249,8 +4245,7 @@ class CutLineManipulatorWidget(object):
                             init_angle = math.fmod(init_angle + 4 * math.pi, 2 * math.pi)
                             rot_angle = screen_angle - init_angle
                             
-                        rot_angle = math.fmod(rot_angle + 4 * math.pi, 2 * math.pi)  #correct for any negatives
-                        print('rotating by %f' % rot_angle)
+                        rot_angle = math.fmod(rot_angle + 3 * math.pi, 2 * math.pi)  #correct for any negatives
                         sin = math.sin(rot_angle/2)
                         cos = math.cos(rot_angle/2)
                         #quat = Quaternion((cos, sin*world_x[0], sin*world_x[1], sin*world_x[2]))
@@ -4259,7 +4254,6 @@ class CutLineManipulatorWidget(object):
                     else:
                         rot_angle = screen_angle - self.angle + math.pi #+ .5 * math.pi  #Mystery
                         rot_angle = math.fmod(rot_angle + 4 * math.pi, 2 * math.pi)  #correct for any negatives
-                        print('rotating by %f' % rot_angle)
                         sin = math.sin(rot_angle/2)
                         cos = math.cos(rot_angle/2)
                         #quat = Quaternion((cos, sin*world_y[0], sin*world_y[1], sin*world_y[2]))
@@ -4451,7 +4445,6 @@ class CutLineManipulatorWidget(object):
                     p4_2d = p1_2d + self.radius * vec_2d
                     p6_2d = p1_2d - self.radius * vec_2d
                     
-                    print('previewing the rotation')
                     contour_utilities.draw_points(context, [p1_2d, p4_2d, p6_2d], self.color3, 5)
                     contour_utilities.draw_polyline_from_points(context, [p6_2d, p4_2d], self.color ,2 , "GL_STIPPLE")
             
