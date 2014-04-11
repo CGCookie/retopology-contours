@@ -995,13 +995,17 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             #TODO - Extension of existing geometry
     def widget_transform(self,context,settings, event):
         
-        self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y, shift = event.shift)    
+        self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y, shift = event.shift)
+        
+            
         self.selected.cut_object(context, self.original_form, self.bme)
         self.selected.simplify_cross(self.selected_path.ring_segments)
         self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
         
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-        self.selected_path.update_visibility(context, self.original_form)    
+        self.selected_path.update_visibility(context, self.original_form)
+        
+        self.temporary_message_start(context, 'WIDGET_TRANSFORM: ' + str(self.cut_line_widget.transform_mode))    
     
     def guide_arrow_shift(self,context,event):
         if event.type == 'LEFT_ARROW':         
@@ -1473,6 +1477,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     
                     self.widget_transform(context, settings, event)
+                    
                     return {'RUNNING_MODAL'}
                
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
