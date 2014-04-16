@@ -1102,8 +1102,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         if event.type == 'TIMER':
             now = time.time()
             if now - self.msg_start_time > self.msg_duration:
-                context.window_manager.event_timer_remove(self._timer)
-                self._timer = None
+                if self._timer:
+                    context.window_manager.event_timer_remove(self._timer)
+                    self._timer = None
                 
                 if self.mode == 'GUIDE':
                     context.area.header_text_set(text = self.guide_msg)
