@@ -2091,7 +2091,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 if len(ngons):
                     #new_geom = bmesh.ops.triangulate(self.bme, faces = ngons, use_beauty = True)
-                    new_geom = bmesh.ops.triangulate(bmesh, faces = ngons, quad_method=0, ngon_method=1)
+                    new_geom = bmesh.ops.triangulate(self.bme, faces = ngons, quad_method=0, ngon_method=1)
                     new_faces = new_geom['faces']
                     
                     
