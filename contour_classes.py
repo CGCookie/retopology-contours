@@ -4239,13 +4239,15 @@ class CutLineManipulatorWidget(object):
                     if self.transform_mode == 'ROTATE_VIEW':
                         if not self.hotkey:
                             rot_angle = screen_angle - self.angle #+ .5 * math.pi  #Mystery
+                            rot_angle = math.fmod(rot_angle + 3 * math.pi, 2 * math.pi)  #correct for any negatives
                             
                         else:
                             init_angle = math.atan2(self.initial_y - self.y, self.initial_x - self.x)
                             init_angle = math.fmod(init_angle + 4 * math.pi, 2 * math.pi)
                             rot_angle = screen_angle - init_angle
+                            rot_angle = math.fmod(rot_angle + 2 * math.pi, 2 * math.pi)  #correct for any negatives
                             
-                        rot_angle = math.fmod(rot_angle + 3 * math.pi, 2 * math.pi)  #correct for any negatives
+                        
                         sin = math.sin(rot_angle/2)
                         cos = math.cos(rot_angle/2)
                         #quat = Quaternion((cos, sin*world_x[0], sin*world_x[1], sin*world_x[2]))
@@ -4448,13 +4450,41 @@ class CutLineManipulatorWidget(object):
                     contour_utilities.draw_points(context, [p1_2d, p4_2d, p6_2d], self.color3, 5)
                     contour_utilities.draw_polyline_from_points(context, [p6_2d, p4_2d], self.color ,2 , "GL_STIPPLE")
             
-class ContoursStatePreserver(object):
+class ContourStatePreserver(object):
     def __init__(self, operator):
-        
         self.mode = operator.mode
         self.modal_state = operator.modal_state  #should always be waiting?
-        self.selected_path = operator.cut_paths.index(operator.selected_path)
-        self.selected_loop = operator.selected_path.cuts.index(operator.selected)
+        
+        if operator.selected_path:
+            print('preserving the selected_path')
+            self.selected_path = operator.cut_paths.index(operator.selected_path)
+            print(self.selected_path)
+        else:
+            self.selected_path = None
+            
+        if operator.selected and operator.selected_path:
+            print('preserving the selected loop')
+            self.selected_loop = operator.selected_path.cuts.index(operator.selected)
+            print(self.selected_loop)
+        else:
+            self.selected_loop = None
         
         #consider adding nsegments, nlopos etc....but why?
+        
+    def push_state(self, operator):
+        
+        operator.mode = self.mode
+        operator.modal_state = self.modal_state
+        
+        if self.selected_path != None:  #because it can be a 0 integer
+            print('pushed the selected path index %i' % self.selected_path)
+            operator.selected_path = operator.cut_paths[self.selected_path]
+        else:
+            operator.selected_path = None
+        
+        if self.selected_loop != None and self.selected_path != None:
+            print('pushed the selected loop index %i' % self.selected_loop)
+            operator.selected = operator.cut_paths[self.selected_path].cuts[self.selected_loop]
+        else:
+            operator.selected = None
         

@@ -1105,7 +1105,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
-            self.cut_paths = self.snapshot
+            self.temporary_message_start(context, "Undo Action")
+            self.undo_action()
             
         #check messages
         if event.type == 'TIMER':
@@ -1286,8 +1287,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         
                     
                     elif self.hover_target  and self.hover_target == self.selected:
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
+                        self.create_undo_snapshot('WIDGET_TRANSFORM')
                         self.modal_state = 'WIDGET_TRANSFORM'
                         #sometimes, there is not a widget from the hover?
                         self.cut_line_widget = CutLineManipulatorWidget(context, 
@@ -1300,6 +1301,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.cut_line_widget.derive_screen(context)
                         
                     else:
+                        self.create_undo_snapshot('CUTTING')
                         self.modal_state = 'CUTTING'
                         self.temporary_message_start(context, self.mode + ': CUTTING')
                         #make a new cut and handle it with self.selected
@@ -1313,8 +1315,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #G -> HOTKEY
                     if event.type == 'G' and event.value == 'PRESS':
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
+                        self.create_undo_snapshot('HOTKEY_TRANSFORM')
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'G'
                         self.loop_hotkey_modal(context,event)
@@ -1322,8 +1324,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         return {'RUNNING_MODAL'}
                     #R -> HOTKEY
                     if event.type == 'R' and event.value == 'PRESS':
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
+                        self.create_undo_snapshot('HOTKEY_TRANSFORM')
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'R'
                         self.loop_hotkey_modal(context,event)
@@ -1332,8 +1334,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #X, DEL -> DELETE
                     elif event.type == 'X' and event.value == 'PRESS':
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
+                        self.create_undo_snapshot('DELETE')
                         if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) == 1 and self.selected_path.existing_head):
                             self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
@@ -1352,20 +1354,21 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #LEFT_ARROW, RIGHT_ARROW to shift
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
-                        
+                        self.create_undo_snapshot('LOOP_SHIFT') 
                         self.loop_arrow_shift(context,event)
                         
                         return {'RUNNING_MODAL'}
                     
                     elif event.type == 'A' and event.value == 'PRESS':
-                    
+                        self.create_undo_snapshot('ALIGN')
                         self.loop_align_modal(context,event)
                          
                         return {'RUNNING_MODAL'}
                         
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
                           (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS') and event.ctrl):
-                          
+                        
+                        self.create_undo_snapshot('RING_SEGMENTS')  
                         if not self.selected_path.ring_lock:
                             old_segments = self.selected_path.ring_segments
                             self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE' or event.type == 'NUMPAD_MINUS')
@@ -1420,9 +1423,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     return {'RUNNING_MODAL'}
                 
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-                    
-                    print('undo')
-                    self.snapshot = copy.deepcopy(self.cut_paths)
+
                     #the new cut is created
                     #the new cut is assessed to be placed into an existing series
                     #the new cut is assessed to be an extension of selected gemometry
@@ -1595,6 +1596,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             if path != self.hover_target:
                                 path.deselect(settings)
                     else:
+                        self.create_undo_snapshot('DRAW_PATH')
                         self.modal_state = 'DRAWING'
                         self.temporary_message_start(context, 'DRAWING')
                     
@@ -1603,8 +1605,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 if self.selected_path:
 
                     if event.type in {'X', 'DEL'} and event.value == 'PRESS':
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
+                        self.create_undo_snapshot('DELETE')
                         self.cut_paths.remove(self.selected_path)
                         self.selected_path = None
                         self.modal_state = 'WAITING'
@@ -1614,8 +1616,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
+                        self.create_undo_snapshot('PATH_SHIFT')
                         self.guide_arrow_shift(context, event)
                           
                         #shift entire segment
@@ -1629,11 +1631,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         #TODO: path.locked
                         #TODO:  dont recalc the path when no change happens
                         if event.type in {'WHEELUPMOUSE','NUMPAD_PLUS'}:
-                            if not self.selected_path.seg_lock:
+                            if not self.selected_path.seg_lock:                            
+                                self.create_undo_snapshot('PATH_SEGMENTS')
                                 self.selected_path.segments += 1
                         elif event.type in {'WHEELDOWNMOUSE', 'NUMPAD_MINUS'} and self.selected_path.segments > 3:
                             if not self.selected_path.seg_lock:
-                                
+                                self.create_undo_snapshot('PATH_SEGMENTS')
                                 self.selected_path.segments -= 1
                     
                         if not self.selected_path.seg_lock:
@@ -1654,18 +1657,21 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     elif event.type == 'S' and event.value == 'PRESS':
 
                         if event.shift:
+                            self.create_undo_snapshot('SMOOTH')
                             #path.smooth_normals
                             self.selected_path.average_normals(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.temporary_message_start(context, 'Smooth normals based on drawn path')
                             
                         elif event.ctrl:
+                            self.create_undo_snapshot('SMOOTH')
                             #smooth CoM path
                             self.temporary_message_start(context, 'Smooth normals based on CoM path')
                             self.selected_path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             
                         elif event.alt:
+                            self.create_undo_snapshot('SMOOTH')
                             #path.interpolate_endpoints
                             self.temporary_message_start(context, 'Smoothly interpolate normals between the endpoints')
                             self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
@@ -1697,8 +1703,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                 if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     if len(self.draw_cache) > 10:
-                        print('undo')
-                        self.snapshot = copy.deepcopy(self.cut_paths)
+                        
                         for path in self.cut_paths:
                             path.deselect(settings)
                             
@@ -1716,206 +1721,46 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
             return{'RUNNING_MODAL'}
             
-    def write_to_cache(self,tool_type):
-        global contour_cache
-        
-        if tool_type in contour_cache:
-            del contour_cache[tool_type]
-            
-        if len(self.valid_cuts):
-            normals = [cut.plane_no for cut in self.valid_cuts]
-            x_vecs = [cut.vec_x for cut in self.valid_cuts]
-            y_vecs = [cut.vec_y for cut in self.valid_cuts]
-            plane_pts = [cut.plane_pt for cut in self.valid_cuts]
-            seeds = [cut.seed_face_index for cut in self.valid_cuts]
-            fine_shifts = [cut.shift for cut in self.valid_cuts]
-            int_shifts = [cut.int_shift for cut in self.valid_cuts]
-            verts = [cut.verts for cut in self.valid_cuts]
-            verts_simple = [cut.verts_simple for cut in self.valid_cuts]
-            
-            
-            #todo, make this a little betetr
-            validate = [self.original_form.name, len(self.bme.faces), len(self.bme.verts), len(self.original_form.modifiers)]
-            contour_cache[tool_type] = {'validate': validate,
-                                        'normals': normals,
-                                        'x_vecs':x_vecs,
-                                        'y_vecs':y_vecs,
-                                        'plane_pts':plane_pts,
-                                        'seeds':seeds,
-                                        'shifts':fine_shifts,
-                                        'int_shifts':int_shifts,
-                                        'segments': self.segments}#,
-   
-    def load_from_cache(self,context, tool_type,clip):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
-        if tool_type not in contour_cache:
-            return None
-        else:
-            data = contour_cache[tool_type]
-            if [self.original_form.name, len(self.bme.faces), len(self.bme.verts), len(self.original_form.modifiers)] == data['validate']:
-                normals = data['normals']
-                x_vecs = data['x_vecs']
-                y_vecs = data['y_vecs']
-                plane_pts = data['plane_pts']
-                #verts = data['verts']
-                #verts_simple = data['verts_simple']
-                seeds = data['seeds']
-                shifts = data['shifts']
-                int_shifts = data['int_shifts']
-                segments = data['segments']
-                
-                
-                #settings and things
-                (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
-                gc = settings.geom_rgb
-                lc = settings.stroke_rgb
-                vc = settings.vert_rgb
-                hc = settings.handle_rgb
-                
-                g_color = (gc[0],gc[1],gc[2],1)
-                l_color = (lc[0],lc[1],lc[2],1)
-                v_color = (vc[0],vc[1],vc[2],1)
-                h_color = (hc[0],hc[1],hc[2],1)
-        
-                for i, plane_no in enumerate(normals):
-                    if i > (len(normals) - 1- clip): continue
-                    cut = ContourCutLine(0, 0, line_width = settings.line_thick, stroke_color = l_color, handle_color = h_color, geom_color = g_color, vert_color = v_color)
-                    cut.plane_no = plane_no
-                    cut.seed_face_index = seeds[i]
-                    cut.vec_x = x_vecs[i]
-                    cut.vec_y = y_vecs[i]
-                    cut.plane_pt = plane_pts[i]
-                    cut.shift = shifts[i]
-                    cut.int_shift = int_shifts[i]
-                    
-                    cut.cut_object(context, self.original_form, self.bme)
-                    cut.simplify_cross(segments)
-                    
-                    cut.update_com()
-                    #cut.verts = verts[i]
-                    #cut.verts_simple = verts_simple[i]     
-                     
-                    cut.deselect(settings) 
-                    self.cut_lines.append(cut)
-                    self.valid_cuts.append(cut)
-                    self.align_cut(cut, mode='DIRECTION', fine_grain=False)
-                    cut.shift = shifts[i]
-                    cut.int_shift = int_shifts[i]
-                    cut.simplify_cross(segments)
-                    
-                    cut.update_screen_coords(context)
-                    
-                self.connect_valid_cuts_to_make_mesh()
+    
                         
-    def create_undo_entry(self, action, cut):
-    
-        available_actions = {'CREATE','DELETE','TRANSFORM','SHIFT','ALIGN','SEGMENT'}
-        if action not in available_actions:
-            return None
+    def create_undo_snapshot(self, action):
+        '''
+        saves data and operator state snapshot
+        for undoing
         
-        print('undo push %s' % action)
-        #it's a dictionary
-        undo = {}
+        TODO:  perhaps pop/append are not fastest way
+        deque?
+        prepare a list and keep track of which entity to
+        replace?
+        '''
         
-        #record what kind of action it is
-        undo['action'] = action
-        #how many segments are
-        undo['segments'] = self.segments
+        repeated_actions = {'LOOP_SHIFT', 'PATH_SHIFT', 'PATH_SEGMENTS', 'LOOP_SEGMENTS'}
         
-        #these are the props we will record about a cut
-        cut_props = ['plane_com',
-                     'plane_no',
-                     'plane_pt',
-                     'seed_face_index',
-                     'shift',
-                     'int_shift',
-                     'vec_x',
-                     'vec_y']
-    
-        #record the relevant props
-        if cut:
-            for prop in cut_props:
-                undo[prop] = getattr(cut, prop) 
+        if action in repeated_actions:
+            if action == contour_undo_cache[-1][2]:
+                print('repeatable...dont take snapshot')
+                return
+        
+        print('undo: ' + action)    
+        cut_data = copy.deepcopy(self.cut_paths)
+        #perhaps I don't even need to copy this?
+        state = copy.deepcopy(ContourStatePreserver(self))
+        contour_undo_cache.append((cut_data, state, action))
             
-        if action in {'DELETE'}:
-            #Special case, we will actually keep the cut in cache
-            #to put it back later
-            undo['cut'] = cut
+        if len(contour_undo_cache) > self.settings.undo_depth:
+            contour_undo_cache.pop(0)
             
-        elif action == 'SEGMENT':
-            undo['cut'] = None
-        else:
-            undo['cut'] = self.cut_lines.index(cut)
             
-        contour_undo_cache.append(undo)
-        print('the undo cache grew, but this size may be irrelevant because of containers etc')
-        print(sys.getsizeof(contour_undo_cache))
-    
-    def undo_action(self,context):
+
+    def undo_action(self):
         
         if len(contour_undo_cache) > 0:
-            undo = contour_undo_cache.pop()
+            cut_data, op_state, action = contour_undo_cache.pop()
             
-            action = undo['action']
+            self.cut_paths = cut_data
+            op_state.push_state(self)
             
-            #this may be an actual cut line
-            #or it may be an index?
             
-            #these are the props we will recorded about a cut
-            cut_props = ['plane_com',
-                         'plane_no',
-                         'plane_pt',
-                         'seed_face_index',
-                         'shift',
-                         'int_shift',
-                         'vec_x',
-                         'vec_y']
-            
-            if action == 'CREATE':
-                cut = self.cut_lines[undo['cut']]
-                if cut in self.valid_cuts:
-                    self.valid_cuts.remove(cut)
-                if cut in self.cut_lines:
-                    self.cut_lines.remove(cut)
-                    
-                self.connect_valid_cuts_to_make_mesh()
-                    
-            elif action == 'DELETE':
-                #in this circumstance...it's actually a cut
-                cut = undo['cut']
-                self.cut_lines.append(cut)
-                self.sort_cuts()
-                self.connect_valid_cuts_to_make_mesh()
-                
-                
-            elif action in {'TRANSFORM', 'SHIFT','ALIGN'}:
-                cut = self.cut_lines[undo['cut']]
-                for prop in cut_props:
-                    print(prop)
-                    setattr(cut, prop, undo[prop])
-                    
-                    
-                cut.cut_object(context, self.original_form, self.bme)
-                cut.simplify_cross(self.segments)
-                self.align_cut(cut, mode = 'DIRECTION', fine_grain = False)
-                cut.update_screen_coords(context)
-                self.connect_valid_cuts_to_make_mesh()
-                
-            elif action == 'SEGMENT':
-                old_segments = self.segments
-                self.segments = undo['segments']
-                ratio = self.segments/old_segments
-                for cut_line in self.cut_lines:
-                    new_bulk_shift = round((cut_line.int_shift + cut_line.shift) * ratio)
-                    new_fine_shift = ratio * (cut_line.shift + cut_line.int_shift) - new_bulk_shift
-                                
-                    cut_line.int_shift = new_bulk_shift
-                    cut_line.shift = new_fine_shift
-                                
-                    cut_line.simplify_cross(self.segments)
-                    cut_line.update_screen_coords(context)
-                
-                self.connect_valid_cuts_to_make_mesh()
                     
 
   
@@ -1932,13 +1777,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         #a list of all the cut paths (segments)
         self.cut_paths = []
-        self.snapshot = None
         #a list to store screen coords when drawing
         self.draw_cache = []
-        
-        
-        #clear the undo cache...perhaps these will persist over operaotr calls?
-        contour_undo_cache = []
         
         #TODO Settings harmony CODE REVIEW
         self.settings = settings
@@ -2022,9 +1862,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                     #path.update_visibility(context, self.original_form)
                     
-                    
                     self.cut_paths.append(path)
-                    
                     self.existing_loops.append(existing_loop)
                     
                     
@@ -2194,8 +2032,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.hover_target = None
         #keep track of selected cut_line and path
         self.selected = None   #TODO: Change this to selected_loop
-        self.selected_path = None   #TODO: change this to selected_segment
-        
+        if len(self.cut_paths) == 0:
+            self.selected_path = None   #TODO: change this to selected_segment
+        else:
+            print('there is a selected_path')
+            self.selected_path = self.cut_paths[-1] #this would be an existing path from selected geom in editmode
         
         self.cut_line_widget = None  #An object of Class "CutLineManipulator" or None
         self.widget_interaction = False  #Being in the state of interacting with a widget o
@@ -2208,8 +2049,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         if settings.recover:
             print('loading cache!')
-            print(contour_cache['CUT_LINES'])
-            self.load_from_cache(context, 'CUT_LINES', settings.recover_clip)
+            self.undo_action()
+            
+        else:
+            contour_undo_cache = []
+            
+            
         #add in the draw callback and modal method
         self._handle = bpy.types.SpaceView3D.draw_handler_add(retopo_draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
         
