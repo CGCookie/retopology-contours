@@ -117,8 +117,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         for v in self.raw_screen:
             view_vector = region_2d_to_vector_3d(region, rv3d, v)
             ray_origin = region_2d_to_origin_3d(region, rv3d, v)
-            ray_target = ray_origin + (view_vector * 10000) #TODO: make a max ray depth or pull this depth from clip depth
-            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)  
+            
+            ray_start = ray_origin - (2000 * view_vector)
+            ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
+            hit = ob.ray_cast(imx*ray_start, imx*ray_target)  
                 
             if hit[2] != -1:
                 self.raw_world.append(mx * hit[0])
@@ -1936,10 +1938,10 @@ class PolySkecthLine(object):
             
             view_vector = region_2d_to_vector_3d(region, rv3d, v)
             ray_origin = region_2d_to_origin_3d(region, rv3d, v)
-            ray_target = ray_origin + (view_vector * 10000) #TODO: make a max ray depth or pull this depth from clip depth
-
-            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)  
-            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)
+            
+            ray_start = ray_origin - (2000 * view_vector)
+            ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
+            hit = ob.ray_cast(imx*ray_start, imx*ray_target)
                 
             if hit[2] != -1:
             #if previous_hit[2] != -1:
@@ -3389,11 +3391,14 @@ class ContourCutLine(object):
             
             view_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
             ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
-            ray_target = ray_origin + (view_vector * 10000) #TODO: make a max ray depth or pull this depth from clip depth
-
+            
             mx = ob.matrix_world
             imx = mx.inverted()
-            hit = ob.ray_cast(imx*ray_origin, imx*ray_target)    
+            ray_start = ray_origin - (2000 * view_vector)
+            ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
+            hit = ob.ray_cast(imx*ray_start, imx*ray_target)
+
+              
     
             if hit[2] != -1:
                 self.head.world_position = region_2d_to_location_3d(region, rv3d, (self.head.x, self.head.y), mx * hit[0])
