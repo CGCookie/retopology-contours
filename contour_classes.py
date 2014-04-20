@@ -4448,28 +4448,13 @@ class CutLineManipulatorWidget(object):
                     contour_utilities.draw_points(context, [p1_2d, p4_2d, p6_2d], self.color3, 5)
                     contour_utilities.draw_polyline_from_points(context, [p6_2d, p4_2d], self.color ,2 , "GL_STIPPLE")
             
-            
-            #If self.transform_mode != 
-#cut line, a user interactive 2d line which represents a plane in 3d splace
-    #head (type conrol point)
-    #tail (type control points)
-    #target mesh
-    #view_direction (crossed with line to make plane normal for slicing)
-    
-    #draw method
-    
-    #new control point project method
-    
-    #mouse hover line calc
-    
-    
-#retopo object, surface
-    #colelction of cut lines
-    #collection of countours to loft
-    
-    #n rings (crosses borrowed from looptools)
-    #n follows (borrowed from looptools and or bsurfaces)
-    
-    #method contours from cutlines
-    
-    #method bridge contours
+class ContoursStatePreserver(object):
+    def __init__(self, operator):
+        
+        self.mode = operator.mode
+        self.modal_state = operator.modal_state  #should always be waiting?
+        self.selected_path = operator.cut_paths.index(operator.selected_path)
+        self.selected_loop = operator.selected_path.cuts.index(operator.selected)
+        
+        #consider adding nsegments, nlopos etc....but why?
+        

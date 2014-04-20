@@ -52,11 +52,12 @@ import bmesh
 import blf
 import math
 import sys
+import copy
 import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries
+from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
@@ -441,7 +442,12 @@ class ContourToolsAddonPreferences(AddonPreferences):
     sketch_color5 = FloatVectorProperty(name="sketch Color", description="Highlight Color", min=0, max=1, default=(1,.1,.1), subtype="COLOR")
     
     
-    
+    undo_depth = IntProperty(
+            name="Undo Depth",
+            default=10,
+            min = 0,
+            max = 100,
+            )
     
     def draw(self, context):
         layout = self.layout
@@ -1098,6 +1104,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         context.area.tag_redraw()
         settings = context.user_preferences.addons['cgc-retopology'].preferences
         
+        if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
+            self.cut_paths = self.snapshot
+            
         #check messages
         if event.type == 'TIMER':
             now = time.time()
@@ -1277,7 +1286,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         
                     
                     elif self.hover_target  and self.hover_target == self.selected:
-                        
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         self.modal_state = 'WIDGET_TRANSFORM'
                         #sometimes, there is not a widget from the hover?
                         self.cut_line_widget = CutLineManipulatorWidget(context, 
@@ -1303,6 +1313,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #G -> HOTKEY
                     if event.type == 'G' and event.value == 'PRESS':
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'G'
                         self.loop_hotkey_modal(context,event)
@@ -1310,6 +1322,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         return {'RUNNING_MODAL'}
                     #R -> HOTKEY
                     if event.type == 'R' and event.value == 'PRESS':
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'R'
                         self.loop_hotkey_modal(context,event)
@@ -1318,7 +1332,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     #X, DEL -> DELETE
                     elif event.type == 'X' and event.value == 'PRESS':
-                        
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) == 1 and self.selected_path.existing_head):
                             self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
@@ -1406,11 +1421,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     
+                    print('undo')
+                    self.snapshot = copy.deepcopy(self.cut_paths)
                     #the new cut is created
                     #the new cut is assessed to be placed into an existing series
                     #the new cut is assessed to be an extension of selected gemometry
                     #the new cut is assessed to become the beginning of a new path
                     self.release_place_cut(context, settings, event)
+                    
                     
                     #we return to waiting
                     self.modal_state = 'WAITING'
@@ -1585,6 +1603,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 if self.selected_path:
 
                     if event.type in {'X', 'DEL'} and event.value == 'PRESS':
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         self.cut_paths.remove(self.selected_path)
                         self.selected_path = None
                         self.modal_state = 'WAITING'
@@ -1594,7 +1614,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
-                        
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         self.guide_arrow_shift(context, event)
                           
                         #shift entire segment
@@ -1676,8 +1697,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                 if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     if len(self.draw_cache) > 10:
-                    
-                        
+                        print('undo')
+                        self.snapshot = copy.deepcopy(self.cut_paths)
                         for path in self.cut_paths:
                             path.deselect(settings)
                             
@@ -1911,14 +1932,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         #a list of all the cut paths (segments)
         self.cut_paths = []
+        self.snapshot = None
         #a list to store screen coords when drawing
         self.draw_cache = []
         
         
-        #clear the undo cache
+        #clear the undo cache...perhaps these will persist over operaotr calls?
         contour_undo_cache = []
         
-        #TODO Settings harmon CODE REVIEW
+        #TODO Settings harmony CODE REVIEW
         self.settings = settings
         
         #default verts in a loop (spans)
