@@ -4461,16 +4461,14 @@ class ContourStatePreserver(object):
         self.modal_state = operator.modal_state  #should always be waiting?
         
         if operator.selected_path:
-            print('preserving the selected_path')
             self.selected_path = operator.cut_paths.index(operator.selected_path)
-            print(self.selected_path)
+
         else:
             self.selected_path = None
             
         if operator.selected and operator.selected_path:
-            print('preserving the selected loop')
             self.selected_loop = operator.selected_path.cuts.index(operator.selected)
-            print(self.selected_loop)
+
         else:
             self.selected_loop = None
         
@@ -4482,13 +4480,11 @@ class ContourStatePreserver(object):
         operator.modal_state = self.modal_state
         
         if self.selected_path != None:  #because it can be a 0 integer
-            print('pushed the selected path index %i' % self.selected_path)
             operator.selected_path = operator.cut_paths[self.selected_path]
         else:
             operator.selected_path = None
         
         if self.selected_loop != None and self.selected_path != None:
-            print('pushed the selected loop index %i' % self.selected_loop)
             operator.selected = operator.cut_paths[self.selected_path].cuts[self.selected_loop]
         else:
             operator.selected = None

@@ -1646,7 +1646,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
                             self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-     
+                            #selected will hold old reference because all cuts are recreated (dumbly, it should just be the in between ones)
+                            self.selected = self.selected_path.cuts[-1]
                             self.temporary_message_start(context, 'PATH SEGMENTS: %i' % self.selected_path.segments)
                             
                             
