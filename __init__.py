@@ -2065,7 +2065,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #timer for temporary messages
         self._timer = None
         self.msg_start_time = time.time()
-        self.msg_duration = 2
+        self.msg_duration = 1
         
         context.window_manager.modal_handler_add(self)
         
