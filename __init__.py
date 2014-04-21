@@ -50,9 +50,6 @@ else:
     print("Imported multifiles")
 '''
 
-# Create a class that contains all location information for addons
-AL = general_utilities.AddonLocator()
-
 import bpy
 import bmesh
 import blf
@@ -62,11 +59,14 @@ import copy
 import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
-import contour_utilities
+import contour_utilities, general_utilities
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
+
+# Create a class that contains all location information for addons
+AL = general_utilities.AddonLocator()
 
 #a place to store stokes for later
 global contour_cache 
