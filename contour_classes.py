@@ -27,12 +27,15 @@ import time
 import copy
 from mathutils import Vector, Quaternion
 from mathutils.geometry import intersect_point_line, intersect_line_plane
-import contour_utilities
+import contour_utilities, general_utilities
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 import bmesh
 import blf
 
 #from development.cgc-retopology import contour_utilities
+
+#Make the addon name and location accessible
+AL = general_utilities.AddonLocator()
 
 class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, SegmentCuts, SegmentCutSeries?
     def __init__(self, context, raw_points,
@@ -42,7 +45,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                  smooth_factor = 5,
                  feature_factor = 5):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         self.seg_lock = False
         self.ring_lock = False
@@ -270,7 +273,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
     def cuts_on_path(self,context,ob,bme):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         gc = settings.geom_rgb
         lc = settings.stroke_rgb
         vc = settings.vert_rgb
@@ -1353,7 +1356,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
     def draw(self,context, path = True, nodes = True, rings = True, follows = True, backbone = True):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
 
         #TODO:  Debug if None in self.world path.  How could this happen?       
         if path and self.world_path != [] and None not in self.world_path:
@@ -1401,7 +1404,7 @@ class SketchEndPoint(object):
         '''
         end = enum in 'HEAD' or 'TAIL'
         '''
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         if len(parent.raw_world) < 3:
             return None
@@ -1474,7 +1477,7 @@ class ExistingVertList(object):
         key_type - enum in {'EDGES', 'INDS'}
         
         '''
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         gc = settings.geom_rgb
         lc = settings.stroke_rgb
         vc = settings.vert_rgb
@@ -1715,7 +1718,7 @@ class ExistingVertList(object):
             '''
             
             debug = settings.debug
-            #settings = context.user_preferences.addons['cgc-retopology'].preferences
+            #settings = context.user_preferences.addons[AL.FolderName].preferences
             
        
             if debug > 1:
@@ -1789,7 +1792,7 @@ class PolySkecthLine(object):
                  smooth_factor = 5,
                  feature_factor = 5):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         ####IDENTIFIER###
         self.desc = 'SKETCH_LINE'
         self.select = True
@@ -1871,7 +1874,7 @@ class PolySkecthLine(object):
         
 
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         mouse_loc = Vector((x,y))
         
         if self.head:
@@ -1922,7 +1925,7 @@ class PolySkecthLine(object):
         
     def ray_cast_path(self,context, ob):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         self.quad_length = ob.dimensions.length * 1/settings.density_factor
         self.quad_width = self.quad_length
         
@@ -3246,7 +3249,7 @@ class ContourCutLine(object):
         '''
         
         debug = settings.debug
-        #settings = context.user_preferences.addons['cgc-retopology'].preferences
+        #settings = context.user_preferences.addons[AL.FolderName].preferences
         
         #this should be moved to only happen if the view changes :-/  I'ts only
         #a few hundred calcs even with a lot of lines. Waste not want not.
@@ -3360,7 +3363,7 @@ class ContourCutLine(object):
     
     #draw contour points? later    
     def hit_object(self, context, ob, method = 'VIEW'):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         region = context.region  
         rv3d = context.space_data.region_3d
         
@@ -3491,7 +3494,7 @@ class ContourCutLine(object):
         pno = self.plane_no
         indx = self.seed_face_index
         
-        meth = context.user_preferences.addons['cgc-retopology'].preferences.new_method
+        meth = context.user_preferences.addons[AL.FolderName].preferences.new_method
         if pt and pno:
             cross = contour_utilities.cross_section_seed(bme, mx, pt, pno, indx, debug = True, method = meth)   
             if cross:
@@ -3841,7 +3844,7 @@ class ContourCutLine(object):
                 self.int_shift = 0
                 
     def active_element(self,context,x,y):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         if self.head: #this makes sure the head and tail haven't been removed
             active_head = self.head.mouse_over(x, y)
@@ -4353,7 +4356,7 @@ class CutLineManipulatorWidget(object):
                               
     def draw(self, context):
         
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
