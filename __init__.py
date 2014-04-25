@@ -1684,9 +1684,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             
                             
                         else:
-                            half = math.floor(self.selected_path.segments/2)
+                            half = math.floor(len(self.selected_path.cuts)/2)
                             
-                            if math.fmod(self.selected_path.segments, 2):  #5 segments is 6 rings
+                            if math.fmod(len(self.selected_path.cuts), 2):  #5 segments is 6 rings
                                 loc = 0.5 * (self.selected_path.cuts[half].plane_com + self.selected_path.cuts[half+1].plane_com)
                             else:
                                 loc = self.selected_path.cuts[half].plane_com

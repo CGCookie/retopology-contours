@@ -1331,11 +1331,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 if i > 0:
                     self.align_cut(cut, mode='BEHIND', fine_grain = True)
             
+            #HACK: Should this happen later on a path basis?
             if len(merge_series.cuts) > 1:
-                print('really?')
                 self.cuts.reverse()
+                for cut in self.cuts:
+                    cut.plane_no = -1 * cut.plane_no
                 
-            merge_series.cuts.extend(self.cuts)
+            merge_series.cuts = self.cuts + merge_series.cuts
     
         elif not ind: #we are snapping to an existing vert list
             print('aligned other cut?')
