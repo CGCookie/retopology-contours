@@ -31,22 +31,25 @@ bl_info = {
     "tracker_url": "https://github.com/CGCookie/script-bakery/issues?labels=Contour+Retopology&milestone=1&page=1&state=open",
     "category": "3D View"}
 
-import sys, os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'cgc-retopology'))    
+# Add the current __file__ path to the search path
+import sys,os
+sys.path.append(os.path.dirname(__file__))
 
 '''    
 if "bpy" in locals():
     import imp
     imp.reload(contour_classes)
     imp.reload(contour_utilities)
+    imp.reload(general_utilities)
 
     print("Reloaded multifiles")
     
 else:
-    from . import contour_classes,  contour_utilities
+    from . import contour_classes,  contour_utilities, general_utilities
     
     print("Imported multifiles")
 '''
+
 import bpy
 import bmesh
 import blf
@@ -56,13 +59,14 @@ import copy
 import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
-import contour_utilities
+import contour_utilities, general_utilities
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
 
-
+# Create a class that contains all location information for addons
+AL = general_utilities.AddonLocator()
 
 #a place to store stokes for later
 global contour_cache 
@@ -593,7 +597,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         col = box.column()
         col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
         
-        cgc_contour = context.user_preferences.addons['cgc-retopology'].preferences
+        cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
         
         row = box.row()
         row.prop(cgc_contour, "vertex_count")
@@ -641,7 +645,7 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
     
 def retopo_draw_callback(self,context):
     
-    settings = context.user_preferences.addons['cgc-retopology'].preferences
+    settings = context.user_preferences.addons[AL.FolderName].preferences
 
     stroke_color = settings.stroke_rgb
     handle_color = settings.handle_rgb
@@ -1102,7 +1106,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     
     def modal(self, context, event):
         context.area.tag_redraw()
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
             self.temporary_message_start(context, "Undo Action")
@@ -1767,7 +1771,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
   
     def invoke(self, context, event):
         #TODO Settings harmon CODE REVIEW
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         self.valid_cut_inds = []
         self.existing_loops = []
@@ -2062,7 +2066,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #timer for temporary messages
         self._timer = None
         self.msg_start_time = time.time()
-        self.msg_duration = 2
+        self.msg_duration = 1
         
         context.window_manager.modal_handler_add(self)
         
@@ -2114,7 +2118,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
     def modal(self, context, event):
         context.area.tag_redraw()
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         
         
@@ -2545,7 +2549,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
     
     
     def intersect_strokes(self,context, stroke1, stroke2):
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
 
         return_strokes = []
         inter_dict1 = {}
@@ -2704,7 +2708,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #HINT you are in the poly sketch code
         
         #TODO Settings harmon CODE REVIEW
-        settings = context.user_preferences.addons['cgc-retopology'].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
         #TODO Settings harmon CODE REVIEW
         self.settings = settings
@@ -2949,7 +2953,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
 addon_keymaps = []
 
 
-#resgistration
+#registration
 def register():
     bpy.utils.register_class(ContourToolsAddonPreferences)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_panel)
