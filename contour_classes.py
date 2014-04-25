@@ -4365,11 +4365,11 @@ class CutLineManipulatorWidget(object):
         
         if self.a:
             contour_utilities.draw_3d_points(context, [self.a], self.color3, 5)
-        if self.path_ahead and self.path_ahead != []:
+        if self.path_ahead and self.path_ahead != [] and settings.debug > 1:
             contour_utilities.draw_3d_points(context, self.path_ahead, self.color5, 6)
         if self.b:
             contour_utilities.draw_3d_points(context, [self.b], self.color3, 5)
-        if self.path_behind and self.path_behind != []:
+        if self.path_behind and self.path_behind != [] and settings.debug > 1:
             contour_utilities.draw_3d_points(context, self.path_behind, self.color3, 6)
             
         if not self.transform and not self.hotkey:
