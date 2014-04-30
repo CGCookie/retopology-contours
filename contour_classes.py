@@ -1953,7 +1953,7 @@ class PolySkecthLine(object):
             view_vector = region_2d_to_vector_3d(region, rv3d, v)
             ray_origin = region_2d_to_origin_3d(region, rv3d, v)
             
-            ray_start = ray_origin - (2000 * view_vector)
+            ray_start = ray_origin - (2000 * view_vector) #HACK, sometimes w/o the -2000 correction, rays do not cast
             ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
             hit = ob.ray_cast(imx*ray_start, imx*ray_target)
                 

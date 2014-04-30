@@ -983,6 +983,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.update_visibility(context, self.original_form)
                             path.seg_lock = True
                             path.do_select(settings)
+                            path.unhighlight(settings)
                             self.selected_path = path
                             self.cut_lines.remove(self.selected)
                             for other_path in self.cut_paths:
@@ -1012,6 +1013,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     path.do_select(settings)
                     
                     self.cut_lines.remove(self.selected)
+                    
+                    if self.force_new:
+                        self.force_new = False
             
             else:
                 self.cut_lines.remove(self.selected)
@@ -1184,7 +1188,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                       event.value == 'PRESS'):
                     
                     self.mode = 'GUIDE'
-                    self.selected = None
+                    self.selected = None  #WHY?
+                    if self.selected_path:
+                        self.selected_path.highlight(settings)
                     
                 elif event.type == 'N' and event.value == 'PRESS':
                     self.force_new = self.force_new != True
@@ -1268,7 +1274,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
-                    self.temporary_message_start(context, 'NAVIGATING')
+                    self.temporary_message_start(context, self.mode + ': NAVIGATING')
 
                     return {'PASS_THROUGH'}
                 elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
@@ -1582,6 +1588,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                 elif event.type == 'TAB' and event.value == 'PRESS':
                     self.mode = 'LOOP'
+                    self.snap_circle = []
+                    
+                    if self.selected_path:
+                        self.selected_path.unhighlight(settings)
                     return {'RUNNING_MODAL'}
                 
                 elif event.type == 'C' and event.value == 'PRESS':
@@ -2083,7 +2093,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #timer for temporary messages
         self._timer = None
         self.msg_start_time = time.time()
-        self.msg_duration = 1
+        self.msg_duration = .75
         
         context.window_manager.modal_handler_add(self)
         
