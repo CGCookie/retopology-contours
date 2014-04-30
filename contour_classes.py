@@ -103,7 +103,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.unhighlight(settings)
          
     def highlight(self,settings):
-        #self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
         self.line_thickness = settings.line_thick + 1
         
     def unhighlight(self,settings):
@@ -1273,7 +1273,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         dists = [(self.raw_world[0] - v).length for v in merge_ring.verts_simple]
         best_index = dists.index(min(dists))
     
-        #snap the world path the that vert
+        #snap the world path to that vert
         self.raw_world = contour_utilities.fit_path_to_endpoints(self.raw_world, merge_ring.verts_simple[best_index], self.raw_world[-1])
         self.smooth_path(context, ob = ob)
         self.ring_segments = merge_series.ring_segments
@@ -1284,8 +1284,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             #has an existing head.
             segment_width = (merge_ring.verts_simple[1] -  merge_ring.verts_simple[0]).length
             ind = None
+            print('MERGE TO EXISTING VERTS')
+        
         else:
-            
             ind = merge_series.cuts.index(merge_ring)
         
             #establish the segment length
@@ -1304,7 +1305,17 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     
         self.create_cut_nodes(context, knots = False)
         
+        
+                
+        
+        self.snap_to_object(ob, raw = False, world = False, cuts = True)
+        self.cuts_on_path(context,ob,bme)
+        self.cuts.pop(0)
+        
+        #if one existing cut....can go either way
+        #make the first cut match the path direction
         if not self.existing_head and ind == 0 and len(merge_series.cuts) == 1:
+            print('MERGING TO THE ONE AND ONLY CUT')
             p_dir = self.cut_points[1] - self.cut_points[0]
             p_dir.normalize
             if merge_ring.plane_no.dot(p_dir) < 0:
@@ -1317,11 +1328,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 merge_ring.verts_simple = contour_utilities.list_shift(merge_ring.verts_simple,-1)
                 merge_ring.shift *= -1
                 merge_ring.plane_no = -1 * merge_ring.plane_no
-                
-        
-        self.snap_to_object(ob, raw = False, world = False, cuts = True)
-        self.cuts_on_path(context,ob,bme)
-        self.cuts.pop(0)
     
         #join the series and align them
         if ind == 0:
@@ -1337,7 +1343,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 for cut in self.cuts:
                     cut.plane_no = -1 * cut.plane_no
                 
-            merge_series.cuts = self.cuts + merge_series.cuts
+                merge_series.cuts = self.cuts + merge_series.cuts
+                
+            else:
+                merge_series.cuts.extend(self.cuts)
     
         elif not ind: #we are snapping to an existing vert list
             print('aligned other cut?')
