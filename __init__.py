@@ -1161,7 +1161,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
                 self.modal_state = 'WAITING'
                 self.post_update = True
-                self.temporary_message_start(context, self.mode + ': NAVIGATING')
                 return {'PASS_THROUGH'}
             
             if (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
@@ -1301,8 +1300,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             for path in self.cut_paths:
                                 for cut in path.cuts:
                                         cut.deselect(settings)  
-                                if self.selected in path.cuts:
+                                if self.selected in path.cuts and path != self.selected_path:
                                     path.do_select(settings)
+                                    path.unhighlight(settings)
                                     self.selected_path = path
                                 else:
                                     path.deselect(settings)
