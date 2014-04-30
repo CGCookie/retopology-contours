@@ -1728,7 +1728,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.deselect(settings)
                             
                         self.selected_path  = self.new_path_from_draw(context, settings)
+                        self.selected_path.do_select(settings)
                         self.selected = self.selected_path.cuts[-1]
+                        self.selected.do_select(settings)
                         
                         self.drag = False #TODO: is self.drag still needed?
                         self.force_new = False
