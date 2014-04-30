@@ -210,6 +210,12 @@ class ContourToolsAddonPreferences(AddonPreferences):
             default=False,
             )
     
+    show_experimental = BoolProperty(
+            name="Show Experimental Func's",
+            description = "Show experimental function, useful for experimenting",
+            default=False,
+            )
+    
     vert_size = IntProperty(
             name="Vertex Size",
             default=3,
@@ -496,30 +502,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
         row = box.row(align=True)
         row.prop(self, "show_cut_indices", text = "Edge Indices")
 
-        #Poly Sketch Settings
-        box = layout.box().column(align=False)
-        row = box.row()
-        row.label(text="Poly Sketch/Stroke Settings")
         
-        
-        row = box.row()
-        row.prop(self, "extend_radius", text="Snap Radius")
-        row.prop(self, "cull_factor", text="Cull Factor")
-        row.prop(self, "intersect_threshold", text="Intersection Threshold")
-        row.prop(self, "density_factor", text="Density Factor")
-        
-        row = box.row()
-        row.prop(self, "merge_threshold", text="Merge Threshold")
-        row.prop(self, "smooth_factor", text="Smooth Factor")
-        row.prop(self, "feature_factor", text="Smooth Factor")
-        
-        
-        row = box.row()
-        row.prop(self, "sketch_color1", text="Color 1")
-        row.prop(self, "sketch_color2", text="Color 2")
-        row.prop(self, "sketch_color3", text="Color 3")
-        row.prop(self, "sketch_color4", text="Color 4")
-        row.prop(self, "sketch_color5", text="Color 5")
             
         
         # Widget Settings
@@ -548,6 +531,37 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row.prop(self, "widget_color4", text="Color 4")
             row.prop(self, "widget_color5", text="Color 5")
 
+        #Poly Sketch Settings/Experiemtnal
+        box = layout.box().column(align=False)
+        row = box.row()
+        if self.show_experimental:
+            row.label(text="Poly Strip Settings")
+        else:
+            row.label(text="Experimental Settings")
+        
+        row = box.row()
+        row.prop(self, "show_experimental")
+        
+        if self.show_experimental:
+            row = box.row()
+            row.prop(self, "extend_radius", text="Snap Radius")
+            row.prop(self, "cull_factor", text="Cull Factor")
+            row.prop(self, "intersect_threshold", text="Intersection Threshold")
+            row.prop(self, "density_factor", text="Density Factor")
+            
+            row = box.row()
+            row.prop(self, "merge_threshold", text="Merge Threshold")
+            row.prop(self, "smooth_factor", text="Smooth Factor")
+            row.prop(self, "feature_factor", text="Smooth Factor")
+            
+            
+            row = box.row()
+            row.prop(self, "sketch_color1", text="Color 1")
+            row.prop(self, "sketch_color2", text="Color 2")
+            row.prop(self, "sketch_color3", text="Color 3")
+            row.prop(self, "sketch_color4", text="Color 4")
+            row.prop(self, "sketch_color5", text="Color 5")
+        
         # Debug Settings
         box = layout.box().column(align=False)
         row = box.row()
@@ -612,12 +626,13 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         col = box.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
         
-        box = layout.box()
-        row = box.row()
-        row.operator("cgcookie.retopo_poly_sketch", icon='MESH_UVSPHERE')
+        if cgc_contour.show_experimental:
+            box = layout.box()
+            row = box.row()
+            row.operator("cgcookie.retopo_poly_sketch", icon='MESH_UVSPHERE')
         
-        row = box.row()
-        row.prop(cgc_contour, "density_factor")
+            row = box.row()
+            row.prop(cgc_contour, "density_factor")
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):  
     bl_label = "Retopology"
