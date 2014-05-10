@@ -854,12 +854,17 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.hover_target = h_target
                             if self.hover_target.desc == 'CUT_LINE':
 
-                                if self.hover_target.select:    
+                                if self.hover_target.select:
+                                    for possible_parent in self.cut_paths:
+                                        if self.hover_target in possible_parent.cuts:
+                                            parent_path = possible_parent
+                                            break
+                                            
                                     self.cut_line_widget = CutLineManipulatorWidget(context, 
                                                                                     settings,
                                                                                     self.original_form, self.bme,
                                                                                     self.hover_target,
-                                                                                    self.selected_path,
+                                                                                    parent_path,
                                                                                     event.mouse_region_x,
                                                                                     event.mouse_region_y)
                                     self.cut_line_widget.derive_screen(context)

@@ -103,7 +103,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.unhighlight(settings)
          
     def highlight(self,settings):
-        self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        #self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
         self.line_thickness = settings.line_thick + 1
         
     def unhighlight(self,settings):
@@ -4153,9 +4153,9 @@ class CutLineManipulatorWidget(object):
                         elif not self.b and world_vec.dot(vec_a_dir) < 0:
                             translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
                             self.cut_line.plane_com = self.initial_com + translate
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
-                            if proposed_point:
-                                
+                            intersect = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')
+                            if intersect[0]:
+                                proposed_point = intersect[0]
                                 snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                                 self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
                                 self.cut_line.seed_face_index = snap[2]
