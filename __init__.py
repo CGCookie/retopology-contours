@@ -2083,8 +2083,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.hot_key = None  #Keep track of which hotkey was pressed
         self.draw = False  #Being in the state of drawing a guide stroke
         
-        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor'
-        self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments'
+        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, TAB: toggle Guide mode'
+        self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments, TAB: toggle Loop mode'
         context.area.header_text_set(self.loop_msg)
         
         if settings.recover:
