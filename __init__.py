@@ -383,6 +383,19 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max = 10,
             )
     
+    mirror_x = BoolProperty(
+            name = "X",
+            description = "Enable X axis mirror",
+            default = False)
+    mirror_y = BoolProperty(
+            name = "Y",
+            description = "Enable Y axis mirror",
+            default = False)
+    mirror_z = BoolProperty(
+            name = "Z",
+            description = "Enable Z axis mirror",
+            default = False)
+    
     search_factor = FloatProperty(
             name = "Search Factor",
             description = "Percentage of object distance to search for new cuts",
@@ -622,6 +635,11 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         row = box.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
+        
+        row = box.row()
+        row.prop(cgc_contour, "mirror_x")
+        row.prop(cgc_contour, "mirror_y")
+        row.prop(cgc_contour, "mirror_z")
 
         col = box.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
@@ -1232,6 +1250,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             context.space_data.region_3d.view_rotation = view_rot
                             context.space_data.region_3d.view_distance = view_dist
                             context.space_data.region_3d.update()
+                        
+                        bpy.ops.object.modifier_add(type='MIRROR')
+                        context.active_object.modifiers['Mirror'].use_x = settings.mirror_x
+                        context.active_object.modifiers['Mirror'].use_y = settings.mirror_y
+                        context.active_object.modifiers['Mirror'].use_z = settings.mirror_z
                             
                     context.area.header_text_set()
                     contour_utilities.callback_cleanup(self,context)

@@ -30,3 +30,6 @@ class AddonLocator(object):
     def AppendPath(self):
         sys.path.append(self.FolderPath)
         print("Addon path has been registered into system path for this session")
+
+def range_mod(m):
+    for i in range(m): yield(i,(i+1)%m)

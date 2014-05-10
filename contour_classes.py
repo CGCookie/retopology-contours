@@ -31,6 +31,7 @@ import contour_utilities, general_utilities
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 import bmesh
 import blf
+import itertools
 
 #from development.cgc-retopology import contour_utilities
 
@@ -3334,31 +3335,55 @@ class ContourCutLine(object):
         
         
         
-        if False not in self.verts_simple_visible:
-                contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
-                contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
-                
-                if self.edges != [] and 0 in self.edges[-1]:
+        if all(self.verts_simple_visible):
+            contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
+            contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
+            
+            if self.edges != [] and 0 in self.edges[-1]:
+                contour_utilities.draw_polyline_from_3dpoints(context, 
+                                                              [self.verts_simple[-1],self.verts_simple[0]], 
+                                                              self.geom_color,  
+                                                              settings.line_thick, 
+                                                              'GL_LINE_STIPPLE')
+            
+        else:
+            verts,verts_vis = self.verts_simple,self.verts_simple_visible
+            sz = len(verts)
+            
+            verts_simple = [vert for vert,vis in zip(verts, verts_vis) if vis]
+            contour_utilities.draw_3d_points(context, verts_simple, self.vert_color, settings.vert_size)
+            
+            for i0,i1 in general_utilities.range_mod(sz):
+                if verts_vis[i0] and verts_vis[i1]:
                     contour_utilities.draw_polyline_from_3dpoints(context, 
-                                                                  [self.verts_simple[-1],self.verts_simple[0]], 
+                                                                  [verts[i0],verts[i1]], 
                                                                   self.geom_color,  
                                                                   settings.line_thick, 
                                                                   'GL_LINE_STIPPLE')
             
-        else:
-            for i, v in enumerate(self.verts_simple):
-                if self.verts_simple_visible[i]:
-                    contour_utilities.draw_3d_points(context, [v], self.vert_color, settings.vert_size)
-                        
-                    if i < len(self.verts_simple) - 1 and self.verts_simple_visible[i+1]:
-                        contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], self.geom_color, settings.line_thick, 'GL_LINE_STIPPLE')
-        
-            if self.edges != [] and 0 in self.edges[-1] and self.verts_simple_visible[0] and self.verts_simple_visible[-1]:
-                    contour_utilities.draw_polyline_from_3dpoints(context, 
-                                                                  [self.verts_simple[-1],self.verts_simple[0]], 
-                                                                  self.geom_color,  
-                                                                  settings.line_thick, 
-                                                                  'GL_LINE_STIPPLE')
+            if settings.mirror_x or settings.mirror_y or settings.mirror_z:
+                Q = context.active_object.rotation_euler.to_quaternion()
+                Qi = Q.inverted()
+                xms = [1,-1] if settings.mirror_x else [1]
+                yms = [1,-1] if settings.mirror_y else [1]
+                zms = [1,-1] if settings.mirror_z else [1]
+                for xm,ym,zm in itertools.product(xms,yms,zms):
+                    if xm == 1 and ym == 1 and zm == 1: continue
+                    for i0,i1 in general_utilities.range_mod(sz):
+                        v0,v1 = Qi*Vector(verts[i0]),Qi*Vector(verts[i1])
+                        v0.x *= xm
+                        v1.x *= xm
+                        v0.x *= ym
+                        v1.y *= ym
+                        v0.z *= zm
+                        v1.z *= zm
+                        v0 = Q * v0
+                        v1 = Q * v1
+                        contour_utilities.draw_polyline_from_3dpoints(context, 
+                                                                      [v0.to_tuple(), v1.to_tuple()], 
+                                                                      self.geom_color,  
+                                                                      settings.line_thick, 
+                                                                      'GL_LINE_STIPPLE')
         
                 
         if debug:
