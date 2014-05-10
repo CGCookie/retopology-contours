@@ -357,7 +357,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
             )
     
     cut_count = IntProperty(
-            name = "Vertex Count",
+            name = "Ring Count",
             description = "The Number of Cuts Per Guide Stroke",
             default=10,
             min = 3,
@@ -615,6 +615,9 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         
         row = box.row()
         row.prop(cgc_contour, "vertex_count")
+        
+        row = box.row()
+        row.prop(cgc_contour, "cut_count")
 
         row = box.row()
         row.prop(cgc_contour, "cyclic")
@@ -881,6 +884,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         TODO: What if errors?
         '''
         path = ContourCutSeries(context, self.draw_cache,
+                                    segments = settings.cut_count,
+                                    ring_segments = settings.vertex_count,
                                     cull_factor = settings.cull_factor, 
                                     smooth_factor = settings.smooth_factor,
                                     feature_factor = settings.feature_factor)
@@ -891,12 +896,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             print('NO RAW PATH')
             return None
         path.find_knots()
-        
-        #if self.existing_loops != [] and not self.force_new:
-        #    for eloop in self.existing_loops:
-        #        used = path.snap_end_to_existing(eloop)
-        #        if used:
-        #            break
         
         if self.snap != [] and not self.force_new:
             merge_series = self.snap[0]
