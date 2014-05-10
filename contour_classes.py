@@ -4480,7 +4480,7 @@ class ContourStatePreserver(object):
         else:
             self.selected_path = None
             
-        if operator.selected and operator.selected_path and operator.selected in operator.cuts:
+        if operator.selected and operator.selected_path and operator.selected in operator.selected_path.cuts:
             self.selected_loop = operator.selected_path.cuts.index(operator.selected)
 
         else:

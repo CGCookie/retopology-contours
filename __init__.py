@@ -1001,6 +1001,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     path.insert_new_cut(context, self.original_form, self.bme, self.selected)
                     path.seg_lock = True  #for now
+                    path.segments = 1
+                    path.ring_segments = len(self.selected.verts_simple)
                     path.connect_cuts_to_make_mesh(self.original_form)
                     path.update_visibility(context, self.original_form)
                     
