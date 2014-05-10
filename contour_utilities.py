@@ -2464,8 +2464,10 @@ def cross_section_seed(bme, mx,
     calc_time = time.time()
     
     print('the new method was used: %r' % method)
-    print('%i verts were found in %f seconds' % (len(ret[0]), (calc_time - start)))
-
+    if ret[0]:
+        print('%i verts were found in %f seconds' % (len(ret[0]), (calc_time - start)))
+    else:
+        print('Cutting failed')
     
     return ret
 
