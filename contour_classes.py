@@ -1170,6 +1170,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         ind = self.cuts.index(cut)
         ahead = ind + 1
         behind = ind - 1
+        
+        
                 
         if ahead != len(self.cuts):
             cut.align_to_other(self.cuts[ahead], auto_align = fine_grain)
@@ -1219,8 +1221,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         elif mode == 'BACKWARD':
             if shift_b:
                 cut.shift = shift_b
-                
         
+        if shift_a:        
+            if cut.plane_no.dot(self.cuts[ahead].plane_no) < 0:
+                cut.plane_no = -1 * cut.plane_no
+        
+        elif shift_b:
+            if cut.plane_no.dot(self.cuts[behind].plane_no) < 0:
+                cut.plane_no = -1 * cut.plane_no
   
     def sort_cuts(self):
         '''
