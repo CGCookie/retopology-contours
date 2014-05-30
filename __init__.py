@@ -129,7 +129,8 @@ def clear_mesh_cache():
     
     if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
         old_obj = contour_mesh_cache['tmp']
-        bpy.data.objects.remove(old_obj)
+        if old_obj and old_obj in bpy.data.objects:
+            bpy.data.objects.remove(old_obj)
         del contour_mesh_cache['tmp']
         
 class ContourToolsAddonPreferences(AddonPreferences):
