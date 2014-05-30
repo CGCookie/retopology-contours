@@ -385,10 +385,10 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     search_factor = FloatProperty(
             name = "Search Factor",
-            description = "Percentage of object distance to search for new cuts",
-            default=.2,
+            description = "Factor of existing segment length to connect a new cut",
+            default=5,
             min = 0,
-            max = 1,
+            max = 30,
             )
         
     intersect_threshold = FloatProperty(
@@ -501,9 +501,6 @@ class ContourToolsAddonPreferences(AddonPreferences):
 
         row = box.row(align=True)
         row.prop(self, "show_cut_indices", text = "Edge Indices")
-
-        
-            
         
         # Widget Settings
         box = layout.box().column(align=False)
@@ -552,8 +549,8 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row = box.row()
             row.prop(self, "merge_threshold", text="Merge Threshold")
             row.prop(self, "smooth_factor", text="Smooth Factor")
-            row.prop(self, "feature_factor", text="Smooth Factor")
-            
+            row.prop(self, "feature_factor", text="Feature Factor")
+            row.prop(self, "search_factor", text="Search Factor")
             
             row = box.row()
             row.prop(self, "sketch_color1", text="Color 1")
@@ -985,7 +982,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 if self.cut_paths != [] and not self.force_new:
                     
                     for path in self.cut_paths:
-                        if path.insert_new_cut(context, self.original_form, self.bme, self.selected):
+                        if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor):
                             #the cut belongs to the series now
                             inserted = True
                             path.connect_cuts_to_make_mesh(self.original_form)
@@ -1009,7 +1006,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     smooth_factor = settings.smooth_factor,
                                     feature_factor = settings.feature_factor)
                     
-                    path.insert_new_cut(context, self.original_form, self.bme, self.selected)
+                    path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
                     path.seg_lock = True  #for now
                     path.segments = 1
                     path.ring_segments = len(self.selected.verts_simple)

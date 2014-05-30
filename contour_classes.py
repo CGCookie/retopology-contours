@@ -853,7 +853,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
             self.follow_vis = visibility_list
             
-    def insert_new_cut(self,context, ob, bme, new_cut):
+    def insert_new_cut(self,context, ob, bme, new_cut, search = 5):
         '''
         attempts to find the best placement for a new cut
         the cut should have already calced verts_simple, 
@@ -907,7 +907,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 diag += l * l
                 
             diag = diag ** .5 
-            thresh = 4 * diag  #TODO: Come to a decision on how to determine distance
+            thresh = search * diag  #TODO: Come to a decision on how to determine distance
             
             vec_between = new_cut.plane_com - cut.plane_com
             
@@ -1048,10 +1048,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if len(self.cuts) > 1:
             spine = self.backbone[1:-1]
             spine_length = sum([contour_utilities.get_path_length(vertebra) for vertebra in spine])
-            fraction = 5 * spine_length /  (len(self.cuts) - 1 + 1 * (self.existing_head != None))
+            fraction = search * spine_length /  (len(self.cuts) - 1 + 1 * (self.existing_head != None))
         
         elif self.existing_head and len(self.cuts) == 1:
-            fraction = 4 * (self.existing_head.plane_com - self.cuts[0].plane_com).length  
+            fraction = search * (self.existing_head.plane_com - self.cuts[0].plane_com).length  
         
         if not inserted and not self.existing_head:
             
