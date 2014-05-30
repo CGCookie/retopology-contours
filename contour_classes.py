@@ -887,11 +887,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         if (len(self.cuts) == 1 and not self.existing_head) or (self.existing_head and len(self.cuts) == 0):
             
-            #How do we decide how close it shoud be?
-            #for now 4x the bounding box diag of the first cut
-            #the smaller the outline,the less distance
-            #perhaps a visualized circle would be nice?
-            #should this be a setting?  Should we just pick one and go with it
+            #criteria for extension existing cut to new cut
+            #A) The distance between the com is < 4 * the bbox diagonal of the existing cut
+            #B) The angle between the existing cut normal and the line between com's is < 60 deg
+            
+            
             
             if len(self.cuts) == 1:
                 cut = self.cuts[0]
@@ -911,7 +911,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
             vec_between = new_cut.plane_com - cut.plane_com
             
-            if vec_between.length < thresh:
+            #absolute value of dot product between line between com and plane normal
+            ang = abs(vec_between.normalized().dot(cut.plane_no))
+            
+            if ang < math.sin(math.pi/3):
+                print('too wide, aim better')
+                print(ang)
+            
+            if vec_between.length < thresh and ang > math.sin(math.pi/3):
                 
                 self.segments += 1
                 self.cuts.append(new_cut)
@@ -953,6 +960,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.backbone_from_cuts(context, ob, bme)
                 inserted = True
                 return inserted
+            
+            else:
+                return False
         
         
         if self.existing_head and len(self.cuts) > 0:
@@ -1042,8 +1052,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         elif self.existing_head and len(self.cuts) == 1:
             fraction = 4 * (self.existing_head.plane_com - self.cuts[0].plane_com).length  
-        
-        print('fraction: %f' % fraction)
         
         if not inserted and not self.existing_head:
             
