@@ -2084,8 +2084,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
        
         if settings.use_x_ray:
             self.orig_x_ray = self.destination_ob.show_x_ray
-            self.destination_ob.show_x_ray = True
-            
+            self.destination_ob.show_x_ray = True     
             
         ####MODE, UI, DRAWING, and MODAL variables###
         self.mode = 'LOOP'
@@ -2124,7 +2123,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.hot_key = None  #Keep track of which hotkey was pressed
         self.draw = False  #Being in the state of drawing a guide stroke
         
-        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, N: Forece New Segment, TAB: toggle Guide mode'
+        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, N: Force New Segment, TAB: toggle Guide mode'
         self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments, TAB: toggle Loop mode'
         context.area.header_text_set(self.loop_msg)
         
@@ -2989,6 +2988,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
        
         if settings.use_x_ray:
             self.orig_x_ray = self.destination_ob.show_x_ray
+
             self.destination_ob.show_x_ray = True
             
         #is the mouse clicked and held down
