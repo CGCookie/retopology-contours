@@ -212,8 +212,8 @@ class ContourToolsAddonPreferences(AddonPreferences):
             )
     
     show_experimental = BoolProperty(
-            name="Show Experimental Func's",
-            description = "Show experimental function, useful for experimenting",
+            name="Enable Experimental",
+            description = "Enable experimental features and functions that are still in development, useful for experimenting and likely to crash",
             default=False,
             )
     
@@ -532,10 +532,8 @@ class ContourToolsAddonPreferences(AddonPreferences):
         #Poly Sketch Settings/Experiemtnal
         box = layout.box().column(align=False)
         row = box.row()
-        if self.show_experimental:
-            row.label(text="Poly Strip Settings")
-        else:
-            row.label(text="Experimental Settings")
+
+        row.label(text="Experimental Features and Settings")
         
         row = box.row()
         row.prop(self, "show_experimental")
@@ -651,7 +649,7 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
         layout.operator_context = 'INVOKE_DEFAULT'
 
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
-        
+
         layout.operator("cgcookie.retop_contour")
         if cgc_contour.show_experimental:
             layout.operator("cgcookie.retopo_poly_sketch")
