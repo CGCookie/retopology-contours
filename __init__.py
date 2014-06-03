@@ -1200,6 +1200,13 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     if self.selected_path:
                         self.selected_path.highlight(settings)
                     
+                    if self._timer:
+                        context.window_manager.event_timer_remove(self._timer)
+                        self._timer = None
+                
+                    
+                    context.area.header_text_set(text = self.guide_msg)
+                
                 elif event.type == 'N' and event.value == 'PRESS':
                     self.force_new = self.force_new != True
                     #self.selected_path = None
@@ -1611,6 +1618,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     if self.selected_path:
                         self.selected_path.unhighlight(settings)
+                        
+                    if self._timer:
+                        context.window_manager.event_timer_remove(self._timer)
+                        self._timer = None
+                
+                    context.area.header_text_set(text = self.loop_msg)
                     return {'RUNNING_MODAL'}
                 
                 elif event.type == 'C' and event.value == 'PRESS':
