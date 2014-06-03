@@ -1031,7 +1031,47 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 self.cut_lines.remove(self.selected)
                     
       
-            #TODO - Extension of existing geometry
+            
+    
+    def finish_mesh(self, context):
+        back_to_edit = context.mode == 'EDIT_MESH'
+                    
+        #This is where all the magic happens
+        for path in self.cut_paths:
+            path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
+            
+        if back_to_edit:
+            bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
+        
+        else:
+            #write the data into the object
+            self.dest_bme.to_mesh(self.dest_me)
+        
+            #remember we created a new object
+            context.scene.objects.link(self.destination_ob)
+            
+            self.destination_ob.select = True
+            context.scene.objects.active = self.destination_ob
+            
+            if context.space_data.local_view:
+                view_loc = context.space_data.region_3d.view_location.copy()
+                view_rot = context.space_data.region_3d.view_rotation.copy()
+                view_dist = context.space_data.region_3d.view_distance
+                bpy.ops.view3d.localview()
+                bpy.ops.view3d.localview()
+                #context.space_data.region_3d.view_matrix = mx_copy
+                context.space_data.region_3d.view_location = view_loc
+                context.space_data.region_3d.view_rotation = view_rot
+                context.space_data.region_3d.view_distance = view_dist
+                context.space_data.region_3d.update()
+                
+        context.area.header_text_set()
+        contour_utilities.callback_cleanup(self,context)
+        if self._timer:
+            context.window_manager.event_timer_remove(self._timer)
+
+        return {'FINISHED'}
+        
     def widget_transform(self,context,settings, event):
         
         self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y, shift = event.shift)
@@ -1219,43 +1259,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
                     event.value == 'PRESS'):
                     
-                    back_to_edit = context.mode == 'EDIT_MESH'
-                    
-                    #This is wehre all the magic happens
-                    for path in self.cut_paths:
-                        path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
-                        
-                    if back_to_edit:
-                        bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
-                    
-                    else:
-                        #write the data into the object
-                        self.dest_bme.to_mesh(self.dest_me)
-                    
-                        #remember we created a new object
-                        context.scene.objects.link(self.destination_ob)
-                        
-                        self.destination_ob.select = True
-                        context.scene.objects.active = self.destination_ob
-                        
-                        if context.space_data.local_view:
-                            view_loc = context.space_data.region_3d.view_location.copy()
-                            view_rot = context.space_data.region_3d.view_rotation.copy()
-                            view_dist = context.space_data.region_3d.view_distance
-                            bpy.ops.view3d.localview()
-                            bpy.ops.view3d.localview()
-                            #context.space_data.region_3d.view_matrix = mx_copy
-                            context.space_data.region_3d.view_location = view_loc
-                            context.space_data.region_3d.view_rotation = view_rot
-                            context.space_data.region_3d.view_distance = view_dist
-                            context.space_data.region_3d.update()
-                            
-                    context.area.header_text_set()
-                    contour_utilities.callback_cleanup(self,context)
-                    if self._timer:
-                        context.window_manager.event_timer_remove(self._timer)
-
-                    return {'FINISHED'}
+                    return self.finish_mesh(context)
                 
 
                     
@@ -1596,6 +1600,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         context.window_manager.event_timer_remove(self._timer)
                         
                     return {'CANCELLED'}
+                
+                elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
+                    event.value == 'PRESS'):
+                    
+                    return self.finish_mesh(context)
                 
                 elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
                     
