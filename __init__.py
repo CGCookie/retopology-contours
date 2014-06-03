@@ -129,7 +129,7 @@ def clear_mesh_cache():
     
     if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
         old_obj = contour_mesh_cache['tmp']
-        if old_obj and old_obj in bpy.data.objects:
+        if old_obj and old_obj.name in bpy.data.objects:
             bpy.data.objects.remove(old_obj)
         del contour_mesh_cache['tmp']
         
@@ -293,7 +293,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     new_method = BoolProperty(
             name="New Method",
             description = "Use robust cutting, may be slower, more accurate on dense meshes",
-            default=False,
+            default=True,
             )
     
     #TODO  Theme this out nicely :-) 
@@ -1578,6 +1578,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
+                
+                elif (event.type in {'ESC','RIGHT_MOUSE'} and 
+                    event.value == 'PRESS'):
+                    
+                    context.area.header_text_set()
+                    contour_utilities.callback_cleanup(self,context)
+                    if self._timer:
+                        context.window_manager.event_timer_remove(self._timer)
+                        
+                    return {'CANCELLED'}
                 
                 elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
                     
