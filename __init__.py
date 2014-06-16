@@ -1839,8 +1839,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
 
   
     def invoke(self, context, event):
+        #HINT you are in contours code
         #TODO Settings harmon CODE REVIEW
         settings = context.user_preferences.addons[AL.FolderName].preferences
+        
+        if context.space_data.viewport_shade in {'WIREFRAME','BOUNDBOX'}:
+            self.report({'ERROR'}, 'Viewport shading must be at lease SOLID')
+            return {'CANCELLED'}
+        
         
         self.valid_cut_inds = []
         self.existing_loops = []
@@ -1899,10 +1905,10 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if len(ed_inds):
                 vert_loops = contour_utilities.edge_loops_from_bmedges(self.dest_bme, ed_inds)
                 
-                
+          
                 
                 if len(vert_loops) > 1:
-                    self.report('WARNING', 'Only one edge loop will be used for extension')
+                    self.report({'WARNING'}, 'Only one edge loop will be used for extension')
                 print('there are %i edge loops selected' % len(vert_loops))
                 
                 #for loop in vert_loops:
