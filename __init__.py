@@ -1009,7 +1009,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     feature_factor = settings.feature_factor)
                     
                     path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
-                    path.seg_lock = True  #for now
+                    path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
                     path.segments = 1
                     path.ring_segments = len(self.selected.verts_simple)
                     path.connect_cuts_to_make_mesh(self.original_form)
@@ -1934,7 +1934,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 
                     
                     path.existing_head = existing_loop
-                    path.seg_lock = True
+                    path.seg_lock = False
                     path.ring_lock = True
                     path.ring_segments = len(existing_loop.verts_simple)
                     path.connect_cuts_to_make_mesh(target)

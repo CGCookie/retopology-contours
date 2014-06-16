@@ -1379,6 +1379,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     
         #expensive recalculation of whole path
         #TODO: make this process smarter
+        merge_series.world_path = [cut.verts_simple[0] for cut in merge_series.cuts]
+        merge_series.segments = len(merge_series.cuts) - 1
         merge_series.backbone_from_cuts(context,ob,bme)
         merge_series.connect_cuts_to_make_mesh(ob)
         merge_series.update_visibility(context,ob)
