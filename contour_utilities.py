@@ -245,7 +245,7 @@ def ray_cast_visible(verts, ob, rv3d):
         eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
         eyeloc_local = imx*eyeloc
         source = [eyeloc_local for vert in verts]
-        target = [imx*(vert+0.001*view_dir) for vert in verts]
+        target = [imx*(vert+ 0.01*view_dir) for vert in verts]
     else:
         source = [imx*(vert+10000*view_dir) for vert in verts]
         target = [imx*(vert+ 0.01*view_dir) for vert in verts]
