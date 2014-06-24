@@ -816,13 +816,17 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         check is completed. For now, that distnace is 4x the
         bounding box diag of the existing cut in the segment
         '''
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         
-        print('>>> testing for insertion')
-        
-        inserted = False
+        if settings.debug > 1:
+            print('>>> testing for insertion')
+            print('>>> self.existing_head = ' + str(self.existing_head))
+            print('>>> len(self.cuts) = %d' % len(self.cuts))
         
         #no cuts, this is a trivial case
         if len(self.cuts) == 0 and not self.existing_head:
+            if settings.debug > 1: print('>>> no cuts and not self.existing_head')
+            
             self.cuts.append(new_cut)
             self.world_path.append(new_cut.verts_simple[0])
             if self.ring_segments != len(new_cut.verts_simple): #TODO: Nomenclature consistency
@@ -830,25 +834,17 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
             self.segments = 1
             
-            inserted = True
             self.backbone_from_cuts(context, ob, bme)
-            print('>>> no cuts and not self.existing_head')
-            return inserted
+            return True
         
         
         if (len(self.cuts) == 1 and not self.existing_head) or (self.existing_head and len(self.cuts) == 0):
-            
+            if settings.debug > 1: print('>>> single cut')
             #criteria for extension existing cut to new cut
             #A) The distance between the com is < 4 * the bbox diagonal of the existing cut
             #B) The angle between the existing cut normal and the line between com's is < 60 deg
             
-            
-            
-            if len(self.cuts) == 1:
-                cut = self.cuts[0]
-            else:
-                cut = self.existing_head 
-            
+            cut = self.cuts[0] if self.cuts else self.existing_head
             
             bounds = contour_utilities.bound_box(cut.verts_simple)
             
@@ -869,7 +865,12 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 print('too wide, aim better')
                 print(ang)
             
+            if settings.debug > 1:
+                print('>>> vec_between.length = %f, thresh = %f' % (vec_between.length,thresh))
+                print('>>> ang = %f, %f' % (ang, math.sin(math.pi/3)))
             if vec_between.length < thresh and ang > math.sin(math.pi/3):
+                if settings.debug > 1:
+                    print('>>> vec_between.length < thresh and ang > math.sin(math.pi/3)')
                 
                 self.segments += 1
                 self.cuts.append(new_cut)
@@ -909,16 +910,17 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 #align the cut, update the backbone etc
                 self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
                 self.backbone_from_cuts(context, ob, bme)
-                inserted = True
-                print('>>> vec_between.length < thresh and ang > math.sin(math.pi/3)')
-                return inserted
+                self.update_backbone(context, ob, bme, new_cut, insert = True)
+                return True
             
             else:
-                print('>>> NOT vec_between.length < thresh and ang > math.sin(math.pi/3)')
+                if settings.debug > 1:
+                    print('>>> NOT vec_between.length < thresh and ang > math.sin(math.pi/3)')
                 return False
         
         
-        if self.existing_head and len(self.cuts) > 0:
+        if self.existing_head and self.cuts:
+            if settings.debug > 1: print('>>> self.existing_head and self.cuts')
             
             A = self.existing_head.plane_com
             B = self.cuts[0].plane_com
@@ -927,6 +929,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             test1 = self.existing_head.plane_no.dot(C-A) > 0
             test2 = self.cuts[0].plane_no.dot(C-B) < 0
             if C and test1 and test2:
+                if settings.debug > 1: print('>>> C and test1 and test2')
                 valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
                 if valid:
                     print('found an intersection between existing head and first loop')
@@ -947,18 +950,15 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     
                     new_cut.simplify_cross(self.ring_segments)
                     self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
-                    
                     self.backbone_from_cuts(context, ob, bme)
-                    inserted = True
-                    
-                    return inserted
-                    
-                    
+                    self.update_backbone(context, ob, bme, new_cut, insert = True)
+                    return True
+            if settings.debug > 1: print('>>> falling through')
+        
+        if settings.debug > 1: print('>>> checking between cuts')
         #Assume the cuts in the series are in order
         #Check in between all the cuts
         for i in range(0,len(self.cuts) -1):
- 
-
             A = self.cuts[i].plane_com
             B = self.cuts[i+1].plane_com
             
@@ -992,7 +992,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     new_cut.simplify_cross(self.ring_segments)
                     self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
                     self.update_backbone(context, ob, bme, new_cut, insert = True)
-                    inserted = True
+                    return True
                 
             #Check the enpoints
             #TODO: Unless there is an existing vert loop endpoint
@@ -1001,13 +1001,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if len(self.cuts) > 1:
             spine = self.backbone[1:-1]
             spine_length = sum([contour_utilities.get_path_length(vertebra) for vertebra in spine])
+            if settings.debug > 1: print('>>> spine_length = ' + str(spine_length))
             fraction = search * spine_length /  (len(self.cuts) - 1 + 1 * (self.existing_head != None))
-        
         elif self.existing_head and len(self.cuts) == 1:
             fraction = search * (self.existing_head.plane_com - self.cuts[0].plane_com).length  
+        if settings.debug > 1: print('>>> fraction = %f' % fraction)
         
-        if not inserted and not self.existing_head:
-            
+        if not self.existing_head:
+            if settings.debug > 1: print('>>> not self.existing_head')
             # B -> A is pointed backward out the tip of the line
             A = self.cuts[0].plane_com
             B = self.cuts[1].plane_com
@@ -1044,51 +1045,49 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     new_cut.simplify_cross(self.ring_segments)
                     self.align_cut(new_cut, mode = 'AHEAD', fine_grain = True)
                     self.update_backbone(context, ob, bme, new_cut, insert = True)
-                    inserted = True
-                    
-        if not inserted:
-
-            if self.existing_head and len(self.cuts) == 1:
-                cut_behind = self.existing_head
-            else:
-                cut_behind = self.cuts[-2]
-                
-            
-            A = self.cuts[-1].plane_com
-            B = cut_behind.plane_com
-            
-            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
-            
-            
-            if C:
-                test1 = self.cuts[-1].plane_no.dot(C-A) > 0
-                test2 = (C - A).length < fraction
-                valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
-                if valid and test1 and test2:
-                    print('inserted the new cut at the end')
-                
-                
-                    if new_cut.plane_no.dot(A-B) < 0:
-                        print('normal reversal to fit path')
-                        new_cut.plane_no = -1 * new_cut.plane_no
-                    
-                    spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
-                    if spin < 0:
-                        new_cut.verts_simple.reverse()
-                        new_cut.verts.reverse()
-                        new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
-                        new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
-                        print('loop reversal to fit into new path')
-                    
-                    self.cuts.append(new_cut)
-                    self.segments += 1
-                    new_cut.simplify_cross(self.ring_segments)
-                    self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
-                    self.update_backbone(context, ob, bme, new_cut, insert = True)
-                    inserted = True
+                    return True
         
-        print('>>> ' + str(inserted))
-        return inserted
+        if settings.debug > 1: print('>>> still not inserted')
+        
+        if self.existing_head and len(self.cuts) == 1:
+            cut_behind = self.existing_head
+        else:
+            cut_behind = self.cuts[-2]
+        if settings.debug > 1: print('>>> cut_behind = ' + str(cut_behind))
+        
+        A = self.cuts[-1].plane_com
+        B = cut_behind.plane_com
+        
+        C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
+        
+        if C:
+            test1 = self.cuts[-1].plane_no.dot(C-A) > 0
+            test2 = (C - A).length < fraction
+            valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01)
+            if valid and test1 and test2:
+                print('inserted the new cut at the end')
+                
+                if new_cut.plane_no.dot(A-B) < 0:
+                    print('normal reversal to fit path')
+                    new_cut.plane_no = -1 * new_cut.plane_no
+                
+                spin = contour_utilities.discrete_curl(new_cut.verts_simple, new_cut.plane_no)
+                if spin < 0:
+                    new_cut.verts_simple.reverse()
+                    new_cut.verts.reverse()
+                    new_cut.verts = contour_utilities.list_shift(new_cut.verts,-1)
+                    new_cut.verts_simple = contour_utilities.list_shift(new_cut.verts_simple,-1)
+                    print('loop reversal to fit into new path')
+                
+                self.cuts.append(new_cut)
+                self.segments += 1
+                new_cut.simplify_cross(self.ring_segments)
+                self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
+                self.update_backbone(context, ob, bme, new_cut, insert = True)
+                return True
+        
+        if settings.debug > 1: print('>>> did not insert')
+        return False
     
     def remove_cut(self,context,ob, bme, cut):
         '''
