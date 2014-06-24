@@ -33,7 +33,8 @@ from collections import deque
 from bpy_extras import view3d_utils
 from mathutils import Vector, Matrix, Quaternion
 from mathutils.geometry import intersect_line_plane, intersect_point_line, distance_point_to_plane, intersect_line_line_2d, intersect_line_line
-from bpy_extras.view3d_utils import location_3d_to_region_2d
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
+
 
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
@@ -231,6 +232,45 @@ def simplify_RDP(splineVerts, error, method = 1):
             
     print('finished simplification with method %i in %f seconds' % (method, time.time() - start))
     return newVerts
+
+def ray_cast_region2d(region, rv3d, screen_coord, ob, settings):
+    mx = ob.matrix_world
+    imx = mx.inverted()
+    
+    if True:
+        # JD's attempt at correcting bug #48
+        ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord).normalized()
+        ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+        if not rv3d.is_perspective:
+            # need to back up the ray's origin, because ortho projection has front and back
+            # projection planes at inf
+            ray_origin = ray_origin + ray_vector * 1000
+            ray_target = ray_origin - ray_vector * 2000
+            ray_vector = -ray_vector # why does this need to be negated?
+        else:
+            ray_target = ray_origin + ray_vector * 1000
+        #TODO: make a max ray depth or pull this depth from clip depth
+    else:
+        ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
+        ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+        ray_target = ray_origin + (10000 * ray_vector) #TODO: make a max ray depth or pull this depth from clip depth
+    
+    ray_start_local  = imx * ray_origin
+    ray_target_local = imx * ray_target
+    
+    if settings.debug > 1:
+        print('ray_persp  = ' + str(rv3d.is_perspective))
+        print('ray_origin = ' + str(ray_origin))
+        print('ray_target = ' + str(ray_target))
+        print('ray_vector = ' + str(ray_vector))
+        print('ray_diff   = ' + str((ray_target - ray_origin).normalized()))
+        print('start:  ' + str(ray_start_local))
+        print('target: ' + str(ray_target_local))
+    
+    hit = ob.ray_cast(ray_start_local, ray_target_local)
+    
+    return (ray_vector, hit)
+
 
 def relax(verts, factor = .75, in_place = True):
     '''

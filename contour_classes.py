@@ -111,24 +111,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.line_thickness = settings.line_thick
                
     def ray_cast_path(self,context, ob):
-        
         region = context.region
         rv3d = context.space_data.region_3d
-        self.raw_world = []
         mx = ob.matrix_world
-        imx = mx.inverted()
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        
-        for v in self.raw_screen:
-            view_vector = region_2d_to_vector_3d(region, rv3d, v)
-            ray_origin = region_2d_to_origin_3d(region, rv3d, v)
-            
-            ray_start = ray_origin # - (2000 * view_vector)
-            ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
-            hit = ob.ray_cast(imx*ray_start, imx*ray_target)  
-                
-            if hit[2] != -1:
-                self.raw_world.append(mx * hit[0])
+        rc = contour_utilities.ray_cast_region2d
+        hits = [rc(region,rv3d,v,ob,settings)[1] for v in self.raw_screen]
+        self.raw_world = [mx*hit[0] for hit in hits if hit[2] != -1]
         
         if settings.debug > 1:
             print('ray_cast_path missed %d/%d points' % (len(self.raw_screen) - len(self.raw_world), len(self.raw_screen)))
@@ -3409,7 +3398,6 @@ class ContourCutLine(object):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         region = context.region  
         rv3d = context.space_data.region_3d
-        view_dist = rv3d.view_distance
         
         pers_mx = rv3d.perspective_matrix  #we need the perspective matrix
         
@@ -3434,41 +3422,10 @@ class ContourCutLine(object):
             self.vec_x = -1 * cut_vec.normalized()
             self.vec_y = self.plane_no.cross(self.vec_x)
             
-            mx = ob.matrix_world
-            imx = mx.inverted()
-            
-            if True:
-                # JD's attempt at correcting bug #48
-                ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord).normalized()
-                ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
-                if not rv3d.is_perspective:
-                    ray_origin = ray_origin + ray_vector * 1000
-                    ray_target = ray_origin - ray_vector * 2000
-                    ray_vector = -ray_vector # why does this need to be negated?
-                else:
-                    ray_target = ray_origin + ray_vector * 1000
-                #TODO: make a max ray depth or pull this depth from clip depth
-            else:
-                # previous attempt (to be deleted once code above works)
-                ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
-                ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
-                ray_target = ray_origin + (10000 * ray_vector) #TODO: make a max ray depth or pull this depth from clip depth
-            
-            ray_start_local  = imx * ray_origin
-            ray_target_local = imx * ray_target
-            
-            if settings.debug > 1:
-                print('ray_persp  = ' + str(rv3d.is_perspective))
-                print('ray_origin = ' + str(ray_origin))
-                print('ray_target = ' + str(ray_target))
-                print('ray_vector = ' + str(ray_vector))
-                print('ray_diff   = ' + str((ray_target - ray_origin).normalized()))
-                print('start:  ' + str(ray_start_local))
-                print('target: ' + str(ray_target_local))
-            
-            hit = ob.ray_cast(ray_start_local, ray_target_local)
+            ray_vector,hit = contour_utilities.ray_cast_region2d(region, rv3d, screen_coord, ob, settings)
             
             if hit[2] != -1:
+                mx = ob.matrix_world
                 self.head.world_position = region_2d_to_location_3d(region, rv3d, (self.head.x, self.head.y), mx * hit[0])
                 self.tail.world_position = region_2d_to_location_3d(region, rv3d, (self.tail.x, self.tail.y), mx * hit[0])
                 
