@@ -112,11 +112,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                
     def ray_cast_path(self,context, ob):
         
-        region = context.region  
+        region = context.region
         rv3d = context.space_data.region_3d
         self.raw_world = []
         mx = ob.matrix_world
         imx = mx.inverted()
+        settings = context.user_preferences.addons[AL.FolderName].preferences
+        
         for v in self.raw_screen:
             view_vector = region_2d_to_vector_3d(region, rv3d, v)
             ray_origin = region_2d_to_origin_3d(region, rv3d, v)
@@ -127,7 +129,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
             if hit[2] != -1:
                 self.raw_world.append(mx * hit[0])
-                
+        
+        if settings.debug > 1:
+            print('ray_cast_path missed %d/%d points' % (len(self.raw_screen) - len(self.raw_world), len(self.raw_screen)))
+        
     def smooth_path(self,context, ob = None):
         
         #clear the world path if need be
@@ -252,6 +257,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             return
         
         path_length = contour_utilities.get_path_length(self.world_path)
+        if path_length == 0:
+            self.cut_points = [self.world_path[0], self.world_path[-1]]
+            return
         cut_spacing = path_length/self.segments
         
         if len(self.knots) > 2 and knots:
@@ -342,7 +350,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
             if (i == 0 and not self.existing_head) or (i == 1 and self.existing_head):
                 #make sure the first loop is right handed
-                if contour_utilities.discrete_curl(cut.verts_simple, cut.plane_no) < 0:
+                curl = contour_utilities.discrete_curl(cut.verts_simple, cut.plane_no)
+                if curl == None:
+                    # TODO: what should happen here?
+                    pass
+                elif curl < 0:
                     #in this case, we reverse the verts and keep the no
                     #because the no is derived from the drawn path direction
                     cut.verts.reverse()
@@ -409,7 +421,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.backbone.append(vertebra3d)
             
             
-            if i > 0 and i < len(self.cuts):
+            if i > 0 and i < len(self.cuts)-1:
                 #cut backward to reach the other cut
                 v1 = cut.verts_simple[0] - self.cuts[i-1].verts_simple[0]
                 cut_no = surface_no.cross(v1)
@@ -443,7 +455,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         else:
             diag = contour_utilities.diagonal_verts(cut.verts_simple)
     
-            cast_point = cut.verts_simple[i] + diag * cut.plane_no
+            cast_point = cut.verts_simple[0] + diag * cut.plane_no
             cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
             vertebra3d = [cast_sfc, cut.verts_simple[0]]
         
@@ -3397,6 +3409,7 @@ class ContourCutLine(object):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         region = context.region  
         rv3d = context.space_data.region_3d
+        view_dist = rv3d.view_distance
         
         pers_mx = rv3d.perspective_matrix  #we need the perspective matrix
         
@@ -3421,17 +3434,40 @@ class ContourCutLine(object):
             self.vec_x = -1 * cut_vec.normalized()
             self.vec_y = self.plane_no.cross(self.vec_x)
             
-            view_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
-            ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
-            
             mx = ob.matrix_world
             imx = mx.inverted()
-            ray_start = ray_origin # - (2000 * view_vector)
-            ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
-            hit = ob.ray_cast(imx*ray_start, imx*ray_target)
-
-              
-    
+            
+            if True:
+                # JD's attempt at correcting bug #48
+                ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord).normalized()
+                ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+                if not rv3d.is_perspective:
+                    ray_origin = ray_origin + ray_vector * 1000
+                    ray_target = ray_origin - ray_vector * 2000
+                    ray_vector = -ray_vector # why does this need to be negated?
+                else:
+                    ray_target = ray_origin + ray_vector * 1000
+                #TODO: make a max ray depth or pull this depth from clip depth
+            else:
+                # previous attempt (to be deleted once code above works)
+                ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
+                ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+                ray_target = ray_origin + (10000 * ray_vector) #TODO: make a max ray depth or pull this depth from clip depth
+            
+            ray_start_local  = imx * ray_origin
+            ray_target_local = imx * ray_target
+            
+            if settings.debug > 1:
+                print('ray_persp  = ' + str(rv3d.is_perspective))
+                print('ray_origin = ' + str(ray_origin))
+                print('ray_target = ' + str(ray_target))
+                print('ray_vector = ' + str(ray_vector))
+                print('ray_diff   = ' + str((ray_target - ray_origin).normalized()))
+                print('start:  ' + str(ray_start_local))
+                print('target: ' + str(ray_target_local))
+            
+            hit = ob.ray_cast(ray_start_local, ray_target_local)
+            
             if hit[2] != -1:
                 self.head.world_position = region_2d_to_location_3d(region, rv3d, (self.head.x, self.head.y), mx * hit[0])
                 self.tail.world_position = region_2d_to_location_3d(region, rv3d, (self.tail.x, self.tail.y), mx * hit[0])
@@ -3443,7 +3479,7 @@ class ContourCutLine(object):
                     
                     cut_vec = self.head.world_position - self.tail.world_position
                     cut_vec.normalize()
-                    self.plane_no = cut_vec.cross(view_vector).normalized()
+                    self.plane_no = cut_vec.cross(ray_vector).normalized()
                     self.vec_x = -1 * cut_vec.normalized()
                     self.vec_y = self.plane_no.cross(self.vec_x)
                     
@@ -3456,6 +3492,7 @@ class ContourCutLine(object):
                 self.seed_face_index = None
                 self.verts = []
                 self.verts_simple = []
+                print('Did not hit!')
             
             return self.plane_pt
         
@@ -3531,7 +3568,7 @@ class ContourCutLine(object):
         meth = context.user_preferences.addons[AL.FolderName].preferences.new_method
         if pt and pno:
             cross = contour_utilities.cross_section_seed(bme, mx, pt, pno, indx, debug = True, method = meth)   
-            if cross:
+            if cross and cross[0] and cross[1]:
                 self.verts = [mx*v for v in cross[0]]
                 self.edges = cross[1]   
         else:
@@ -3578,8 +3615,8 @@ class ContourCutLine(object):
         
     
     def generic_3_axis_from_normal(self):
-        
-        (self.vec_x, self.vec_y) = contour_utilities.generic_axes_from_plane_normal(self.plane_com, self.plane_no)
+        if self.plane_com:
+            (self.vec_x, self.vec_y) = contour_utilities.generic_axes_from_plane_normal(self.plane_com, self.plane_no)
         
                        
     def derive_3_axis_control(self, method = 'FROM_VECS', n=0):
@@ -4025,7 +4062,10 @@ class CutLineManipulatorWidget(object):
         #find out where the cut is
         ind = cut_path.cuts.index(cut_line)
         self.path_behind = cut_path.backbone[ind]
-        self.path_ahead = cut_path.backbone[ind+1]
+        if ind+1 < len(cut_path.backbone):
+            self.path_ahead = cut_path.backbone[ind+1]
+        else:
+            self.path_ahead = None
         
         
         if ind > 0:

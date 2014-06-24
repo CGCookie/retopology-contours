@@ -921,7 +921,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         path.connect_cuts_to_make_mesh(self.original_form)
         path.backbone_from_cuts(context, self.original_form, self.bme)
         path.update_visibility(context, self.original_form)
-        path.cuts[-1].do_select(settings)
+        if path.cuts:
+            # TODO: should this ever be empty?
+            path.cuts[-1].do_select(settings)
         
         self.cut_paths.append(path)
         
@@ -961,75 +963,76 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         if width.length < 20: #TODO: Setting for minimum pixel width
             self.cut_lines.remove(self.selected)
             self.selected = None
+            print('Placed cut is too short')
             return
         
-        else:
-            #hit the mesh for the first time
-            hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
+        #hit the mesh for the first time
+        hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
+        
+        if not hit:
+            self.cut_lines.remove(self.selected)
+            self.selected = None
+            print('Placed cut did not hit the mesh')
+            return
+        
+        self.selected.cut_object(context, self.original_form, self.bme)
+        self.selected.simplify_cross(self.segments)
+        self.selected.update_com()
+        self.selected.update_screen_coords(context)
+        
+        
+        self.selected.head = None
+        self.selected.tail = None
+        
+        self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        
+        inserted = False
+        if self.cut_paths != [] and not self.force_new:
             
-            if hit:
-                
-                self.selected.cut_object(context, self.original_form, self.bme)
-                self.selected.simplify_cross(self.segments)
-                self.selected.update_com()
-                self.selected.update_screen_coords(context)
-                
-                
-                self.selected.head = None
-                self.selected.tail = None
-                
-                self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
-                
-                inserted = False
-                if self.cut_paths != [] and not self.force_new:
-                    
-                    for path in self.cut_paths:
-                        if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor):
-                            #the cut belongs to the series now
-                            inserted = True
-                            path.connect_cuts_to_make_mesh(self.original_form)
-                            path.update_visibility(context, self.original_form)
-                            path.seg_lock = True
-                            path.do_select(settings)
-                            path.unhighlight(settings)
-                            self.selected_path = path
-                            self.cut_lines.remove(self.selected)
-                            for other_path in self.cut_paths:
-                                if other_path != self.selected_path:
-                                    other_path.deselect(settings)
-                        if inserted:
-                            # no need to search for more paths
-                            break
-                            
-                if self.cut_paths == [] or not inserted or self.force_new:
-                    #create a blank segment
-                    path = ContourCutSeries(context, [],
-                                    cull_factor = settings.cull_factor, 
-                                    smooth_factor = settings.smooth_factor,
-                                    feature_factor = settings.feature_factor)
-                    
-                    path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
-                    path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
-                    path.segments = 1
-                    path.ring_segments = len(self.selected.verts_simple)
+            for path in self.cut_paths:
+                if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor):
+                    #the cut belongs to the series now
+                    inserted = True
                     path.connect_cuts_to_make_mesh(self.original_form)
                     path.update_visibility(context, self.original_form)
-                    
-                    for other_path in self.cut_paths:
-                        other_path.deselect(settings)
-                    
-                    self.cut_paths.append(path)
-                    self.selected_path = path
+                    path.seg_lock = True
                     path.do_select(settings)
-                    
+                    path.unhighlight(settings)
+                    self.selected_path = path
                     self.cut_lines.remove(self.selected)
+                    for other_path in self.cut_paths:
+                        if other_path != self.selected_path:
+                            other_path.deselect(settings)
+                if inserted:
+                    # no need to search for more paths
+                    break
                     
-                    if self.force_new:
-                        self.force_new = False
+        if self.cut_paths == [] or not inserted or self.force_new:
+            #create a blank segment
+            path = ContourCutSeries(context, [],
+                            cull_factor = settings.cull_factor, 
+                            smooth_factor = settings.smooth_factor,
+                            feature_factor = settings.feature_factor)
             
-            else:
-                self.cut_lines.remove(self.selected)
-                    
+            path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
+            path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
+            path.segments = 1
+            path.ring_segments = len(self.selected.verts_simple)
+            path.connect_cuts_to_make_mesh(self.original_form)
+            path.update_visibility(context, self.original_form)
+            
+            for other_path in self.cut_paths:
+                other_path.deselect(settings)
+            
+            self.cut_paths.append(path)
+            self.selected_path = path
+            path.do_select(settings)
+            
+            self.cut_lines.remove(self.selected)
+            
+            if self.force_new:
+                self.force_new = False
+        
       
             
     
@@ -1780,9 +1783,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.deselect(settings)
                             
                         self.selected_path  = self.new_path_from_draw(context, settings)
-                        self.selected_path.do_select(settings)
-                        self.selected = self.selected_path.cuts[-1]
-                        self.selected.do_select(settings)
+                        if self.selected_path:
+                            self.selected_path.do_select(settings)
+                            if self.selected_path.cuts:
+                                self.selected = self.selected_path.cuts[-1]
+                            else:
+                                self.selected = None
+                            if self.selected:
+                                self.selected.do_select(settings)
                         
                         self.drag = False #TODO: is self.drag still needed?
                         self.force_new = False

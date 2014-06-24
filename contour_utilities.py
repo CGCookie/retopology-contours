@@ -1405,8 +1405,8 @@ def discrete_curl(verts, z): #Adapted from Open Dental CAD by Patrick Moore
        
     '''
     if len(verts) < 3:
-        print('not posisble for this to be a loop!')
-        return
+        print('not possible for this to be a loop!')
+        return None
     
     curl = 0
     
@@ -2534,14 +2534,14 @@ def cross_section_seed_direction(bme, mx,
             else:
                 seeds[len(verts)-1] = None
                 print('seed face is an edge of mesh face')
- 
+    
     if len(verts) < 2:
-        print('critical error, probably machine error')
+        print('critical error, probably machine error (len(verts) = %d)' % len(verts))
         #TODO: debug and dump relevant info
         return (None, None)
     
     elif len(verts) > 2:
-        print('critial error probably concave ngong or something')
+        print('critial error probably concave ngon or something (len(verts) = %d)' % len(verts))
         #TODO: debug and dump relevant info
         return (None, None) 
       
@@ -2627,7 +2627,7 @@ def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
     #TODO:  input quality checks for variables
     
     intersects = []
-    n = len(verts)
+    n = len(verts) if verts else 0
     
     for i in range(0,n-1):
         cross = cross_edge(verts[i], verts[i+1], pt, no)
