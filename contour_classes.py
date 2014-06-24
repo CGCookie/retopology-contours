@@ -316,7 +316,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             elif i == len(self.cut_points) -1:
                 no1 = self.cut_points[i] - self.cut_points[i-1]
                 no2 = self.cut_points[i] - self.cut_points[i-2]
-                
             else:
                 no1 = self.cut_points[i] - self.cut_points[i-1]
                 no2 = self.cut_points[i+1] - self.cut_points[i]
@@ -324,8 +323,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             no1.normalize()
             no2.normalize()
             
-            no = .5 * no1 + .5 * no2
-            no.normalize()
+            no = (no1 + no2).normalized()
             
             #make the cut in the view plane
             #TODO..this is not always smart!
@@ -487,7 +485,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             self.backbone.pop(0)
             self.backbone.insert(0,vertebra3d)
                 
-        if ind > 0 and ind < len(self.cuts):
+        if ind > 0 and ind < len(self.backbone): #<--- was len(self.cuts)!?
             #cut backward to reach the other cut
             v1 = cut.verts_simple[0] - self.cuts[ind-1].verts_simple[0]
             cut_no = surface_no.cross(v1)
@@ -502,7 +500,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 vertebra3d = [ob.matrix_world * v for v in vertebra]
             else:
                 vertebra3d = [cut.verts_simple[0], self.cuts[ind-1].verts_simple[0]]
-        
         
             self.backbone.pop(ind)
             self.backbone.insert(ind,vertebra3d)    
@@ -608,30 +605,21 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         avg_normal = Vector((0,0,0))
         for i, loc in enumerate(self.cut_points):
-            
             if i == 0:
                 no1 = self.cut_points[i+1] - self.cut_points[i]
                 no2 = self.cut_points[i+2] - self.cut_points[i]
             elif i == len(self.cut_points) -1:
                 no1 = self.cut_points[i] - self.cut_points[i-1]
                 no2 = self.cut_points[i] - self.cut_points[i-2]
-                
             else:
                 no1 = self.cut_points[i] - self.cut_points[i-1]
                 no2 = self.cut_points[i+1] - self.cut_points[i]
-                
             no1.normalize()
             no2.normalize()
-            
-            no = .5 * no1 + .5 * no2
-            no.normalize()
-            
-            avg_normal = avg_normal + no
-            
+            avg_normal = avg_normal + (no1 + no2).normalized()
         
-        avg_normal = 1/len(self.cut_points) * avg_normal
         avg_normal.normalize()
-               
+        
         
         for i, cut in enumerate(self.cuts):
             cut.plane_no = avg_normal
@@ -809,50 +797,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         #update connecting edges between ring
         if context.space_data.use_occlude_geometry:
             rv3d = context.space_data.region_3d
-            eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
-            view_dir = rv3d.view_rotation * Vector((0,0,1))
-            
-            #print('are these vectors similar?')
-            #print(eyevec)
-            #print(view_dir)
-            
-            
-            eyevec.length = 100000
-            eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
-            view_loc = rv3d.view_location
-
-            imx = ob.matrix_world.inverted()
-            visibility_list = []
-            for vert_list in self.follow_lines:
-                visible = []
-                for vert in vert_list:
-                    
-                    if rv3d.is_perspective:
-                        hit = ob.ray_cast(imx  * eyeloc, imx * (vert - .001 * view_dir))
-                        if hit[2] != -1:
-                            hit = ob.ray_cast(imx  * eyeloc, imx * (vert + .001 * view_dir))
-                            
-                        if hit[2] != -1:
-                            visible.append(False)
-                        
-                        else:
-                            visible.append(True)
-                            
-                    else:
-                        hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
-                        if hit[2] != -1:
-                            hit = ob.ray_cast(imx * (vert + .001 * view_dir), imx * (vert - 10000 * view_dir))
-                        
-                        if hit[2] != -1:
-                            visible.append(True)
-                        
-                        else:
-                            visible.append(False)
-                        
-                visibility_list.append(visible)
-                
-            
-            self.follow_vis = visibility_list
+            is_vis = contour_utilities.ray_cast_visible
+            self.follow_vis = [is_vis(vert_list, ob, rv3d) for vert_list in self.follow_lines]
+        else:
+            self.follow_vis = [[True]*len(vert_list) for vert_list in self.follow_lines]
             
     def insert_new_cut(self,context, ob, bme, new_cut, search = 5):
         '''
@@ -1681,69 +1629,16 @@ class ExistingVertList(object):
                 self.vert_inds_unsorted.reverse()
                 
     def update_visibility(self,context,ob):
-          
-        rv3d = context.space_data.region_3d
-        
         if context.space_data.use_occlude_geometry:
+            #TODO: should the following be uncommented?
+            #self.visible_poly = []
+            #self.visible_u = []
+            #self.visible_d = []
             rv3d = context.space_data.region_3d
-            eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
-            view_dir = rv3d.view_rotation * Vector((0,0,1))
-            
-            #print('are these vectors similar?')
-            #print(eyevec)
-            #print(view_dir)
-            
-            
-            eyevec.length = 100000
-            eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
-            view_loc = rv3d.view_location
-            #print('are the locations similar')
-            #print(eyeloc)
-            #print(view_loc)
-            
-            
-            imx = ob.matrix_world.inverted()
-            
-            self.visible_poly = []
-            self.visible_u = []
-            self.visible_d = []
-            #self.visible_world = []
-            
-            visible = []
-            for vert in self.verts_simple:
-                
-                if rv3d.is_perspective:
-                    hit = ob.ray_cast(imx  * eyeloc, imx * (vert - .001 * view_dir))
-                    if hit[2] != -1:
-                        hit = ob.ray_cast(imx  * eyeloc, imx * (vert + .001 * view_dir))
-                        
-                    if hit[2] != -1:
-                        visible.append(False)
-                    
-                    else:
-                        visible.append(True)
-                        
-                    #if hit[0]:
-                    #    vno = -vno
-                    #    vco = self.findworldco(vert.co + vno)
-                    #    hit = self.scn.ray_cast(vco, eyevec)
-                else:
-                    hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
-                    if hit[2] != -1:
-                        hit = ob.ray_cast(imx * (vert + .001 * view_dir), imx * (vert - 10000 * view_dir))
-                    
-                    if hit[2] != -1:
-                        visible.append(True)
-                    
-                    else:
-                        visible.append(False)
-            
-            self.verts_simple_visible = visible
-            
+            self.verts_simple_visible = contour_utilities.ray_cast_visible(self.verts_simple, ob, rv3d)
         else:
             self.verts_simple_visible = [True] * len(self.verts_simple)
-            
-            
+    
     def draw(self,context, settings, three_dimensional = True, interacting = False):
             '''
             setings are the addon preferences for contour tools
@@ -3010,74 +2905,16 @@ class PolySkecthLine(object):
         print('make the snap poitns')
             
     def update_visibility(self,context,ob):
-        
-        region = context.region  
-        rv3d = context.space_data.region_3d
-        
         if context.space_data.use_occlude_geometry:
             rv3d = context.space_data.region_3d
-            eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
-            view_dir = rv3d.view_rotation * Vector((0,0,1))
-            
-            #print('are these vectors similar?')
-            #print(eyevec)
-            #print(view_dir)
-            
-            
-            eyevec.length = 100000
-            eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
-            view_loc = rv3d.view_location
-            #print('are the locations similar')
-            #print(eyeloc)
-            #print(view_loc)
-            
-            
-            imx = ob.matrix_world.inverted()
-            
-            self.visible_poly = []
-            self.visible_u = []
-            self.visible_d = []
-            #self.visible_world = []
-            
-            visibility_list = []
-            for vert_list in [self.poly_nodes, self.extrudes_u, self.extrudes_d, self.world_path]:
-                visible = []
-                for vert in vert_list:
-                    
-                    if rv3d.is_perspective:
-                        hit = ob.ray_cast(imx  * eyeloc, imx * (vert - .001 * view_dir))
-                        if hit[2] != -1:
-                            hit = ob.ray_cast(imx  * eyeloc, imx * (vert + .001 * view_dir))
-                            
-                        if hit[2] != -1:
-                            visible.append(False)
-                        
-                        else:
-                            visible.append(True)
-                            
-
-                    else:
-                        hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
-                        if hit[2] != -1:
-                            hit = ob.ray_cast(imx * (vert + .001 * view_dir), imx * (vert - 10000 * view_dir))
-                        
-                        if hit[2] != -1:
-                            visible.append(True)
-                        
-                        else:
-                            visible.append(False)
-                        
-                visibility_list.append(visible)
-                        
-            
-            self.visible_poly = visibility_list[0]
-            self.visible_u = visibility_list[1]
-            self.visible_d = visibility_list[2]
-            #self.visible_world = visibility_list[3]
+            self.visible_poly  = contour_utilities.ray_cast_visible(self.poly_nodes, ob, rv3d)
+            self.visible_u     = contour_utilities.ray_cast_visible(self.extrudes_u, ob, rv3d)
+            self.visible_d     = contour_utilities.ray_cast_visible(self.extrudes_d, ob, rv3d)
+            self.visible_world = contour_utilities.ray_cast_visible(self.world_path, ob, rv3d)
         else:
-            self.visible_poly = [True] * len(self.poly_nodes)
-            self.visible_u = [True] * len(self.extrudes_u)
-            self.visible_d = [True] * len(self.extrudes_d)
+            self.visible_poly  = [True] * len(self.poly_nodes)
+            self.visible_u     = [True] * len(self.extrudes_u)
+            self.visible_d     = [True] * len(self.extrudes_d)
             self.visible_world = [True] * len(self.world_path)
                        
     def draw(self,context):
@@ -3212,69 +3049,17 @@ class ContourCutLine(object):
         
         
     def update_visibility(self,context,ob):
-        
-        region = context.region  
-        rv3d = context.space_data.region_3d
-        
         if context.space_data.use_occlude_geometry:
             rv3d = context.space_data.region_3d
-            eyevec = Vector(rv3d.view_matrix[2][:3]) #I don't understand this!
-            view_dir = rv3d.view_rotation * Vector((0,0,1))
-            
-            #print('are these vectors similar?')
-            #print(eyevec)
-            #print(view_dir)
-            
-            
-            eyevec.length = 100000
-            eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
-            view_loc = rv3d.view_location
-            #print('are the locations similar')
-            #print(eyeloc)
-            #print(view_loc)
-            
-            
-            imx = ob.matrix_world.inverted()
-            
-            self.visible_poly = []
-            self.visible_u = []
-            self.visible_d = []
-            #self.visible_world = []
-            
-            visible = []
-            for vert in self.verts_simple:
-                
-                if rv3d.is_perspective:
-                    hit = ob.ray_cast(imx  * eyeloc, imx * (vert - .001 * view_dir))
-                    if hit[2] != -1:
-                        hit = ob.ray_cast(imx  * eyeloc, imx * (vert + .001 * view_dir))
-                        
-                    if hit[2] != -1:
-                        visible.append(False)
-                    
-                    else:
-                        visible.append(True)
-                        
-                    #if hit[0]:
-                    #    vno = -vno
-                    #    vco = self.findworldco(vert.co + vno)
-                    #    hit = self.scn.ray_cast(vco, eyevec)
-                else:
-                    hit = ob.ray_cast(imx * (vert - .001 * view_dir), imx * (vert - 10000 * view_dir))
-                    if hit[2] != -1:
-                        hit = ob.ray_cast(imx * (vert + .001 * view_dir), imx * (vert - 10000 * view_dir))
-                    
-                    if hit[2] != -1:
-                        visible.append(True)
-                    
-                    else:
-                        visible.append(False)
-            
-            self.verts_simple_visible = visible
-            
+            self.verts_simple_visible  = contour_utilities.ray_cast_visible(self.verts_simple, ob, rv3d)
+            #TODO: should the following be uncommented?
+            #self.visible_poly = []
+            #self.visible_u = []
+            #self.visible_d = []
+            ##self.visible_world = []
         else:
             self.verts_simple_visible = [True] * len(self.verts_simple)
-                 
+    
     def draw(self,context, settings, three_dimensional = True, interacting = False):
         '''
         setings are the addon preferences for contour tools
@@ -3720,7 +3505,7 @@ class ContourCutLine(object):
         eds_1 = other.eds_simple
         
         #print('testing alignment')
-        if 0 in eds_1[-1]:
+        if eds_1 and 0 in eds_1[-1]:
             cyclic = True
             print('cyclic vert chain')
         else:
