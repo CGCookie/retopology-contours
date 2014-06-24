@@ -817,6 +817,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         bounding box diag of the existing cut in the segment
         '''
         
+        print('>>> testing for insertion')
         
         inserted = False
         
@@ -831,6 +832,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
             inserted = True
             self.backbone_from_cuts(context, ob, bme)
+            print('>>> no cuts and not self.existing_head')
             return inserted
         
         
@@ -908,9 +910,11 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
                 self.backbone_from_cuts(context, ob, bme)
                 inserted = True
+                print('>>> vec_between.length < thresh and ang > math.sin(math.pi/3)')
                 return inserted
             
             else:
+                print('>>> NOT vec_between.length < thresh and ang > math.sin(math.pi/3)')
                 return False
         
         
@@ -1082,7 +1086,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
                     self.update_backbone(context, ob, bme, new_cut, insert = True)
                     inserted = True
-    
+        
+        print('>>> ' + str(inserted))
         return inserted
     
     def remove_cut(self,context,ob, bme, cut):

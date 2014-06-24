@@ -1006,7 +1006,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 if inserted:
                     # no need to search for more paths
                     break
-                    
+        
         if self.cut_paths == [] or not inserted or self.force_new:
             #create a blank segment
             path = ContourCutSeries(context, [],
