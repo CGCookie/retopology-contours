@@ -614,8 +614,9 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         row = box.row()
         row.prop(cgc_contour, "cut_count")
 
-        row = box.row()
-        row.prop(cgc_contour, "cyclic")
+        ### Commenting out for now until this is further improved and made to work again ###
+        # row = box.row()
+        # row.prop(cgc_contour, "cyclic")
         
         row = box.row()
         row.prop(cgc_contour, "recover")
