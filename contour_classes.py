@@ -762,12 +762,16 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 ind3 = ind0 + n_lines
                 total_faces.append((ind0,ind1,ind2,ind3))
                 
-
+        
+        #assert all(len(cut.verts_simple) == n_lines for cut in self.cuts)
+        
         self.follow_lines = []
         for i in range(0,n_lines):
             tmp_line = []
+            
             if self.existing_head:
                 tmp_line.append(self.existing_head.verts_simple[i])
+            
             for cut_line in self.cuts:
                 tmp_line.append(cut_line.verts_simple[i])
                 
@@ -2054,7 +2058,7 @@ class PolySkecthLine(object):
 
                                 
                                 #make sketch path is oriented at least a little parallel
-                                print('this is the validatino test')
+                                print('this is the validation test')
                                 print(other_direc.dot(self_direc))
                                 if other_direc.dot(self_direc) > math.cos(math.pi / 6):
                                     relations.append([endpoint, key, v, i, dist_vec.length, other])

@@ -81,12 +81,19 @@ global contour_mesh_cache
 contour_mesh_cache = {}
 
 def object_validation(ob):
+    me = ob.data
     
-    valid = [ob.name, len(ob.data.vertices), len(ob.data.edges), len(ob.data.polygons), len(ob.modifiers)]
+    # get object data to act as a hash
+    counts = (len(me.vertices), len(me.edges), len(me.polygons), len(ob.modifiers))
+    bbox   = (min(v.co for v in me.vertices), max(v.co for v in me.vertices))
+    vsum   = sum((v.co for v in me.vertices), Vector((0,0,0)))
+    
+    valid  = (ob.name, counts, bbox, vsum)
     
     return valid
 
 def write_mesh_cache(orig_ob,tmp_ob, bme):
+    print('>>> write_mesh_cache')
     
     #TODO try taking this out
     global contour_mesh_cache
@@ -106,6 +113,7 @@ def write_mesh_cache(orig_ob,tmp_ob, bme):
     contour_mesh_cache['bme'] = bme
     
     if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
+        print('>>> clearing out old mesh cache')
         old_obj = contour_mesh_cache['tmp']
         
         #context.scene.objects.unlink(self.tmp_ob)
@@ -119,6 +127,7 @@ def write_mesh_cache(orig_ob,tmp_ob, bme):
     contour_mesh_cache['tmp'] = tmp_ob
     
 def clear_mesh_cache():
+    print('>>> clear_mesh_cache')
     if 'valid' in contour_mesh_cache and contour_mesh_cache['valid']:
         del contour_mesh_cache['valid']
         
@@ -1961,9 +1970,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             validation = object_validation(target)
             
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
-                use_cache = True
+            is_valid = 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation
+            has_tmp = 'ContourTMP' in bpy.data.objects and bpy.data.objects['ContourTMP'].data
             
+            if is_valid and has_tmp:
+                use_cache = True
             else:
                 use_cache = False
                 self.original_form  = target #TODO:  Clarify original_form as reference_form consistent with design doc

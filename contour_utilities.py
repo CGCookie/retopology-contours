@@ -1132,7 +1132,7 @@ def vert_cycle(vert, pt, no, prev_eds, verts):#, connection):
                 elif result[0] == 'COPLANAR':
                     cop_face = 0
                     for face in ed.link_faces:
-                        if face.no.cross(no) == 0:
+                        if face.normal.cross(no) == 0:
                             cop_face += 1
                             print('found a coplanar face')
     
