@@ -118,12 +118,28 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         mx = ob.matrix_world
         imx = mx.inverted()
         for v in self.raw_screen:
-            view_vector = region_2d_to_vector_3d(region, rv3d, v)
-            ray_origin = region_2d_to_origin_3d(region, rv3d, v)
             
-            ray_start = ray_origin # - (2000 * view_vector)
-            ray_target = ray_origin + (10000 * view_vector) #TODO: make a max ray depth or pull this depth from clip depth
-            hit = ob.ray_cast(imx*ray_start, imx*ray_target)  
+            if True:
+                # JD's attempt at correcting bug #48
+                ray_vector = region_2d_to_vector_3d(region, rv3d, v).normalized()
+                ray_origin = region_2d_to_origin_3d(region, rv3d, v)
+                if not rv3d.is_perspective:
+                    ray_origin = ray_origin + ray_vector * 1000
+                    ray_target = ray_origin - ray_vector * 2000
+                    ray_vector = -ray_vector # why does this need to be negated?
+                else:
+                    ray_target = ray_origin + ray_vector * 1000
+                #TODO: make a max ray depth or pull this depth from clip depth
+            else:
+                # previous attempt (to be deleted once code above works)
+                ray_vector = region_2d_to_vector_3d(region, rv3d, v)
+                ray_origin = region_2d_to_origin_3d(region, rv3d, v)
+                ray_target = ray_origin + (10000 * ray_vector) 
+            
+            ray_start_local  = imx * ray_origin
+            ray_target_local = imx * ray_target
+            
+            hit = ob.ray_cast(ray_start_local, ray_target_local)
                 
             if hit[2] != -1:
                 self.raw_world.append(mx * hit[0])
