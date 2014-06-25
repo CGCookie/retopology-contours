@@ -81,56 +81,50 @@ global contour_mesh_cache
 contour_mesh_cache = {}
 
 def object_validation(ob):
+    me = ob.data
     
-    valid = [ob.name, len(ob.data.vertices), len(ob.data.edges), len(ob.data.polygons), len(ob.modifiers)]
+    # get object data to act as a hash
+    counts = (len(me.vertices), len(me.edges), len(me.polygons), len(ob.modifiers))
+    bbox   = (tuple(min(v.co for v in me.vertices)), tuple(max(v.co for v in me.vertices)))
+    vsum   = tuple(sum((v.co for v in me.vertices), Vector((0,0,0))))
     
-    return valid
+    return (ob.name, counts, bbox, vsum)
+
+def is_object_valid(ob):
+    global contour_mesh_cache
+    if 'valid' not in contour_mesh_cache: return False
+    return contour_mesh_cache['valid'] == object_validation(ob)
 
 def write_mesh_cache(orig_ob,tmp_ob, bme):
+    print('writing mesh cache')
+    global contour_mesh_cache
+    clear_mesh_cache()
+    contour_mesh_cache['valid'] = object_validation(orig_ob)
+    contour_mesh_cache['bme'] = bme
+    contour_mesh_cache['tmp'] = tmp_ob
     
-    #TODO try taking this out
+def clear_mesh_cache():
+    print('clearing mesh cache')
+    
     global contour_mesh_cache
     
     if 'valid' in contour_mesh_cache and contour_mesh_cache['valid']:
         del contour_mesh_cache['valid']
         
-    valid = object_validation(orig_ob) #TODO, maybe this should be polygons
-    
-    contour_mesh_cache['valid'] = valid
-    
     if 'bme' in contour_mesh_cache and contour_mesh_cache['bme']:
         bme_old = contour_mesh_cache['bme']
         bme_old.free()
         del contour_mesh_cache['bme']
     
-    contour_mesh_cache['bme'] = bme
-    
     if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
         old_obj = contour_mesh_cache['tmp']
-        
         #context.scene.objects.unlink(self.tmp_ob)
-        me = old_obj.data
+        old_me = old_obj.data
         old_obj.user_clear()
-        bpy.data.objects.remove(old_obj)
-        bpy.data.meshes.remove(me)
-                
-        del contour_mesh_cache['tmp']
-        
-    contour_mesh_cache['tmp'] = tmp_ob
-    
-def clear_mesh_cache():
-    if 'valid' in contour_mesh_cache and contour_mesh_cache['valid']:
-        del contour_mesh_cache['valid']
-        
-    if 'bme' in contour_mesh_cache and contour_mesh_cache['bme']:
-        bme_old = contour_mesh_cache['bme']
-        bme_old.free()
-        del contour_mesh_cache['bme']
-    
-    if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
-        old_obj = contour_mesh_cache['tmp']
         if old_obj and old_obj.name in bpy.data.objects:
             bpy.data.objects.remove(old_obj)
+        if old_me and old_me.name in bpy.data.meshes:
+            bpy.data.meshes.remove(old_me)
         del contour_mesh_cache['tmp']
         
 class ContourToolsAddonPreferences(AddonPreferences):
@@ -620,8 +614,9 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         row = box.row()
         row.prop(cgc_contour, "cut_count")
 
-        row = box.row()
-        row.prop(cgc_contour, "cyclic")
+        ### Commenting out for now until this is further improved and made to work again ###
+        # row = box.row()
+        # row.prop(cgc_contour, "cyclic")
         
         row = box.row()
         row.prop(cgc_contour, "recover")
@@ -921,7 +916,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         path.connect_cuts_to_make_mesh(self.original_form)
         path.backbone_from_cuts(context, self.original_form, self.bme)
         path.update_visibility(context, self.original_form)
-        path.cuts[-1].do_select(settings)
+        if path.cuts:
+            # TODO: should this ever be empty?
+            path.cuts[-1].do_select(settings)
         
         self.cut_paths.append(path)
         
@@ -961,95 +958,96 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         if width.length < 20: #TODO: Setting for minimum pixel width
             self.cut_lines.remove(self.selected)
             self.selected = None
+            print('Placed cut is too short')
             return
         
-        else:
-            #hit the mesh for the first time
-            hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
-            
-            if hit:
-                
-                self.selected.cut_object(context, self.original_form, self.bme)
-                self.selected.simplify_cross(self.segments)
-                self.selected.update_com()
-                self.selected.update_screen_coords(context)
-                
-                
-                self.selected.head = None
-                self.selected.tail = None
-                
-                self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
-                
-                inserted = False
-                if self.cut_paths != [] and not self.force_new:
-                    
-                    for path in self.cut_paths:
-                        if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor):
-                            #the cut belongs to the series now
-                            inserted = True
-                            path.connect_cuts_to_make_mesh(self.original_form)
-                            path.update_visibility(context, self.original_form)
-                            path.seg_lock = True
-                            path.do_select(settings)
-                            path.unhighlight(settings)
-                            self.selected_path = path
-                            self.cut_lines.remove(self.selected)
-                            for other_path in self.cut_paths:
-                                if other_path != self.selected_path:
-                                    other_path.deselect(settings)
-                        if inserted:
-                            # no need to search for more paths
-                            break
-                            
-                if self.cut_paths == [] or not inserted or self.force_new:
-                    #create a blank segment
-                    path = ContourCutSeries(context, [],
-                                    cull_factor = settings.cull_factor, 
-                                    smooth_factor = settings.smooth_factor,
-                                    feature_factor = settings.feature_factor)
-                    
-                    path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
-                    path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
-                    path.segments = 1
-                    path.ring_segments = len(self.selected.verts_simple)
+        #hit the mesh for the first time
+        hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
+        
+        if not hit:
+            self.cut_lines.remove(self.selected)
+            self.selected = None
+            print('Placed cut did not hit the mesh')
+            return
+        
+        self.selected.cut_object(context, self.original_form, self.bme)
+        self.selected.simplify_cross(self.segments)
+        self.selected.update_com()
+        self.selected.update_screen_coords(context)
+        
+        
+        self.selected.head = None
+        self.selected.tail = None
+        
+        self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        
+        if settings.debug > 1:
+            print('release_place_cut')
+            print('len(self.cut_paths) = %d' % len(self.cut_paths))
+            print('self.force_new = ' + str(self.force_new))
+        
+        if self.cut_paths != [] and not self.force_new:
+            for path in self.cut_paths:
+                if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor):
+                    #the cut belongs to the series now
                     path.connect_cuts_to_make_mesh(self.original_form)
                     path.update_visibility(context, self.original_form)
-                    
-                    for other_path in self.cut_paths:
-                        other_path.deselect(settings)
-                    
-                    self.cut_paths.append(path)
-                    self.selected_path = path
+                    path.seg_lock = True
                     path.do_select(settings)
-                    
+                    path.unhighlight(settings)
+                    self.selected_path = path
                     self.cut_lines.remove(self.selected)
-                    
-                    if self.force_new:
-                        self.force_new = False
-            
-            else:
-                self.cut_lines.remove(self.selected)
-                    
-      
-            
+                    for other_path in self.cut_paths:
+                        if other_path != self.selected_path:
+                            other_path.deselect(settings)
+                    # no need to search for more paths
+                    return
+        
+        #create a blank segment
+        path = ContourCutSeries(context, [],
+                        cull_factor = settings.cull_factor, 
+                        smooth_factor = settings.smooth_factor,
+                        feature_factor = settings.feature_factor)
+        
+        path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
+        path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
+        path.segments = 1
+        path.ring_segments = len(self.selected.verts_simple)
+        path.connect_cuts_to_make_mesh(self.original_form)
+        path.update_visibility(context, self.original_form)
+        
+        for other_path in self.cut_paths:
+            other_path.deselect(settings)
+        
+        self.cut_paths.append(path)
+        self.selected_path = path
+        path.do_select(settings)
+        
+        self.cut_lines.remove(self.selected)
+        self.force_new = False
     
     def finish_mesh(self, context):
-        back_to_edit = context.mode == 'EDIT_MESH'
+        back_to_edit = (context.mode == 'EDIT_MESH')
                     
         #This is where all the magic happens
+        print('pushing data into bmesh')
         for path in self.cut_paths:
             path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
-            
+        
         if back_to_edit:
+            print('updating edit mesh')
             bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
         
         else:
             #write the data into the object
+            print('write data into the object')
             self.dest_bme.to_mesh(self.dest_me)
         
             #remember we created a new object
+            print('link destination object')
             context.scene.objects.link(self.destination_ob)
             
+            print('select and make active')
             self.destination_ob.select = True
             context.scene.objects.active = self.destination_ob
             
@@ -1064,12 +1062,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 context.space_data.region_3d.view_rotation = view_rot
                 context.space_data.region_3d.view_distance = view_dist
                 context.space_data.region_3d.update()
-                
+        
+        print('wrap up')
         context.area.header_text_set()
         contour_utilities.callback_cleanup(self,context)
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
-
+        
+        print('finished mesh!')
         return {'FINISHED'}
         
     def widget_transform(self,context,settings, event):
@@ -1780,9 +1780,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             path.deselect(settings)
                             
                         self.selected_path  = self.new_path_from_draw(context, settings)
-                        self.selected_path.do_select(settings)
-                        self.selected = self.selected_path.cuts[-1]
-                        self.selected.do_select(settings)
+                        if self.selected_path:
+                            self.selected_path.do_select(settings)
+                            if self.selected_path.cuts:
+                                self.selected = self.selected_path.cuts[-1]
+                            else:
+                                self.selected = None
+                            if self.selected:
+                                self.selected.do_select(settings)
                         
                         self.drag = False #TODO: is self.drag still needed?
                         self.force_new = False
@@ -1886,12 +1891,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             #this is a simple set of recorded properties meant to help detect
             #if the mesh we are using is the same as the one in the cache.
-            validation = object_validation(target)
-            
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_object_valid(target):
                 use_cache = True
                 print('willing and able to use the cache!')
-            
             else:
                 use_cache = False  #later, we will double check for ngons and things
                 clear_mesh_cache()
@@ -1956,11 +1958,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             #the active object will be the target
             target = context.object
             
-            validation = object_validation(target)
+            is_valid = is_object_valid(target)
+            has_tmp = 'ContourTMP' in bpy.data.objects and bpy.data.objects['ContourTMP'].data
             
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_valid and has_tmp:
                 use_cache = True
-            
             else:
                 use_cache = False
                 self.original_form  = target #TODO:  Clarify original_form as reference_form consistent with design doc
@@ -2083,8 +2085,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
        
         if settings.use_x_ray:
             self.orig_x_ray = self.destination_ob.show_x_ray
-            self.destination_ob.show_x_ray = True
-            
+            self.destination_ob.show_x_ray = True     
             
         ####MODE, UI, DRAWING, and MODAL variables###
         self.mode = 'LOOP'
@@ -2123,7 +2124,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.hot_key = None  #Keep track of which hotkey was pressed
         self.draw = False  #Being in the state of drawing a guide stroke
         
-        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, N: Forece New Segment, TAB: toggle Guide mode'
+        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, N: Force New Segment, TAB: toggle Guide mode'
         self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments, TAB: toggle Loop mode'
         context.area.header_text_set(self.loop_msg)
         
@@ -2805,11 +2806,9 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             #or we wil pull the mesh cache
             target = [ob for ob in context.selected_objects if ob.name != context.object.name][0]
             
-            validation = object_validation(target)
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_object_valid(target):
                 use_cache = True
                 print('willing and able to use the cache!')
-            
             else:
                 use_cache = False  #later, we will double check for ngons and things
                 clear_mesh_cache()
@@ -2862,11 +2861,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             #the active object will be the target
             target = context.object
             
-            validation = object_validation(target)
-            
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_object_valid(target):
                 use_cache = True
-            
             else:
                 use_cache = False
                 self.original_form  = target
@@ -2993,6 +2989,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
        
         if settings.use_x_ray:
             self.orig_x_ray = self.destination_ob.show_x_ray
+
             self.destination_ob.show_x_ray = True
             
         #is the mouse clicked and held down
