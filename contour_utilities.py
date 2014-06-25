@@ -608,6 +608,13 @@ def diagonal_verts(verts):
 
 
 def calculate_com_normal(locs):
+    '''
+    computes a center of mass (CoM) and a normal of provided roughly planar locs
+    notes:
+    - uses random sampling
+    - does not assume a particular order of locs
+    - may compute the negative of "true" normal
+    '''
     com = sum((loc for loc in locs), Vector((0,0,0))) / len(locs)
     # get locations wrt to com
     llocs = [loc-com for loc in locs]

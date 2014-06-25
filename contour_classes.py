@@ -1343,6 +1343,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     
         #expensive recalculation of whole path
         #TODO: make this process smarter
+        if any(len(cut.verts_simple)==0 for cut in merge_series.cuts):
+            print('>>> error!')
+            print(str([len(cut.verts_simple) for cut in merge_series.cuts]))
         merge_series.world_path = [cut.verts_simple[0] for cut in merge_series.cuts]
         merge_series.segments = len(merge_series.cuts) - 1
         merge_series.backbone_from_cuts(context,ob,bme)

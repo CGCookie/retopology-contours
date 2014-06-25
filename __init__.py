@@ -85,61 +85,46 @@ def object_validation(ob):
     
     # get object data to act as a hash
     counts = (len(me.vertices), len(me.edges), len(me.polygons), len(ob.modifiers))
-    bbox   = (min(v.co for v in me.vertices), max(v.co for v in me.vertices))
-    vsum   = sum((v.co for v in me.vertices), Vector((0,0,0)))
+    bbox   = (tuple(min(v.co for v in me.vertices)), tuple(max(v.co for v in me.vertices)))
+    vsum   = tuple(sum((v.co for v in me.vertices), Vector((0,0,0))))
     
-    valid  = (ob.name, counts, bbox, vsum)
-    
-    return valid
+    return (ob.name, counts, bbox, vsum)
+
+def is_object_valid(ob):
+    global contour_mesh_cache
+    if 'valid' not in contour_mesh_cache: return False
+    return contour_mesh_cache['valid'] == object_validation(ob)
 
 def write_mesh_cache(orig_ob,tmp_ob, bme):
     print('writing mesh cache')
+    global contour_mesh_cache
+    clear_mesh_cache()
+    contour_mesh_cache['valid'] = object_validation(orig_ob)
+    contour_mesh_cache['bme'] = bme
+    contour_mesh_cache['tmp'] = tmp_ob
     
-    #TODO try taking this out
+def clear_mesh_cache():
+    print('clearing mesh cache')
+    
     global contour_mesh_cache
     
     if 'valid' in contour_mesh_cache and contour_mesh_cache['valid']:
         del contour_mesh_cache['valid']
         
-    valid = object_validation(orig_ob) #TODO, maybe this should be polygons
-    
-    contour_mesh_cache['valid'] = valid
-    
     if 'bme' in contour_mesh_cache and contour_mesh_cache['bme']:
         bme_old = contour_mesh_cache['bme']
         bme_old.free()
         del contour_mesh_cache['bme']
     
-    contour_mesh_cache['bme'] = bme
-    
     if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
-        print('clearing out old mesh cache')
         old_obj = contour_mesh_cache['tmp']
-        
         #context.scene.objects.unlink(self.tmp_ob)
-        me = old_obj.data
+        old_me = old_obj.data
         old_obj.user_clear()
-        bpy.data.objects.remove(old_obj)
-        bpy.data.meshes.remove(me)
-                
-        del contour_mesh_cache['tmp']
-        
-    contour_mesh_cache['tmp'] = tmp_ob
-    
-def clear_mesh_cache():
-    print('clearing mesh cache')
-    if 'valid' in contour_mesh_cache and contour_mesh_cache['valid']:
-        del contour_mesh_cache['valid']
-        
-    if 'bme' in contour_mesh_cache and contour_mesh_cache['bme']:
-        bme_old = contour_mesh_cache['bme']
-        bme_old.free()
-        del contour_mesh_cache['bme']
-    
-    if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
-        old_obj = contour_mesh_cache['tmp']
         if old_obj and old_obj.name in bpy.data.objects:
             bpy.data.objects.remove(old_obj)
+        if old_me and old_me.name in bpy.data.meshes:
+            bpy.data.meshes.remove(old_me)
         del contour_mesh_cache['tmp']
         
 class ContourToolsAddonPreferences(AddonPreferences):
@@ -1905,12 +1890,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             #this is a simple set of recorded properties meant to help detect
             #if the mesh we are using is the same as the one in the cache.
-            validation = object_validation(target)
-            
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_object_valid(target):
                 use_cache = True
                 print('willing and able to use the cache!')
-            
             else:
                 use_cache = False  #later, we will double check for ngons and things
                 clear_mesh_cache()
@@ -1975,9 +1957,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             #the active object will be the target
             target = context.object
             
-            validation = object_validation(target)
-            
-            is_valid = 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation
+            is_valid = is_object_valid(target)
             has_tmp = 'ContourTMP' in bpy.data.objects and bpy.data.objects['ContourTMP'].data
             
             if is_valid and has_tmp:
@@ -2826,11 +2806,9 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             #or we wil pull the mesh cache
             target = [ob for ob in context.selected_objects if ob.name != context.object.name][0]
             
-            validation = object_validation(target)
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_object_valid(target):
                 use_cache = True
                 print('willing and able to use the cache!')
-            
             else:
                 use_cache = False  #later, we will double check for ngons and things
                 clear_mesh_cache()
@@ -2883,11 +2861,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             #the active object will be the target
             target = context.object
             
-            validation = object_validation(target)
-            
-            if 'valid' in contour_mesh_cache and contour_mesh_cache['valid'] == validation:
+            if is_object_valid(target):
                 use_cache = True
-            
             else:
                 use_cache = False
                 self.original_form  = target
