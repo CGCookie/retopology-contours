@@ -607,6 +607,25 @@ def diagonal_verts(verts):
     return diag
 
 
+def calculate_com_normal(locs):
+    com = sum((loc for loc in locs), Vector((0,0,0))) / len(locs)
+    # get locations wrt to com
+    llocs = [loc-com for loc in locs]
+    ac = Vector((0,0,0))
+    first = True
+    for i in range(len(locs)):
+        lp0,lp1 = random.sample(llocs,2)
+        c = lp0.cross(lp1).normalized()
+        if first:
+            ac = c
+            first = False
+        else:
+            if ac.dot(c) < 0:
+                ac -= c
+            else:
+                ac += c
+    return (com, ac.normalized())
+
 #TODO: CREDIT
 #TODO: LINK
 def calculate_best_plane(locs):

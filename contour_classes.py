@@ -1541,7 +1541,8 @@ class ExistingVertList(object):
     def derive_normal(self):
         
         if self.verts_simple != []:
-            com, normal = contour_utilities.calculate_best_plane(self.verts_simple)
+            #com, normal = contour_utilities.calculate_best_plane(self.verts_simple)
+            com,normal = contour_utilities.calculate_com_normal(self.verts_simple)
             
         self.plane_no = normal
         self.plane_com = com
