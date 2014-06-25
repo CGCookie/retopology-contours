@@ -93,7 +93,7 @@ def object_validation(ob):
     return valid
 
 def write_mesh_cache(orig_ob,tmp_ob, bme):
-    print('>>> write_mesh_cache')
+    print('writing mesh cache')
     
     #TODO try taking this out
     global contour_mesh_cache
@@ -113,7 +113,7 @@ def write_mesh_cache(orig_ob,tmp_ob, bme):
     contour_mesh_cache['bme'] = bme
     
     if 'tmp' in contour_mesh_cache and contour_mesh_cache['tmp']:
-        print('>>> clearing out old mesh cache')
+        print('clearing out old mesh cache')
         old_obj = contour_mesh_cache['tmp']
         
         #context.scene.objects.unlink(self.tmp_ob)
@@ -127,7 +127,7 @@ def write_mesh_cache(orig_ob,tmp_ob, bme):
     contour_mesh_cache['tmp'] = tmp_ob
     
 def clear_mesh_cache():
-    print('>>> clear_mesh_cache')
+    print('clearing mesh cache')
     if 'valid' in contour_mesh_cache and contour_mesh_cache['valid']:
         del contour_mesh_cache['valid']
         
@@ -996,9 +996,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
         
         if settings.debug > 1:
-            print('>>> release_place_cut')
-            print('>>> len(self.cut_paths) = %d' % len(self.cut_paths))
-            print('>>> self.force_new = ' + str(self.force_new))
+            print('release_place_cut')
+            print('len(self.cut_paths) = %d' % len(self.cut_paths))
+            print('self.force_new = ' + str(self.force_new))
         
         if self.cut_paths != [] and not self.force_new:
             for path in self.cut_paths:
@@ -1041,22 +1041,27 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.force_new = False
     
     def finish_mesh(self, context):
-        back_to_edit = context.mode == 'EDIT_MESH'
+        back_to_edit = (context.mode == 'EDIT_MESH')
                     
         #This is where all the magic happens
+        print('pushing data into bmesh')
         for path in self.cut_paths:
             path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
-            
+        
         if back_to_edit:
+            print('updating edit mesh')
             bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
         
         else:
             #write the data into the object
+            print('write data into the object')
             self.dest_bme.to_mesh(self.dest_me)
         
             #remember we created a new object
+            print('link destination object')
             context.scene.objects.link(self.destination_ob)
             
+            print('select and make active')
             self.destination_ob.select = True
             context.scene.objects.active = self.destination_ob
             
@@ -1071,12 +1076,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 context.space_data.region_3d.view_rotation = view_rot
                 context.space_data.region_3d.view_distance = view_dist
                 context.space_data.region_3d.update()
-                
+        
+        print('wrap up')
         context.area.header_text_set()
         contour_utilities.callback_cleanup(self,context)
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
-
+        
+        print('finished mesh!')
         return {'FINISHED'}
         
     def widget_transform(self,context,settings, event):

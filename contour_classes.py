@@ -823,13 +823,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
         if settings.debug > 1:
-            print('>>> testing for insertion')
-            print('>>> self.existing_head = ' + str(self.existing_head))
-            print('>>> len(self.cuts) = %d' % len(self.cuts))
+            print('testing for cut insertion')
+            print('self.existing_head = ' + str(self.existing_head))
+            print('len(self.cuts) = %d' % len(self.cuts))
         
         #no cuts, this is a trivial case
         if len(self.cuts) == 0 and not self.existing_head:
-            if settings.debug > 1: print('>>> no cuts and not self.existing_head')
+            if settings.debug > 1: print('no cuts and not self.existing_head')
             
             self.cuts.append(new_cut)
             self.world_path.append(new_cut.verts_simple[0])
@@ -843,7 +843,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         
         if (len(self.cuts) == 1 and not self.existing_head) or (self.existing_head and len(self.cuts) == 0):
-            if settings.debug > 1: print('>>> single cut')
+            if settings.debug > 1: print('single cut')
             #criteria for extension existing cut to new cut
             #A) The distance between the com is < 4 * the bbox diagonal of the existing cut
             #B) The angle between the existing cut normal and the line between com's is < 60 deg
@@ -861,20 +861,28 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             thresh = search * diag  #TODO: Come to a decision on how to determine distance
             
             vec_between = new_cut.plane_com - cut.plane_com
+            vec_dist = vec_between.length
+            is_dist_large = vec_dist > thresh
             
             #absolute value of dot product between line between com and plane normal
-            ang = abs(vec_between.normalized().dot(cut.plane_no))
-            
-            if ang < math.sin(math.pi/3):
-                print('too wide, aim better')
-                print(ang)
+            ang = abs(vec_between.normalized().dot(cut.plane_no.normalized()))
+            is_ang_wide = ang < math.sin(math.pi/3)
             
             if settings.debug > 1:
-                print('>>> vec_between.length = %f, thresh = %f' % (vec_between.length,thresh))
-                print('>>> ang = %f, %f' % (ang, math.sin(math.pi/3)))
-            if vec_between.length < thresh and ang > math.sin(math.pi/3):
+                print('dist = %f, thresh = %f' % (vec_dist,thresh))
+                print('ang = %f, thresh = %f' % (ang, math.sin(math.pi/3)))
+                if is_dist_large:
+                    print('distance too far')
+                    print('dist = %f' % vec_dist)
+                if is_ang_wide:
+                    print('too wide, aim better')
+                    print('ang = %f' % ang)
+                    print('vec_between  = ' + str(vec_between.normalized()))
+                    print('cut.plane_no = ' + str(cut.plane_no.normalized()))
+            
+            if not is_dist_large and not is_ang_wide:
                 if settings.debug > 1:
-                    print('>>> vec_between.length < thresh and ang > math.sin(math.pi/3)')
+                    print('True: vec_between.length < thresh and ang > math.sin(math.pi/3)')
                 
                 self.segments += 1
                 self.cuts.append(new_cut)
@@ -919,12 +927,12 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             
             else:
                 if settings.debug > 1:
-                    print('>>> NOT vec_between.length < thresh and ang > math.sin(math.pi/3)')
+                    print('False: vec_between.length < thresh and ang > math.sin(math.pi/3)')
                 return False
         
         
         if self.existing_head and self.cuts:
-            if settings.debug > 1: print('>>> self.existing_head and self.cuts')
+            if settings.debug > 1: print('True: self.existing_head and self.cuts')
             
             A = self.existing_head.plane_com
             B = self.cuts[0].plane_com
@@ -933,7 +941,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             test1 = self.existing_head.plane_no.dot(C-A) > 0
             test2 = self.cuts[0].plane_no.dot(C-B) < 0
             if C and test1 and test2:
-                if settings.debug > 1: print('>>> C and test1 and test2')
+                if settings.debug > 1: print('True: C and test1 and test2')
                 valid = contour_utilities.point_inside_loop_almost3D(C, new_cut.verts_simple, new_cut.plane_no, new_cut.plane_com, threshold = .01, bbox = True)
                 if valid:
                     print('found an intersection between existing head and first loop')
@@ -957,9 +965,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     self.backbone_from_cuts(context, ob, bme)
                     self.update_backbone(context, ob, bme, new_cut, insert = True)
                     return True
-            if settings.debug > 1: print('>>> falling through')
+            if settings.debug > 1: print('falling through')
         
-        if settings.debug > 1: print('>>> checking between cuts')
+        if settings.debug > 1: print('checking between cuts')
         #Assume the cuts in the series are in order
         #Check in between all the cuts
         for i in range(0,len(self.cuts) -1):
@@ -1005,14 +1013,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if len(self.cuts) > 1:
             spine = self.backbone[1:-1]
             spine_length = sum([contour_utilities.get_path_length(vertebra) for vertebra in spine])
-            if settings.debug > 1: print('>>> spine_length = ' + str(spine_length))
+            if settings.debug > 1: print('spine_length = ' + str(spine_length))
             fraction = search * spine_length /  (len(self.cuts) - 1 + 1 * (self.existing_head != None))
         elif self.existing_head and len(self.cuts) == 1:
             fraction = search * (self.existing_head.plane_com - self.cuts[0].plane_com).length  
-        if settings.debug > 1: print('>>> fraction = %f' % fraction)
+        if settings.debug > 1: print('fraction = %f' % fraction)
         
         if not self.existing_head:
-            if settings.debug > 1: print('>>> not self.existing_head')
+            if settings.debug > 1: print('False: self.existing_head')
             # B -> A is pointed backward out the tip of the line
             A = self.cuts[0].plane_com
             B = self.cuts[1].plane_com
@@ -1051,13 +1059,13 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     self.update_backbone(context, ob, bme, new_cut, insert = True)
                     return True
         
-        if settings.debug > 1: print('>>> still not inserted')
+        if settings.debug > 1: print('still not inserted')
         
         if self.existing_head and len(self.cuts) == 1:
             cut_behind = self.existing_head
         else:
             cut_behind = self.cuts[-2]
-        if settings.debug > 1: print('>>> cut_behind = ' + str(cut_behind))
+        if settings.debug > 1: print('cut_behind = ' + str(cut_behind))
         
         A = self.cuts[-1].plane_com
         B = cut_behind.plane_com
@@ -1090,7 +1098,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.update_backbone(context, ob, bme, new_cut, insert = True)
                 return True
         
-        if settings.debug > 1: print('>>> did not insert')
+        if settings.debug > 1: print('did not insert')
         return False
     
     def remove_cut(self,context,ob, bme, cut):
@@ -1194,39 +1202,38 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         '''
         print('sort the cuts')
         
-    def push_data_into_bmesh(self,context, reto_ob, reto_bme, orignal_form, original_me):
+    def push_data_into_bmesh(self, context, reto_ob, reto_bme, orignal_form, original_me):
         
         #TODO: Bridging on bmesh level!  Hooray
         
-        orig_mx = orignal_form.matrix_world
-        reto_mx = reto_ob.matrix_world
+        orig_mx  = orignal_form.matrix_world
+        reto_mx  = reto_ob.matrix_world
         reto_imx = reto_mx.inverted()
+        xform    = reto_imx * orig_mx
         
-        bmverts = []
+        # a cheap hashing of vector with epsilon
+        def h(v): return '%0.3f,%0.3f,%0.3f' % tuple(v)
         
-        for i, vert in enumerate(self.verts):
-                new_vert = reto_bme.verts.new(tuple(reto_imx * (orig_mx * vert)))
-                bmverts.append(new_vert)
+        weld_verts = {}
+        if self.existing_head:
+            for i in self.existing_head.vert_inds_sorted:
+                v = reto_bme.verts[i]
+                weld_verts[h(v.co)] = v
+        if self.existing_tail:
+            for i in self.existing_tail.vert_inds_sorted:
+                v = reto_bme.verts[i]
+                weld_verts[h(v.co)] = v
+        
+        hvs = [h(vert) for vert in self.verts]
+        bmverts = [weld_verts[hv] if hv in weld_verts else reto_bme.verts.new(tuple(xform * vert)) for hv,vert in zip(hvs,self.verts)]
+        bmfaces = [reto_bme.faces.new(tuple(bmverts[iv] for iv in face)) for face in self.faces]
         
         # Initialize the index values of this sequence
-        reto_bme.verts.index_update() 
+        reto_bme.verts.index_update()
+        reto_bme.edges.index_update()
+        reto_bme.faces.index_update()
         
-        bmfaces = []
-        for face in self.faces:
-
-            #actual BMVerts not indices I think?
-            new_face = tuple([bmverts[i] for i in face])
-            bmfaces.append(reto_bme.faces.new(new_face))
-            
-        
-        if self.existing_head or self.existing_tail:
-            if self.existing_head:
-                weld_verts = [reto_bme.verts[n] for n in self.existing_head.vert_inds_sorted]
-            
-            if self.existing_tail:
-                weld_verts.extend([reto_bme.verts[n] for n in self.existing_tail.vert_inds_sorted])
-        
-            bmesh.ops.remove_doubles(reto_bme, verts = bmverts + weld_verts, dist = .0001)    
+        print('data pushed into bmesh')
     
     def snap_merge_into_other(self, merge_series, merge_ring, context, ob, bme):
         '''
