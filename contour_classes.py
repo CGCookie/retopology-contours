@@ -3835,7 +3835,7 @@ class CutLineManipulatorWidget(object):
         else:
             self.b = None
             self.b_no = None
-            
+        
         if ind < len(cut_path.cuts)-1:
             self.a = cut_path.cuts[ind+1].plane_com
             self.a_no = cut_path.cuts[ind+1].plane_no
@@ -3853,7 +3853,7 @@ class CutLineManipulatorWidget(object):
         
         self.arc_arrow_1 = []
         self.arc_arrow_2 = []
-                
+    
     def user_interaction(self, context, mouse_x,mouse_y, shift = False):
         '''
         analyse mouse coords x,y
@@ -3887,242 +3887,234 @@ class CutLineManipulatorWidget(object):
                 if loc_angle >= 1/4 * math.pi and loc_angle < 3/4 * math.pi:
                     #we are in the  left quadrant...which is perpendicular
                     self.transform_mode = 'EDGE_SLIDE'
-                    
                 elif loc_angle >= 3/4 * math.pi and loc_angle < 5/4 * math.pi:
                     self.transform_mode = 'ROTATE_VIEW'
-                
                 elif loc_angle >= 5/4 * math.pi and loc_angle < 7/4 * math.pi:
                     self.transform_mode = 'EDGE_SLIDE'
-                
                 else:
                     self.transform_mode = 'ROTATE_VIEW_PERPENDICULAR'
-
+                    
                 print(self.transform_mode)
                 
             return {'DO_NOTHING'}  #this tells it whether to recalc things
             
-        else:
-            #we were transforming but went back in the circle
-            if mouse_wrt_widget.length < self.inner_radius and not self.hotkey:
+        #we were transforming but went back in the circle
+        if mouse_wrt_widget.length < self.inner_radius and not self.hotkey:
+            
+            self.cancel_transform()
+            self.transform = False
+            self.transform_mode = None
+            
+            return {'RECUT'}
+            
+        
+        if self.transform_mode == 'EDGE_SLIDE':
+            
+            world_vec = world_mouse - world_widget
+            screen_dist = mouse_wrt_widget.length - self.inner_radius
+            
+            factor = 1 if self.hotkey else screen_dist/mouse_wrt_widget.length
+            if shift:
+                factor *= 1/5
                 
-                self.cancel_transform()
-                self.transform = False
-                self.transform_mode = None
+            if self.a:
+                a_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.a)
+                vec_a_screen = a_screen - com_screen
+                vec_a_screen_norm = vec_a_screen.normalized()
                 
-                return {'RECUT'}
-
-            else:
+                vec_a = self.a - self.initial_com
+                vec_a_dir = vec_a.normalized()
                 
-                if self.transform_mode == 'EDGE_SLIDE':
+                if mouse_wrt_widget.dot(vec_a_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_a_screen_norm) < vec_a_screen.length:
+                    translate = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length * vec_a
                     
-                    world_vec = world_mouse - world_widget
-                    screen_dist = mouse_wrt_widget.length - self.inner_radius
-
-                    if self.hotkey:
-                        factor =  1
+                    if self.a_no.dot(self.initial_plane_no) < 0:
+                        v = -1 * self.a_no
                     else:
-                        factor = screen_dist/mouse_wrt_widget.length
+                        v = self.a_no
                     
-                    if shift:
-                        factor *= 1/5
-                        
-                    if self.a:
-                        a_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.a)
-                        vec_a_screen = a_screen - com_screen
-                        vec_a_screen_norm = vec_a_screen.normalized()
-                        
-                        vec_a = self.a - self.initial_com                        
-                        vec_a_dir = vec_a.normalized()
-                        
-                        if mouse_wrt_widget.dot(vec_a_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_a_screen_norm) < vec_a_screen.length:
-                            translate = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length * vec_a
-                            
-
-                            if self.a_no.dot(self.initial_plane_no) < 0:
-                                v = -1 * self.a_no
-                            else:
-                                v = self.a_no
-                            
-                            scale = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length
-                            quat = contour_utilities.rot_between_vecs(self.initial_plane_no, v, factor = scale)
-                            inter_no = quat * self.initial_plane_no
-                            
-                            
-                            
-                            new_com = self.initial_com + translate
-                            self.cut_line.plane_com = new_com
-                            self.cut_line.plane_no = inter_no
-                            
-                            self.cut_line.vec_x = quat * self.vec_x.copy()
-                            self.cut_line.vec_y = quat * self.vec_y.copy()
-                            
-                            intersect = contour_utilities.intersect_path_plane(self.path_ahead, new_com, inter_no, mode = 'FIRST')
-                            
-                            if intersect[0]:
-                                proposed_point = intersect[0]
-                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                                self.cut_line.seed_face_index = snap[2]
-                            
-                            else:
-                                self.cancel_transform()
-
-                            return {'RECUT'}
-                        
-                        elif not self.b and world_vec.dot(vec_a_dir) < 0:
-                            translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
-                            self.cut_line.plane_com = self.initial_com + translate
-                            intersect = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')
-                            if intersect[0]:
-                                proposed_point = intersect[0]
-                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                                self.cut_line.seed_face_index = snap[2]
-                            else:
-                                
-                                self.cancel_transform()
-                            return {'RECUT'}
+                    scale = factor * mouse_wrt_widget.dot(vec_a_screen_norm)/vec_a_screen.length
+                    quat = contour_utilities.rot_between_vecs(self.initial_plane_no, v, factor = scale)
+                    inter_no = quat * self.initial_plane_no
                     
-                    if self.b:
-                        b_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.b)
-                        vec_b_screen = b_screen - com_screen
-                        vec_b_screen_norm = vec_b_screen.normalized()
-                        
-                        vec_b = self.b - self.initial_com
-                        vec_b_dir = vec_b.normalized()
-                        
-                        if mouse_wrt_widget.dot(vec_b_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_b_screen_norm) < vec_b_screen.length:
-                            translate = factor * mouse_wrt_widget.dot(vec_b_screen_norm)/vec_b_screen.length * vec_b
-                            
-                            if self.b_no.dot(self.initial_plane_no) < 0:
-                                v = -1 * self.b_no
-                            else:
-                                v = self.b_no
-                            
-                            scale = factor * mouse_wrt_widget.dot(vec_b_screen_norm)/vec_b_screen.length
-                            quat = contour_utilities.rot_between_vecs(self.initial_plane_no, v, factor = scale)
-                            inter_no = quat * self.initial_plane_no
-                            
-                            new_com = self.initial_com + translate
-                            self.cut_line.plane_com = new_com
-                            self.cut_line.plane_no = inter_no
-                            self.cut_line.vec_x = quat * self.vec_x.copy()
-                            self.cut_line.vec_y = quat * self.vec_y.copy()
-                            
-                            #TODO:  what if we don't get a proposed point?
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_behind, new_com, inter_no, mode = 'FIRST')[0]
-                            if proposed_point:
-                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                                self.cut_line.seed_face_index = snap[2]
-                            
-                            else:
-                                self.cancel_transform()
-                            return {'RECUT'}
-                            
-                        elif not self.a and world_vec.dot(vec_b_dir) < 0:
-                            translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
-                            self.cut_line.plane_com = self.initial_com + translate
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
-                            if proposed_point:
-                                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                                self.cut_line.seed_face_index = snap[2]
-                            else:
-                                self.cancel_transform()
+                    new_com = self.initial_com + translate
+                    self.cut_line.plane_com = new_com
+                    self.cut_line.plane_no = inter_no
                     
-                    if not self.a and not self.b:
-                        
-                        translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
-                        self.cut_line.plane_com = self.initial_com + translate
-                        
-                        proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
-                        if not proposed_point:
-                            
-                            proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
-                        if proposed_point:        
-                            snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
-                            self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                            self.cut_line.seed_face_index = snap[2]
-                        else:
-                            self.cancel_transform()
-                        
-                        return {'RECUT'}
+                    self.cut_line.vec_x = quat * self.vec_x.copy()
+                    self.cut_line.vec_y = quat * self.vec_y.copy()
                     
-                    return {'DO_NOTHING'}
-
-                if self.transform_mode == 'NORMAL_TRANSLATE':
-                    #the pixel distance used to scale the translation
-                    screen_dist = mouse_wrt_widget.length - self.inner_radius
+                    intersect = contour_utilities.intersect_path_plane(self.path_ahead, new_com, inter_no, mode = 'FIRST')
                     
-                    world_vec = world_mouse - world_widget
-                    translate = screen_dist/mouse_wrt_widget.length * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
-                    
-                    self.cut_line.plane_com = self.initial_com + translate
-                    
-                    return {'REHIT','RECUT'}
-                
-                elif self.transform_mode in {'ROTATE_VIEW_PERPENDICULAR', 'ROTATE_VIEW'}:
-                    
-                    #establish the transform axes
-                    axis_1  = rv3d.view_rotation * Vector((0,0,1))
-                    axis_1.normalize()
-                    
-                    axis_2 = self.initial_plane_no.cross(axis_1)
-                    axis_2.normalize()
-
-                    #identify which quadrant we are in
-                    screen_angle = math.atan2(mouse_wrt_widget[1], mouse_wrt_widget[0])
-                    
-                    if self.transform_mode == 'ROTATE_VIEW':
-                        if not self.hotkey:
-                            rot_angle = screen_angle - self.angle #+ .5 * math.pi  #Mystery
-                            rot_angle = math.fmod(rot_angle + 3 * math.pi, 2 * math.pi)  #correct for any negatives
-                            
-                        else:
-                            init_angle = math.atan2(self.initial_y - self.y, self.initial_x - self.x)
-                            init_angle = math.fmod(init_angle + 4 * math.pi, 2 * math.pi)
-                            rot_angle = screen_angle - init_angle
-                            rot_angle = math.fmod(rot_angle + 2 * math.pi, 2 * math.pi)  #correct for any negatives
-                            
-                        
-                        sin = math.sin(rot_angle/2)
-                        cos = math.cos(rot_angle/2)
-                        #quat = Quaternion((cos, sin*world_x[0], sin*world_x[1], sin*world_x[2]))
-                        quat = Quaternion((cos, sin*axis_1[0], sin*axis_1[1], sin*axis_1[2]))
-                                            
-                    else:
-                        rot_angle = screen_angle - self.angle + math.pi #+ .5 * math.pi  #Mystery
-                        rot_angle = math.fmod(rot_angle + 4 * math.pi, 2 * math.pi)  #correct for any negatives
-                        sin = math.sin(rot_angle/2)
-                        cos = math.cos(rot_angle/2)
-                        #quat = Quaternion((cos, sin*world_y[0], sin*world_y[1], sin*world_y[2]))
-                        quat = Quaternion((cos, sin*axis_2[0], sin*axis_2[1], sin*axis_2[2])) 
-
-                    new_no = self.initial_plane_no.copy() #its not rotated yet
-                    new_no.rotate(quat)
-
-                    new_x = self.vec_x.copy() #its not rotated yet
-                    new_x.rotate(quat)
-                   
-                    new_y = self.vec_y.copy()
-                    new_y.rotate(quat)
-                    
-                    self.cut_line.vec_x = new_x
-                    self.cut_line.vec_y = new_y
-                    self.cut_line.plane_no = new_no
-                    
-                    new_pt = contour_utilities.intersect_path_plane(self.path_ahead, self.initial_com, new_no, mode = 'FIRST')
-                    if not new_pt[0]:
-                        new_pt = contour_utilities.intersect_path_plane(self.path_behind, self.initial_com, new_no, mode = 'FIRST')
-                    
-                    if new_pt[0]:
-                        snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * new_pt[0])
+                    if intersect[0]:
+                        proposed_point = intersect[0]
+                        snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
                         self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
-                        self.cut_line.seed_face_index = snap[2] 
+                        self.cut_line.seed_face_index = snap[2]
                     else:
                         self.cancel_transform()
+                        
                     return {'RECUT'}
+                
+                if not self.b and world_vec.dot(vec_a_dir) < 0:
+                    translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
+                    self.cut_line.plane_com = self.initial_com + translate
+                    intersect = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')
+                    
+                    if intersect[0]:
+                        proposed_point = intersect[0]
+                        snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                        self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                        self.cut_line.seed_face_index = snap[2]
+                    else:
+                        self.cancel_transform()
+                    
+                    return {'RECUT'}
+            
+            if self.b:
+                b_screen = location_3d_to_region_2d(context.region, context.space_data.region_3d,self.b)
+                vec_b_screen = b_screen - com_screen
+                vec_b_screen_norm = vec_b_screen.normalized()
+                
+                vec_b = self.b - self.initial_com
+                vec_b_dir = vec_b.normalized()
+                
+                if mouse_wrt_widget.dot(vec_b_screen_norm) > 0 and factor * mouse_wrt_widget.dot(vec_b_screen_norm) < vec_b_screen.length:
+                    translate = factor * mouse_wrt_widget.dot(vec_b_screen_norm)/vec_b_screen.length * vec_b
+                    
+                    if self.b_no.dot(self.initial_plane_no) < 0:
+                        v = -1 * self.b_no
+                    else:
+                        v = self.b_no
+                    
+                    scale = factor * mouse_wrt_widget.dot(vec_b_screen_norm)/vec_b_screen.length
+                    quat = contour_utilities.rot_between_vecs(self.initial_plane_no, v, factor = scale)
+                    inter_no = quat * self.initial_plane_no
+                    
+                    new_com = self.initial_com + translate
+                    self.cut_line.plane_com = new_com
+                    self.cut_line.plane_no = inter_no
+                    self.cut_line.vec_x = quat * self.vec_x.copy()
+                    self.cut_line.vec_y = quat * self.vec_y.copy()
+                    
+                    #TODO:  what if we don't get a proposed point?
+                    proposed_point = contour_utilities.intersect_path_plane(self.path_behind, new_com, inter_no, mode = 'FIRST')[0]
+                    
+                    if proposed_point:
+                        snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                        self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                        self.cut_line.seed_face_index = snap[2]
+                    else:
+                        self.cancel_transform()
+                    
+                    return {'RECUT'}
+                    
+                if not self.a and world_vec.dot(vec_b_dir) < 0:
+                    translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
+                    self.cut_line.plane_com = self.initial_com + translate
+                    proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                    
+                    if proposed_point:
+                        snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                        self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                        self.cut_line.seed_face_index = snap[2]
+                    else:
+                        self.cancel_transform()
+                    
+                    return {'RECUT'}
+            
+            if not self.a and not self.b:
+                
+                translate = factor * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
+                self.cut_line.plane_com = self.initial_com + translate
+                
+                proposed_point = contour_utilities.intersect_path_plane(self.path_ahead, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                if not proposed_point:
+                    
+                    proposed_point = contour_utilities.intersect_path_plane(self.path_behind, self.cut_line.plane_com, self.initial_plane_no, mode = 'FIRST')[0]
+                if proposed_point:        
+                    snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * proposed_point)
+                    self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                    self.cut_line.seed_face_index = snap[2]
+                else:
+                    self.cancel_transform()
+                
+                return {'RECUT'}
+            
+            return {'DO_NOTHING'}
+        
+        if self.transform_mode == 'NORMAL_TRANSLATE':
+            #the pixel distance used to scale the translation
+            screen_dist = mouse_wrt_widget.length - self.inner_radius
+            
+            world_vec = world_mouse - world_widget
+            translate = screen_dist/mouse_wrt_widget.length * world_vec.dot(self.initial_plane_no) * self.initial_plane_no
+            
+            self.cut_line.plane_com = self.initial_com + translate
+            
+            return {'REHIT','RECUT'}
+        
+        elif self.transform_mode in {'ROTATE_VIEW_PERPENDICULAR', 'ROTATE_VIEW'}:
+            
+            #establish the transform axes
+            axis_1  = rv3d.view_rotation * Vector((0,0,1))
+            axis_1.normalize()
+            
+            axis_2 = self.initial_plane_no.cross(axis_1)
+            axis_2.normalize()
+            
+            #identify which quadrant we are in
+            screen_angle = math.atan2(mouse_wrt_widget[1], mouse_wrt_widget[0])
+            
+            if self.transform_mode == 'ROTATE_VIEW':
+                if not self.hotkey:
+                    rot_angle = screen_angle - self.angle #+ .5 * math.pi  #Mystery
+                    rot_angle = math.fmod(rot_angle + 3 * math.pi, 2 * math.pi)  #correct for any negatives
+                    
+                else:
+                    init_angle = math.atan2(self.initial_y - self.y, self.initial_x - self.x)
+                    init_angle = math.fmod(init_angle + 4 * math.pi, 2 * math.pi)
+                    rot_angle = screen_angle - init_angle
+                    rot_angle = math.fmod(rot_angle + 2 * math.pi, 2 * math.pi)  #correct for any negatives
+                    
+                
+                sin = math.sin(rot_angle/2)
+                cos = math.cos(rot_angle/2)
+                #quat = Quaternion((cos, sin*world_x[0], sin*world_x[1], sin*world_x[2]))
+                quat = Quaternion((cos, sin*axis_1[0], sin*axis_1[1], sin*axis_1[2]))
+                                    
+            else:
+                rot_angle = screen_angle - self.angle + math.pi #+ .5 * math.pi  #Mystery
+                rot_angle = math.fmod(rot_angle + 4 * math.pi, 2 * math.pi)  #correct for any negatives
+                sin = math.sin(rot_angle/2)
+                cos = math.cos(rot_angle/2)
+                #quat = Quaternion((cos, sin*world_y[0], sin*world_y[1], sin*world_y[2]))
+                quat = Quaternion((cos, sin*axis_2[0], sin*axis_2[1], sin*axis_2[2])) 
+            
+            new_no = self.initial_plane_no.copy() #its not rotated yet
+            new_no.rotate(quat)
+            
+            new_x = self.vec_x.copy() #its not rotated yet
+            new_x.rotate(quat)
+           
+            new_y = self.vec_y.copy()
+            new_y.rotate(quat)
+            
+            self.cut_line.vec_x = new_x
+            self.cut_line.vec_y = new_y
+            self.cut_line.plane_no = new_no
+            
+            new_pt = contour_utilities.intersect_path_plane(self.path_ahead, self.initial_com, new_no, mode = 'FIRST')
+            if not new_pt[0]:
+                new_pt = contour_utilities.intersect_path_plane(self.path_behind, self.initial_com, new_no, mode = 'FIRST')
+            
+            if new_pt[0]:
+                snap = self.ob.closest_point_on_mesh(self.ob.matrix_world.inverted() * new_pt[0])
+                self.cut_line.plane_pt = self.ob.matrix_world * snap[0]
+                self.cut_line.seed_face_index = snap[2] 
+            else:
+                self.cancel_transform()
+            return {'RECUT'}
         
 
     def derive_screen(self,context):
