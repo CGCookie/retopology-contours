@@ -408,7 +408,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 self.backbone.append(vertebra3d)
             
             
-            if i > 0 and i < len(self.cuts)-1:
+            if i > 0 and i < len(self.cuts):
                 #cut backward to reach the other cut
                 v1 = cut.verts_simple[0] - self.cuts[i-1].verts_simple[0]
                 cut_no = surface_no.cross(v1)
@@ -922,7 +922,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 #align the cut, update the backbone etc
                 self.align_cut(new_cut, mode = 'BEHIND', fine_grain = True)
                 self.backbone_from_cuts(context, ob, bme)
-                self.update_backbone(context, ob, bme, new_cut, insert = True)
+                #self.update_backbone(context, ob, bme, new_cut, insert = True)
                 return True
             
             else:
@@ -934,9 +934,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if self.existing_head and self.cuts:
             if settings.debug > 1: print('True: self.existing_head and self.cuts')
             
-            A = self.existing_head.plane_com
-            B = self.cuts[0].plane_com
-            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no)
+            A = self.existing_head.plane_com  #the center of the head
+            B = self.cuts[0].plane_com  #the first cut
+            C = intersect_line_plane(A,B,new_cut.plane_com, new_cut.plane_no) #the intersection of a the line between the head and first cut
             
             test1 = self.existing_head.plane_no.dot(C-A) > 0
             test2 = self.cuts[0].plane_no.dot(C-B) < 0
@@ -963,7 +963,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     new_cut.simplify_cross(self.ring_segments)
                     self.align_cut(new_cut, mode = 'BETWEEN', fine_grain = True)
                     self.backbone_from_cuts(context, ob, bme)
-                    self.update_backbone(context, ob, bme, new_cut, insert = True)
+                    #self.update_backbone(context, ob, bme, new_cut, insert = True)
                     return True
             if settings.debug > 1: print('falling through')
         

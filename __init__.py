@@ -1503,6 +1503,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
                     self.selected.cut_object(context, self.original_form, self.bme)
                     self.selected.simplify_cross(self.selected_path.ring_segments)
+                    self.selected.update_com()
                     self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
                     
                     self.selected_path.connect_cuts_to_make_mesh(self.original_form)
