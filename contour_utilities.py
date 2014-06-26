@@ -2359,15 +2359,23 @@ def find_bmedges_crossing_plane(pt, no, edges, epsilon):
     returns list of edges that *cross* plane and corresponding intersection points
     '''
     
+    coords = {}
+    for edge in edges:
+        v0,v1 = edge.verts
+        if v0 not in coords: coords[v0] = no.dot(v0.co-pt)
+        if v1 not in coords: coords[v1] = no.dot(v1.co-pt)
+    #print(str(coords))
+    
     ret = []
     for edge in edges:
         v0,v1 = edge.verts
-        co0,co1 = v0.co, v1.co
-        s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
-        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
-            continue
+        s0,s1 = coords[v0],coords[v1]
+        if s0 > epsilon and s1 > epsilon: continue
+        if s0 < -epsilon and s1 < -epsilon: continue
+        #if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+        #    continue
         
-        i = intersect_line_plane(co0, co1, pt, no)
+        i = intersect_line_plane(v0.co, v1.co, pt, no)
         ret += [(edge,i)]
     return ret
 
@@ -2395,8 +2403,10 @@ def find_distant_bmedge_crossing_plane(pt, no, edges, epsilon, eind_from, co_fro
         v0,v1 = edge.verts
         co0,co1 = v0.co, v1.co
         s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
-        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
-            continue
+        if s0 > epsilon and s1 > epsilon: continue
+        if s0 < -epsilon and s1 < -epsilon: continue
+        #if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+        #    continue
         
         i = intersect_line_plane(co0, co1, pt, no)
         d = (co_from - i).length
@@ -2474,12 +2484,19 @@ def cross_section_seed_ver1(bme, mx,
         # shift pt so plane crosses face
         shift_dist = (min(ld)+epsilon) if ld[0] > epsilon else (max(ld)-epsilon)
         pt += no * shift_dist
+        print('>>> shifting')
+        print('>>> ' + str(ld))
+        print('>>> ' + shift_dist)
+        print('>>> ' + no*shift_dist)
     
     # find intersections of edges and cutting plane
-    ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges, epsilon)
+    bmface = bme.faces[seed_index]
+    bmedges = bmface.edges
+    ei_init = find_bmedges_crossing_plane(pt, no, bmedges, epsilon)
     
     if len(ei_init) < 2:
         print('warning: it should not reach here! len(ei_init) = %d' % len(ei_init))
+        print('lengths = ' + str([(edge.verts[0].co-edge.verts[1].co).length for edge in bmedges]))
         return (None,None)
     elif len(ei_init) == 2:
         # simple case
@@ -2521,6 +2538,7 @@ def cross_section_seed_ver1(bme, mx,
     edges = [(i,i+1) for i in range(nv-1)]
     
     return (verts, edges)
+
 
 
 def cross_section_seed(bme, mx, 
