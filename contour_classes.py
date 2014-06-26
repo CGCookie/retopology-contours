@@ -384,31 +384,52 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 cut_no = surface_no.cross(cut.plane_no)
                 
                 if self.existing_head:
-                    vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
-                                                                          pt,cut_no, seed, 
-                                                                          -1 * cut.plane_no,
-                                                                          stop_plane = [self.existing_head.plane_com, self.existing_head.plane_no],
-                                                                          max_tests=1000)[0]
+                    stop_plane = [self.existing_head.plane_com, sef.existing_head.plane_no]
                 else:
-                    vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
-                                                                          pt,cut_no, seed, 
-                                                                          -1 * cut.plane_no,
-                                                                          stop_plane = [cut.plane_com, cut.plane_no],
-                                                                          max_tests=1000)[0]
+                    stop_plane = [cut.plane_com, cut.plane_no]
+                
+                vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                      pt,cut_no, seed, 
+                                                                      -cut.plane_no,
+                                                                      stop_plane=stop_plane,
+                                                                      max_tests=1000)[0]
                 
                 if vertebra:
                     vertebra3d = [ob.matrix_world * v for v in vertebra]
-                
                 else:
-                    diag = contour_utilities.diagonal_verts(self.cuts[0].verts_simple)
-                    cast_point = self.cuts[0].verts_simple[0] - diag * self.cuts[0].plane_no
+                    diag = contour_utilities.diagonal_verts(cut.verts_simple)
+                    cast_point = cut.verts_simple[0] - diag * cut.plane_no
                     cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
-                    vertebra3d = [self.cuts[0].verts_simple[0], cast_sfc]
+                    vertebra3d = [cut.verts_simple[0], cast_sfc]
                 
                 self.backbone.append(vertebra3d)
             
+            elif i == len(self.cuts)-1:
+                #shoot a cut out the back
+                cut_no = surface_no.cross(cut.plane_no)
+                
+                if self.existing_tail:
+                    stop_plane = [self.existing_tail.plane_com, sef.existing_tail.plane_no]
+                else:
+                    stop_plane = [cut.plane_com, cut.plane_no]
+                
+                vertebra = contour_utilities.cross_section_seed_direction(bme, ob.matrix_world, 
+                                                                      pt,cut_no, seed, 
+                                                                      -cut.plane_no,
+                                                                      stop_plane=stop_plane,
+                                                                      max_tests=1000)[0]
+                
+                if vertebra:
+                    vertebra3d = [ob.matrix_world * v for v in vertebra]
+                else:
+                    diag = contour_utilities.diagonal_verts(cut.verts_simple)
+                    cast_point = cut.verts_simple[0] - diag * cut.plane_no
+                    cast_sfc = ob.closest_point_on_mesh(ob.matrix_world.inverted() * cast_point)[0]
+                    vertebra3d = [cut.verts_simple[0], cast_sfc]
+                
+                self.backbone.append(vertebra3d)
             
-            if i > 0 and i < len(self.cuts):
+            else:
                 #cut backward to reach the other cut
                 v1 = cut.verts_simple[0] - self.cuts[i-1].verts_simple[0]
                 cut_no = surface_no.cross(v1)
@@ -422,7 +443,10 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 if vertebra:
                     vertebra3d = [ob.matrix_world * v for v in vertebra]
                 else:
-                    vertebra3d = [cut.verts_simple[0], self.cuts[i+1].verts_simple[0]]
+                    cut1 = self.cuts[i+1]
+                    v0 = cut.verts_simple[0]
+                    v1 = cut1.verts_simple[0]
+                    vertebra3d = [v0, v1]
             
             
                 self.backbone.append(vertebra3d)    
