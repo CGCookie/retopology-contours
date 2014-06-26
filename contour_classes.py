@@ -366,6 +366,8 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         #TODO: cyclic series
         #TODO: redistribute backbone when number of cut segments is increased/decreased
         
+        #TEMPORARY FIX TO REMOVE BAD CUTS
+        self.clean_cuts()
         self.backbone = []
         
         if len(self.cuts) == 0:
@@ -706,7 +708,16 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         self.align_cut(self.cuts[end-1], mode='BEHIND', fine_grain='TRUE')
         self.align_cut(self.cuts[end], mode='BEHIND', fine_grain='TRUE')
-        
+    
+    def clean_cuts(self):
+        for cut in self.cuts:
+            if not len(cut.verts) or not len(cut.verts_simple):
+                self.cuts.remove(cut)
+                print('##################################')
+                print('##################################')
+                print('tossed a failed cut!')
+                #TODO, implement some kind of warning or visual reference
+                 
     def connect_cuts_to_make_mesh(self, ob):
         '''
         This also takes care of bridging to existing vert loops
@@ -719,6 +730,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         total_verts = []
         total_edges = []
         total_faces = []
+        
+        #TEMPORARY FIX to TOSS OUT BAD CUTS
+        self.clean_cuts()
         
         if len(self.cuts) < 2 and not (self.existing_head or self.existing_tail):
             print('waiting on other cut lines')

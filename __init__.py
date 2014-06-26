@@ -974,12 +974,16 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected.simplify_cross(self.segments)
         self.selected.update_com()
         self.selected.update_screen_coords(context)
-        
-        
         self.selected.head = None
         self.selected.tail = None
-        
         self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        
+        if not len(self.selected.verts) or not len(self.selected.verts_simple):
+            self.selected = None
+            print('cut failure')  #TODO, header text message.
+            
+            return
+    
         
         if settings.debug > 1:
             print('release_place_cut')
