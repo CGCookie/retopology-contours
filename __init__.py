@@ -28,7 +28,7 @@ bl_info = {
     "location": "View 3D > Tool Shelf",
     "warning": '',  # used for warning icon and text in addons panel
     "wiki_url": "http://cgcookie.com/blender/docs/contour-retopology/",
-    "tracker_url": "https://github.com/CGCookie/script-bakery/issues?labels=Contour+Retopology&milestone=1&page=1&state=open",
+    "tracker_url": "https://github.com/CGCookie/retopology/issues?labels=Bug&milestone=1&state=open",
     "category": "3D View"}
 
 # Add the current __file__ path to the search path
