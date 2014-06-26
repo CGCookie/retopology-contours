@@ -1739,6 +1739,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             #path.smooth_normals
                             self.selected_path.average_normals(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                             self.temporary_message_start(context, 'Smooth normals based on drawn path')
                             
                         elif event.ctrl:
@@ -1747,14 +1748,14 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                             self.temporary_message_start(context, 'Smooth normals based on CoM path')
                             self.selected_path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            
+                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                         elif event.alt:
                             self.create_undo_snapshot('SMOOTH')
                             #path.interpolate_endpoints
                             self.temporary_message_start(context, 'Smoothly interpolate normals between the endpoints')
                             self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            
+                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                             
                         else:
                             half = math.floor(len(self.selected_path.cuts)/2)
