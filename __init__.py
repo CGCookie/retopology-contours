@@ -2179,6 +2179,7 @@ def poly_sketch_draw_callback(self,context):
     if len(self.mouse_circle):
         contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
 
+#Poly Sketch Branch
 class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
     '''Draw Polygon Strips on Surface for Retopology'''
     bl_idname = "cgcookie.retopo_poly_sketch"
