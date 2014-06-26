@@ -1893,7 +1893,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             #this is a simple set of recorded properties meant to help detect
             #if the mesh we are using is the same as the one in the cache.
-            if is_object_valid(target):
+            is_valid = is_object_valid(target)
+            if is_valid:
                 use_cache = True
                 print('willing and able to use the cache!')
             else:
@@ -2130,7 +2131,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments, TAB: toggle Loop mode'
         context.area.header_text_set(self.loop_msg)
         
-        if settings.recover:
+        if settings.recover and is_valid:
             print('loading cache!')
             self.undo_action()
             

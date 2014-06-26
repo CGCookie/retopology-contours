@@ -4054,7 +4054,7 @@ class CutLineManipulatorWidget(object):
             
             return {'REHIT','RECUT'}
         
-        elif self.transform_mode in {'ROTATE_VIEW_PERPENDICULAR', 'ROTATE_VIEW'}:
+        if self.transform_mode in {'ROTATE_VIEW_PERPENDICULAR', 'ROTATE_VIEW'}:
             
             #establish the transform axes
             axis_1  = rv3d.view_rotation * Vector((0,0,1))
@@ -4116,6 +4116,9 @@ class CutLineManipulatorWidget(object):
                 self.cancel_transform()
             return {'RECUT'}
         
+        # unknown state
+        print('ERROR: unknown self.transform_mode = "%s"' % self.transform_mode)
+        return {'DO_NOTHING'}
 
     def derive_screen(self,context):
         rv3d = context.space_data.region_3d
