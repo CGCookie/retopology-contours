@@ -641,6 +641,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         
             row = box.row()
             row.prop(cgc_contour, "density_factor")
+            row.prop(cgc_contour, "quad_prev_radius")
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):  
     bl_label = "Retopology"
@@ -2360,10 +2361,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             #the mouse points and 4 sample points around the mouse
             center = (event.mouse_region_x,event.mouse_region_y)
-            top =  (event.mouse_region_x,event.mouse_region_y + self.quad_screen_radius)
-            left =  (event.mouse_region_x - self.quad_screen_radius, event.mouse_region_y)
-            bottom =  (event.mouse_region_x,event.mouse_region_y - self.quad_screen_radius)
-            right =  (event.mouse_region_x + self.quad_screen_radius, event.mouse_region_y)
+            top =  (event.mouse_region_x,event.mouse_region_y + settings.quad_prev_radius)
+            left =  (event.mouse_region_x - settings.quad_prev_radius, event.mouse_region_y)
+            bottom =  (event.mouse_region_x,event.mouse_region_y - settings.quad_prev_radius)
+            right =  (event.mouse_region_x + settings.quad_prev_radius, event.mouse_region_y)
             
             vec, center_ray = contour_utilities.ray_cast_region2d(region, rv3d, center, self.original_form, settings)
             vec.normalize()
@@ -2371,7 +2372,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             if center_ray[2] != -1:
                 self.sample_points = []
-                self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, self.quad_screen_radius, 20)
+                self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, settings.quad_prev_radius, 20)
                 vec1, top_ray = contour_utilities.ray_cast_region2d(region, rv3d, top, self.original_form, settings)
                 vec2, left_ray = contour_utilities.ray_cast_region2d(region, rv3d, left, self.original_form, settings)
                 vec3, bottom_ray = contour_utilities.ray_cast_region2d(region, rv3d, bottom, self.original_form, settings)
@@ -3021,7 +3022,6 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #mouse preview circle
         self.mouse_circle = []
         self.sample_points = []
-        self.quad_screen_radius = settings.quad_prev_radius
         self.world_width = self.original_form.dimensions.length * 1/settings.density_factor
         
         
