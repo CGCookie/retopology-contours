@@ -87,8 +87,9 @@ def object_validation(ob):
     counts = (len(me.vertices), len(me.edges), len(me.polygons), len(ob.modifiers))
     bbox   = (tuple(min(v.co for v in me.vertices)), tuple(max(v.co for v in me.vertices)))
     vsum   = tuple(sum((v.co for v in me.vertices), Vector((0,0,0))))
+    xform  = tuple(e for r in ob.matrix_world for e in r)
     
-    return (ob.name, counts, bbox, vsum)
+    return (ob.name, counts, bbox, vsum, xform)
 
 def is_object_valid(ob):
     global contour_mesh_cache
@@ -688,15 +689,15 @@ def retopo_draw_callback(self,context):
     g_color = settings.geom_rgb
     v_color = settings.vert_rgb
 
-    if (self.post_update or self.modal_state == 'NAVIGATING') and context.space_data.use_occlude_geometry:
+    if (self.post_update or self.is_navigating) and context.space_data.use_occlude_geometry:
         for path in self.cut_paths:
             path.update_visibility(context, self.original_form)
             for cut_line in path.cuts:
                 cut_line.update_visibility(context, self.original_form)
                     
         self.post_update = False
-        
-
+    
+    
     for i, c_cut in enumerate(self.cut_lines):
         if self.widget_interaction and self.drag_target == c_cut:
             interact = True
@@ -704,25 +705,33 @@ def retopo_draw_callback(self,context):
             interact = False
         
         c_cut.draw(context, settings,three_dimensional = self.navigating, interacting = interact)
-
+        
         if c_cut.verts_simple != [] and settings.show_cut_indices:
             loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, c_cut.verts_simple[0])
             blf.position(0, loc[0], loc[1], 0)
             blf.draw(0, str(i))
-
-
+    
+    
     if self.cut_line_widget and settings.draw_widget:
         self.cut_line_widget.draw(context)
-        
+    
     if len(self.draw_cache):
         contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1,.5,1,.8), 2, "GL_LINE_SMOOTH")
-        
+    
     if len(self.cut_paths):
         for path in self.cut_paths:
             path.draw(context, path = True, nodes = settings.show_nodes, rings = True, follows = True, backbone = settings.show_backbone    )
-            
+    
     if len(self.snap_circle):
         contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
+    
+    if settings.mirror_x:
+        m = self.original_form.matrix_world
+        l0 = location_3d_to_region_2d(context.region, context.space_data.region_3d, m*Vector((0,-5,-5)))
+        l1 = location_3d_to_region_2d(context.region, context.space_data.region_3d, m*Vector((0, 5,-5)))
+        l2 = location_3d_to_region_2d(context.region, context.space_data.region_3d, m*Vector((0, 5, 5)))
+        l3 = location_3d_to_region_2d(context.region, context.space_data.region_3d, m*Vector((0,-5, 5)))
+        contour_utilities.draw_polyline_from_points(context, [l0,l1,l2,l3,l0], (.5,.5,.5,.25), 1, "GL_LINE_SMOOTH")
         
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
@@ -745,7 +754,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         else:
             return False
     
-    def hover_guide_mode(self,context, settings, event):
+    def hover_guide_mode(self, context, settings, event):
         '''
         handles mouse selection, hovering, highlighting
         and snapping when the mouse moves in guide
@@ -1049,8 +1058,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.force_new = False
     
     def finish_mesh(self, context):
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         back_to_edit = (context.mode == 'EDIT_MESH')
-                    
+        
         #This is where all the magic happens
         print('pushing data into bmesh')
         for path in self.cut_paths:
@@ -1084,12 +1094,18 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 context.space_data.region_3d.view_rotation = view_rot
                 context.space_data.region_3d.view_distance = view_dist
                 context.space_data.region_3d.update()
+            
+            bpy.ops.object.modifier_add(type='MIRROR')
+        
+        # update mirror details
+        context.active_object.modifiers['Mirror'].use_x = settings.mirror_x
+        context.active_object.modifiers['Mirror'].use_y = settings.mirror_y
+        context.active_object.modifiers['Mirror'].use_z = settings.mirror_z
         
         print('wrap up')
         context.area.header_text_set()
         contour_utilities.callback_cleanup(self,context)
-        if self._timer:
-            context.window_manager.event_timer_remove(self._timer)
+        self.kill_timer(context)
         
         print('finished mesh!')
         return {'FINISHED'}
@@ -1196,678 +1212,498 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         context.area.header_text_set(text = message)    
                                                  
     
+    def kill_timer(self, context):
+        if not self._timer: return
+        context.window_manager.event_timer_remove(self._timer)
+        self._timer = None
+    
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
-        if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
-            self.temporary_message_start(context, "Undo Action")
-            self.undo_action()
-            
-        #check messages
-        if event.type == 'TIMER':
-            now = time.time()
-            if now - self.msg_start_time > self.msg_duration:
-                if self._timer:
-                    context.window_manager.event_timer_remove(self._timer)
-                    self._timer = None
-                
-                if self.mode == 'GUIDE':
-                    context.area.header_text_set(text = self.guide_msg)
-                else:
-                    context.area.header_text_set(text = self.loop_msg)
-                
-                
-        if self.modal_state == 'NAVIGATING':
-            
-            if (event.type in {'MOUSEMOVE',
-                               'MIDDLEMOUSE', 
-                                'NUMPAD_2', 
-                                'NUMPAD_4', 
-                                'NUMPAD_6',
-                                'NUMPAD_8', 
-                                'NUMPAD_1', 
-                                'NUMPAD_3', 
-                                'NUMPAD_5', 
-                                'NUMPAD_7',
-                                'NUMPAD_9'} and event.value == 'RELEASE'):
-            
-                self.modal_state = 'WAITING'
-                self.post_update = True
-                return {'PASS_THROUGH'}
-            
-            if (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
-            
-                self.modal_state = 'WAITING'
-                self.post_update = True 
-                return {'PASS_THROUGH'}
+        # event details
+        event_ctrl    = 'CTRL+'  if event.ctrl  else ''
+        event_shift   = 'SHIFT+' if event.shift else ''
+        event_alt     = 'ALT+'   if event.alt   else ''
+        event_value   = event_ctrl + event_shift + event_alt + event.type
+        event_press   = event_value if event.value == 'PRESS'   else None
+        event_release = event_value if event.value == 'RELEASE' else None
         
-        if self.mode == 'LOOP':
+        
+        ################################
+        # TIMER messages event handling
+        
+        if event.type == 'TIMER':
+            if time.time()-self.msg_start_time < self.msg_duration:
+                return {'RUNNING_MODAL'}
             
-            if self.modal_state == 'WAITING':
-                
-                if (event.type in {'ESC','RIGHT_MOUSE'} and 
-                    event.value == 'PRESS'):
-                    
-                    context.area.header_text_set()
-                    contour_utilities.callback_cleanup(self,context)
-                    if self._timer:
-                        context.window_manager.event_timer_remove(self._timer)
-                        
-                    return {'CANCELLED'}
-                
-                elif (event.type == 'TAB' and 
-                      event.value == 'PRESS'):
-                    
+            self.kill_timer(context)
+            
+            if self.mode == 'GUIDE':
+                context.area.header_text_set(text = self.guide_msg)
+            elif self.mode == 'LOOP':
+                context.area.header_text_set(text = self.loop_msg)
+            else:
+                print('WARNING: unhandled self.mode ("%s")' % self.mode)
+            
+            return {'RUNNING_MODAL'}
+        
+        #print('%s.%s: %s %s' % (self.mode,self.modal_state,event_value,event.value))
+        
+        ####################################
+        # general navigation event handling
+        
+        events_numpad = {
+            'NUMPAD_1',       'NUMPAD_2',       'NUMPAD_3',
+            'NUMPAD_4',       'NUMPAD_5',       'NUMPAD_6',
+            'NUMPAD_7',       'NUMPAD_8',       'NUMPAD_9',
+            'CTRL+NUMPAD_1',  'CTRL+NUMPAD_2',  'CTRL+NUMPAD_3',
+            'CTRL+NUMPAD_4',  'CTRL+NUMPAD_5',  'CTRL+NUMPAD_6',
+            'CTRL+NUMPAD_7',  'CTRL+NUMPAD_8',  'CTRL+NUMPAD_9',
+            'SHIFT+NUMPAD_1', 'SHIFT+NUMPAD_2', 'SHIFT+NUMPAD_3',
+            'SHIFT+NUMPAD_4', 'SHIFT+NUMPAD_5', 'SHIFT+NUMPAD_6',
+            'SHIFT+NUMPAD_7', 'SHIFT+NUMPAD_8', 'SHIFT+NUMPAD_9',
+            'NUMPAD_PLUS', 'NUMPAD_MINUS', # CTRL+NUMPAD_PLUS and CTRL+NUMPAD_MINUS are used later
+            'NUMPAD_PERIOD',
+        }
+        handle_nav = False
+        handle_nav |= event.type == 'MIDDLEMOUSE'
+        handle_nav |= event.type == 'MOUSEMOVE' and self.is_navigating
+        handle_nav |= event_value in events_numpad      # note: event_value handles ctrl,shift,alt
+        handle_nav |= event.type.startswith('NDOF_')
+        handle_nav |= event.type.startswith('TRACKPAD')
+        handle_nav |= event_value in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} # note: event_value handles ctrl,shift,alt
+        if handle_nav:
+            self.is_navigating = (event.value == 'PRESS')
+            self.post_update = True
+            return {'PASS_THROUGH'}
+        self.is_navigating = False
+        
+        
+        #################################
+        # general WAITING event handling
+        
+        if self.modal_state == 'WAITING':
+            
+            # handle commit
+            if event_press in {'RET', 'NUMPAD_ENTER'}:
+                return self.finish_mesh(context)
+            
+            # handle cancellation
+            if event_press in {'ESC', 'RIGHTMOUSE'}:
+                context.area.header_text_set()
+                contour_utilities.callback_cleanup(self,context)
+                self.kill_timer(context)
+                return {'CANCELLED'}
+            
+            # handle undoing
+            if event_press == 'CTRL+Z':
+                self.temporary_message_start(context, "Undo Action")
+                self.undo_action()
+                return {'RUNNING_MODAL'}
+            
+            # handle mode changing
+            if event_press == 'TAB':
+                if self.mode == 'LOOP':
                     self.mode = 'GUIDE'
                     self.selected = None  #WHY?
+                    self.hover_target = None
+                    self.cut_line_widget = None
                     if self.selected_path:
                         self.selected_path.highlight(settings)
-                    
-                    if self._timer:
-                        context.window_manager.event_timer_remove(self._timer)
-                        self._timer = None
-                
-                    
                     context.area.header_text_set(text = self.guide_msg)
+                elif self.mode == 'GUIDE':
+                    self.mode = 'LOOP'
+                    self.snap_circle = []
+                    if self.selected_path:
+                        self.selected_path.unhighlight(settings)
+                    context.area.header_text_set(text = self.loop_msg)
+                else:
+                    assert False, 'unhandled self.mode ("%s")' % self.mode
                 
-                elif event.type == 'N' and event.value == 'PRESS':
-                    self.force_new = self.force_new != True
-                    #self.selected_path = None
-                    self.snap = None
-                    
-                    self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
-                    return {'RUNNING_MODAL'}
-                
-                elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
-                    event.value == 'PRESS'):
-                    
-                    #### begin symmetry stuffs
-                    
-                    back_to_edit = context.mode == 'EDIT_MESH'
-                    
-                    #This is wehre all the magic happens
-                    for path in self.cut_paths:
-                        path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
-                        
-                    if back_to_edit:
-                        bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
-                    
-                    else:
-                        #write the data into the object
-                        self.dest_bme.to_mesh(self.dest_me)
-                    
-                        #remember we created a new object
-                        context.scene.objects.link(self.destination_ob)
-                        
-                        self.destination_ob.select = True
-                        context.scene.objects.active = self.destination_ob
-                        
-                        if context.space_data.local_view:
-                            view_loc = context.space_data.region_3d.view_location.copy()
-                            view_rot = context.space_data.region_3d.view_rotation.copy()
-                            view_dist = context.space_data.region_3d.view_distance
-                            bpy.ops.view3d.localview()
-                            bpy.ops.view3d.localview()
-                            #context.space_data.region_3d.view_matrix = mx_copy
-                            context.space_data.region_3d.view_location = view_loc
-                            context.space_data.region_3d.view_rotation = view_rot
-                            context.space_data.region_3d.view_distance = view_dist
-                            context.space_data.region_3d.update()
-                        
-                        bpy.ops.object.modifier_add(type='MIRROR')
-                        context.active_object.modifiers['Mirror'].use_x = settings.mirror_x
-                        context.active_object.modifiers['Mirror'].use_y = settings.mirror_y
-                        context.active_object.modifiers['Mirror'].use_z = settings.mirror_z
-                            
-                    context.area.header_text_set()
-                    contour_utilities.callback_cleanup(self,context)
-                    if self._timer:
-                        context.window_manager.event_timer_remove(self._timer)
-
-                    return {'FINISHED'}
-                    return self.finish_mesh(context)        # previous (non-symmetry)
-                
-                
-                if event.type == 'MOUSEMOVE':
-                    
-                    self.hover_loop_mode(context, settings, event)
-
-                
-                elif (event.type == 'C' and
-                      event.value == 'PRESS'):
-                    
-                    bpy.ops.view3d.view_center_cursor()
-                    self.temporary_message_start(context, 'Center View to Cursor')
-                    return {'RUNNING_MODAL'}
-                
-                elif event.type == 'S' and event.value == 'PRESS':
-                    if self.selected:
-                        context.scene.cursor_location = self.selected.plane_com
-                        self.temporary_message_start(context, 'Cursor to selected loop or segment')
-                
-                #NAVIGATION KEYS
-                elif (event.type in {'MIDDLEMOUSE', 
-                                    'NUMPAD_2', 
-                                    'NUMPAD_4', 
-                                    'NUMPAD_6',
-                                    'NUMPAD_8', 
-                                    'NUMPAD_1', 
-                                    'NUMPAD_3', 
-                                    'NUMPAD_5', 
-                                    'NUMPAD_7',
-                                    'NUMPAD_9'} and event.value == 'PRESS'):
-                    
-                    self.modal_state = 'NAVIGATING'
-                    self.post_update = True
-                    self.temporary_message_start(context, self.mode + ': NAVIGATING')
-
-                    return {'PASS_THROUGH'}
-                elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
-                    
-                    self.modal_state = 'NAVIGATING'
-                    self.post_update = True
-                    self.temporary_message_start(context, 'NAVIGATING')
-
-                    return {'PASS_THROUGH'}
-                
-                #ZOOM KEYS
-                elif (event.type in  {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and not 
-                        (event.ctrl or event.shift)):
-                    
-                    self.post_update = True
-                    return{'PASS_THROUGH'}
-                
-                elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                    
-                    if self.hover_target and self.hover_target != self.selected:
-                        
-                        self.selected = self.hover_target    
-                        if not event.shift:
-                            for path in self.cut_paths:
-                                for cut in path.cuts:
-                                        cut.deselect(settings)  
-                                if self.selected in path.cuts and path != self.selected_path:
-                                    path.do_select(settings)
-                                    path.unhighlight(settings)
-                                    self.selected_path = path
-                                else:
-                                    path.deselect(settings)
-                        
-                        #select the ring
-                        self.hover_target.do_select(settings)
-                        
-                    
-                    elif self.hover_target  and self.hover_target == self.selected:
-                        
-                        self.create_undo_snapshot('WIDGET_TRANSFORM')
-                        self.modal_state = 'WIDGET_TRANSFORM'
-                        #sometimes, there is not a widget from the hover?
-                        self.cut_line_widget = CutLineManipulatorWidget(context, 
-                                                                        settings,
-                                                                        self.original_form, self.bme,
-                                                                        self.hover_target,
-                                                                        self.selected_path,
-                                                                        event.mouse_region_x,
-                                                                        event.mouse_region_y)
-                        self.cut_line_widget.derive_screen(context)
-                        
-                    else:
-                        self.create_undo_snapshot('CUTTING')
-                        self.modal_state = 'CUTTING'
-                        self.temporary_message_start(context, self.mode + ': CUTTING')
-                        #make a new cut and handle it with self.selected
-                        self.selected = self.click_new_cut(context, settings, event)
-                        
-                        
-                    return {'RUNNING_MODAL'}
-                
-                if self.selected:
-                    #print(event.type + " " + event.value)
-                    
-                    #G -> HOTKEY
-                    if event.type == 'G' and event.value == 'PRESS':
-                        
-                        self.create_undo_snapshot('HOTKEY_TRANSFORM')
-                        self.modal_state = 'HOTKEY_TRANSFORM'
-                        self.hot_key = 'G'
-                        self.loop_hotkey_modal(context,event)
-                        self.temporary_message_start(context, self.mode + ':Hotkey Grab')
-                        return {'RUNNING_MODAL'}
-                    #R -> HOTKEY
-                    if event.type == 'R' and event.value == 'PRESS':
-                        
-                        self.create_undo_snapshot('HOTKEY_TRANSFORM')
-                        self.modal_state = 'HOTKEY_TRANSFORM'
-                        self.hot_key = 'R'
-                        self.loop_hotkey_modal(context,event)
-                        self.temporary_message_start(context, self.mode + ':Hotkey Rotate')
-                        return {'RUNNING_MODAL'}
-                    
-                    #X, DEL -> DELETE
-                    elif event.type == 'X' and event.value == 'PRESS':
-                        
-                        self.create_undo_snapshot('DELETE')
-                        if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) == 1 and self.selected_path.existing_head):
-                            self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
-                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            self.selected_path.update_visibility(context, self.original_form)
-                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                        
-                        else:
-                            self.cut_paths.remove(self.selected_path)
-                            self.selected_path = None
-                            
-                        self.selected = None
-                        self.temporary_message_start(context, self.mode + ': DELETE')
-                    
-                    #S -> CURSOR SELECTED CoM
-                    
-                    #LEFT_ARROW, RIGHT_ARROW to shift
-                    elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
-                          event.value == 'PRESS'):
-                        self.create_undo_snapshot('LOOP_SHIFT') 
-                        self.loop_arrow_shift(context,event)
-                        
-                        return {'RUNNING_MODAL'}
-                    
-                    elif event.type == 'A' and event.value == 'PRESS':
-                        self.create_undo_snapshot('ALIGN')
-                        self.loop_align_modal(context,event)
-                         
-                        return {'RUNNING_MODAL'}
-                        
-                    elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
-                          (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS') and event.ctrl):
-                        
-                        self.create_undo_snapshot('RING_SEGMENTS')  
-                        if not self.selected_path.ring_lock:
-                            old_segments = self.selected_path.ring_segments
-                            self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE' or event.type == 'NUMPAD_MINUS')
-                            if self.selected_path.ring_segments < 3:
-                                self.selected_path.ring_segments = 3
-                                
-                            for cut in self.selected_path.cuts:
-                                new_bulk_shift = round(cut.shift * old_segments/self.selected_path.ring_segments)
-                                new_fine_shift = old_segments/self.selected_path.ring_segments * cut.shift - new_bulk_shift
-                                
-                                
-                                new_shift =  self.selected_path.ring_segments/old_segments * cut.shift
-                                
-                                print(new_shift - new_bulk_shift - new_fine_shift)
-                                cut.shift = new_shift
-                                cut.simplify_cross(self.selected_path.ring_segments)
-                            
-                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)    
-                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            self.selected_path.update_visibility(context, self.original_form)
-                            
-                            self.temporary_message_start(context, self.mode +': RING SEGMENTS %i' %self.selected_path.ring_segments)
-                            self.msg_start_time = time.time()
-                        else:
-                            self.temporary_message_start(context, self.mode +': RING SEGMENTS: Can not be changed.  Path Locked')
-                            
-                        #else:
-                            #let the user know the path is locked
-                            #header message set
-
-                        return {'RUNNING_MODAL'}
-                    #if hover == selected:
-                        #LEFTCLICK -> WIDGET
-                        
-                
-                        
+                self.kill_timer(context)
                 return {'RUNNING_MODAL'}
-                        
-            elif self.modal_state == 'CUTTING':
-                
-                if event.type == 'MOUSEMOVE':
-                    #pass mouse coords to widget
-                    x = str(event.mouse_region_x)
-                    y = str(event.mouse_region_y)
-                    message = self.mode + ':CUTTING: X: ' +  x + '  Y:  ' +  y
-                    context.area.header_text_set(text = message)
-                    
-                    self.selected.tail.x = event.mouse_region_x
-                    self.selected.tail.y = event.mouse_region_y
-                    #self.seleted.screen_to_world(context)
-                    
-                    return {'RUNNING_MODAL'}
-                
-                elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-
-                    #the new cut is created
-                    #the new cut is assessed to be placed into an existing series
-                    #the new cut is assessed to be an extension of selected gemometry
-                    #the new cut is assessed to become the beginning of a new path
-                    self.release_place_cut(context, settings, event)
-                    
-                    
-                    #we return to waiting
-                    self.modal_state = 'WAITING'
-                    return {'RUNNING_MODAL'}
+        
+        
+        #####################################
+        # specific mode+state event handling
+        # note: the nested ifs are broken into separate ifs for readability
+        
+        current_state = '%s.%s' % (self.mode,self.modal_state)
+        
+        if   current_state == 'LOOP.WAITING':
             
+            if event_press == 'N':
+                self.force_new = self.force_new != True
+                #self.selected_path = None
+                self.snap = None
+                self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
             
-            elif self.modal_state == 'HOTKEY_TRANSFORM':
+            if event.type == 'MOUSEMOVE':
+                self.hover_loop_mode(context, settings, event)
+            
+            if event_press == 'C':
+                bpy.ops.view3d.view_center_cursor()
+                self.temporary_message_start(context, 'Center View to Cursor')
+            
+            if event_press == 'S':
+                if self.selected:
+                    context.scene.cursor_location = self.selected.plane_com
+                    self.temporary_message_start(context, 'Cursor to selected loop or segment')
+            
+            if event_press == 'LEFTMOUSE':
+                
+                if self.hover_target and self.hover_target != self.selected:
+                    self.selected = self.hover_target    
+                    if not event.shift:
+                        for path in self.cut_paths:
+                            for cut in path.cuts:
+                                    cut.deselect(settings)  
+                            if self.selected in path.cuts and path != self.selected_path:
+                                path.do_select(settings)
+                                path.unhighlight(settings)
+                                self.selected_path = path
+                            else:
+                                path.deselect(settings)
+                    
+                    #select the ring
+                    self.hover_target.do_select(settings)
+                    
+                
+                elif self.hover_target  and self.hover_target == self.selected:
+                    self.create_undo_snapshot('WIDGET_TRANSFORM')
+                    self.modal_state = 'WIDGET_TRANSFORM'
+                    #sometimes, there is not a widget from the hover?
+                    self.cut_line_widget = CutLineManipulatorWidget(context, 
+                                                                    settings,
+                                                                    self.original_form, self.bme,
+                                                                    self.hover_target,
+                                                                    self.selected_path,
+                                                                    event.mouse_region_x,
+                                                                    event.mouse_region_y)
+                    self.cut_line_widget.derive_screen(context)
+                    
+                else:
+                    self.create_undo_snapshot('CUTTING')
+                    self.modal_state = 'CUTTING'
+                    self.temporary_message_start(context, self.mode + ': CUTTING')
+                    #make a new cut and handle it with self.selected
+                    self.selected = self.click_new_cut(context, settings, event)
+                
+                return {'RUNNING_MODAL'}
+            
+            if not self.selected:
+                return {'RUNNING_MODAL'}
+            
+            #G -> HOTKEY
+            if event_press == 'G':
+                self.create_undo_snapshot('HOTKEY_TRANSFORM')
+                self.modal_state = 'HOTKEY_TRANSFORM'
+                self.hot_key = 'G'
+                self.loop_hotkey_modal(context,event)
+                self.temporary_message_start(context, self.mode + ':Hotkey Grab')
+            
+            #R -> HOTKEY
+            if event_press == 'R':
+                self.create_undo_snapshot('HOTKEY_TRANSFORM')
+                self.modal_state = 'HOTKEY_TRANSFORM'
+                self.hot_key = 'R'
+                self.loop_hotkey_modal(context,event)
+                self.temporary_message_start(context, self.mode + ':Hotkey Rotate')
+            
+            #X, DEL -> DELETE
+            if event_press == 'X':
+                self.create_undo_snapshot('DELETE')
+                if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) == 1 and self.selected_path.existing_head):
+                    self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.update_visibility(context, self.original_form)
+                    self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
+                
+                else:
+                    self.cut_paths.remove(self.selected_path)
+                    self.selected_path = None
+                    
+                self.selected = None
+                self.temporary_message_start(context, self.mode + ': DELETE')
+            
+            #S -> CURSOR SELECTED CoM
+            
+            #LEFT_ARROW, RIGHT_ARROW to shift
+            if event_press in {'LEFT_ARROW', 'RIGHT_ARROW'}:
+                self.create_undo_snapshot('LOOP_SHIFT') 
+                self.loop_arrow_shift(context,event)
+            
+            if event_press == 'A':
+                self.create_undo_snapshot('ALIGN')
+                self.loop_align_modal(context,event)
+                
+            if event_press in {'CTRL+WHEELUPMOUSE','CTRL+WHEELDOWNMOUSE','CTRL+NUMPAD_PLUS','CTRL+NUMPAD_MINUS'}:
+                self.create_undo_snapshot('RING_SEGMENTS')
+                
+                if self.selected_path.ring_lock:
+                    #let the user know the path is locked
+                    self.temporary_message_start(context, self.mode +': RING SEGMENTS: Can not be changed.  Path Locked')
+                    return {'RUNNING_MODAL'}
+                    
+                old_segments = self.selected_path.ring_segments
+                add_segments = 1 - 2 * (event.type == 'WHEELDOWNMOUSE' or event.type == 'NUMPAD_MINUS')
+                new_segments = max(old_segments + add_segments, 3)
+                self.selected_path.ring_segments = new_segments
+                    
+                for cut in self.selected_path.cuts:
+                    new_bulk_shift = round(cut.shift * old_segments / new_segments)
+                    new_fine_shift = old_segments / new_segments * cut.shift - new_bulk_shift
+                    
+                    new_shift =  self.selected_path.ring_segments/old_segments * cut.shift
+                    
+                    print(new_shift - new_bulk_shift - new_fine_shift)
+                    cut.shift = new_shift
+                    cut.simplify_cross(self.selected_path.ring_segments)
+                
+                self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)    
+                self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                self.selected_path.update_visibility(context, self.original_form)
+                
+                self.temporary_message_start(context, self.mode +': RING SEGMENTS %i' % self.selected_path.ring_segments)
+                self.msg_start_time = time.time()
+        
+        elif current_state == 'LOOP.CUTTING':
+            
+            if event.type == 'MOUSEMOVE':
+                #pass mouse coords to widget
+                x = str(event.mouse_region_x)
+                y = str(event.mouse_region_y)
+                message = self.mode + ':CUTTING: X: ' +  x + '  Y:  ' +  y
+                context.area.header_text_set(text = message)
+                
+                self.selected.tail.x = event.mouse_region_x
+                self.selected.tail.y = event.mouse_region_y
+                #self.seleted.screen_to_world(context)
+                return {'RUNNING_MODAL'}
+            
+            if event_release == 'LEFTMOUSE':
+                #the new cut is created
+                #the new cut is assessed to be placed into an existing series
+                #the new cut is assessed to be an extension of selected gemometry
+                #the new cut is assessed to become the beginning of a new path
+                self.release_place_cut(context, settings, event)
+                
+                #we return to waiting
+                self.modal_state = 'WAITING'
+        
+        elif current_state == 'LOOP.HOTKEY_TRANSFORM':
+            
+            if event.type == 'MOUSEMOVE':
+                #pass mouse coords to widget
                 if self.hot_key == 'G':
                     action = 'Grab'
                 elif self.hot_key == 'R':
                     action = 'Rotate'
-                    
                 if event.shift:
-                        action = 'FINE CONTROL ' + action
-                
-                if event.type == 'MOUSEMOVE':
-                    #pass mouse coords to widget
-                    x = str(event.mouse_region_x)
-                    y = str(event.mouse_region_y)
-                    message  = self.mode + ": " + action + ": X: " +  x + '  Y:  ' +  y
-                    self.temporary_message_start(context, message)
+                    action = 'FINE CONTROL ' + action
+                x = str(event.mouse_region_x)
+                y = str(event.mouse_region_y)
+                message  = self.mode + ": " + action + ": X: " +  x + '  Y:  ' +  y
+                self.temporary_message_start(context, message)
 
-                    #widget.user_interaction
-                    self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
-                    self.selected.cut_object(context, self.original_form, self.bme)
-                    self.selected.simplify_cross(self.selected_path.ring_segments)
-                    self.selected.update_com()
-                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
-                    
-                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                    self.selected_path.update_visibility(context, self.original_form)
-                    return {'RUNNING_MODAL'}
+                #widget.user_interaction
+                self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
+                self.selected.cut_object(context, self.original_form, self.bme)
+                self.selected.simplify_cross(self.selected_path.ring_segments)
+                self.selected.update_com()
+                self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
                 
-                
-                #LEFTMOUSE event.value == 'PRESS':#RET, ENTER
-                if (event.type in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER'} and
-                    event.value == 'PRESS'):
-                    #confirm transform
-                    #recut, align, visibility?, and update the segment
-                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
-                    self.modal_state = 'WAITING'
-                    return {'RUNNING_MODAL'}
-                
-                if (event.type in {'ESC', 'RIGHTMOUSE'} and
-                    event.value == 'PRESS'):
-                    self.cut_line_widget.cancel_transform()
-                    self.selected.cut_object(context, self.original_form, self.bme)
-                    self.selected.simplify_cross(self.selected_path.ring_segments)
-                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
-                    self.selected.update_com()
-                    
-                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                    self.selected_path.update_visibility(context, self.original_form)
-                    self.modal_state = 'WAITING'
-                    return {'RUNNING_MODAL'}
-                
+                self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                self.selected_path.update_visibility(context, self.original_form)
             
-            elif self.modal_state == 'WIDGET_TRANSFORM':
+            #LEFTMOUSE event.value == 'PRESS':#RET, ENTER
+            if event_press in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER'}:
+                #confirm transform
+                #recut, align, visibility?, and update the segment
+                self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
+                self.modal_state = 'WAITING'
+            
+            if event_press in {'ESC', 'RIGHTMOUSE'}:
+                self.cut_line_widget.cancel_transform()
+                self.selected.cut_object(context, self.original_form, self.bme)
+                self.selected.simplify_cross(self.selected_path.ring_segments)
+                self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
+                self.selected.update_com()
                 
-                #MOUSEMOVE
-                if event.type == 'MOUSEMOVE':
-                    if event.shift:
-                        action = 'FINE WIDGET'
-                    else:
-                        action = 'WIDGET'
-                    
-                    
-                    self.widget_transform(context, settings, event)
-                    
-                    return {'RUNNING_MODAL'}
-               
-                elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-                    #destroy the widget
-                    self.cut_line_widget = None
-                    self.modal_state = 'WAITING'
-                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
-                    
-                    return {'RUNNING_MODAL'}
-                    
-                elif  event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and self.hot_key:
-                    self.cut_line_widget.cancel_transform()
-                    self.selected.cut_object(context, self.original_form, self.bme)
-                    self.selected.simplify_cross(self.selected_path.ring_segments)
-                    self.selected.update_com()
-                    
-                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                    self.selected_path.update_visibility(context, self.original_form)
-                    
+                self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                self.selected_path.update_visibility(context, self.original_form)
+                self.modal_state = 'WAITING'
+        
+        elif current_state == 'LOOP.WIDGET_TRANSFORM':
+            
+            #MOUSEMOVE
+            if event.type == 'MOUSEMOVE':
+                self.widget_transform(context, settings, event)
+           
+            if event_release == 'LEFTMOUSE':
+                #destroy the widget
+                self.cut_line_widget = None
+                self.modal_state = 'WAITING'
+                self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
+                
+            if  event_press in {'RIGHTMOUSE', 'ESC'} and self.hot_key:
+                self.cut_line_widget.cancel_transform()
+                self.selected.cut_object(context, self.original_form, self.bme)
+                self.selected.simplify_cross(self.selected_path.ring_segments)
+                self.selected.update_com()
+                
+                self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                self.selected_path.update_visibility(context, self.original_form)
+        
+        elif current_state == 'GUIDE.WAITING':
+            
+            if event_press == 'C':
+                #center cursor
+                bpy.ops.view3d.view_center_cursor()
+                self.temporary_message_start(context, 'Center View to Cursor')
+                
+            if event_press == 'N':
+                self.force_new = self.force_new != True
+                #self.selected_path = None
+                self.snap = None
+                self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
+            
+            if event.type == 'MOUSEMOVE':
+                self.hover_guide_mode(context, settings, event)
+            
+            if event_press == 'LEFTMOUSE':
+                if self.hover_target and self.hover_target.desc == 'CUT SERIES':
+                    self.hover_target.do_select(settings)
+                    self.selected_path = self.hover_target
+                    for path in self.cut_paths:
+                        if path != self.hover_target:
+                            path.deselect(settings)
+                else:
+                    self.create_undo_snapshot('DRAW_PATH')
+                    self.modal_state = 'DRAWING'
+                    self.temporary_message_start(context, 'DRAWING')
+                
                 return {'RUNNING_MODAL'}
             
+            if not self.selected_path:
+                return {'RUNNING_MODAL'}
+                
+            if event_press in {'X', 'DEL'}:
+                self.create_undo_snapshot('DELETE')
+                self.cut_paths.remove(self.selected_path)
+                self.selected_path = None
+                self.modal_state = 'WAITING'
+                self.temporary_message_start(context, 'DELETED PATH')
             
+            if event_press in {'LEFT_ARROW', 'RIGHT_ARROW'}:
+                self.create_undo_snapshot('PATH_SHIFT')
+                self.guide_arrow_shift(context, event)
+                #shift entire segment
+                self.temporary_message_start(context, 'Shift entire segment')
                 
+            if event_press in {'CTRL+WHEELUPMOUSE','CTRL+WHEELDOWNMOUSE','CTRL+NUMPAD_PLUS','CTRL+NUMPAD_MINUS'}:
+                #if not selected_path.lock:
+                #TODO: path.locked
+                #TODO:  dont recalc the path when no change happens
+                if event.type in {'WHEELUPMOUSE','NUMPAD_PLUS'}:
+                    if not self.selected_path.seg_lock:                            
+                        self.create_undo_snapshot('PATH_SEGMENTS')
+                        self.selected_path.segments += 1
+                elif event.type in {'WHEELDOWNMOUSE', 'NUMPAD_MINUS'} and self.selected_path.segments > 3:
+                    if not self.selected_path.seg_lock:
+                        self.create_undo_snapshot('PATH_SEGMENTS')
+                        self.selected_path.segments -= 1
                 
-            return{'RUNNING_MODAL'}
-        
-        if self.mode == 'GUIDE':
-            
-            if self.modal_state == 'WAITING':
-                #NAVIGATION KEYS
-                if (event.type in {'MIDDLEMOUSE', 
-                                    'NUMPAD_2', 
-                                    'NUMPAD_4', 
-                                    'NUMPAD_6',
-                                    'NUMPAD_8', 
-                                    'NUMPAD_1', 
-                                    'NUMPAD_3', 
-                                    'NUMPAD_5', 
-                                    'NUMPAD_7',
-                                    'NUMPAD_9'} and event.value == 'PRESS'):
-                    
-                    self.modal_state = 'NAVIGATING'
-                    self.post_update = True
-                    self.temporary_message_start(context, 'NAVIGATING')
-
-                    return {'PASS_THROUGH'}
-                
-                elif (event.type in {'ESC','RIGHT_MOUSE'} and 
-                    event.value == 'PRESS'):
-                    
-                    context.area.header_text_set()
-                    contour_utilities.callback_cleanup(self,context)
-                    if self._timer:
-                        context.window_manager.event_timer_remove(self._timer)
-                        
-                    return {'CANCELLED'}
-                
-                elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
-                    event.value == 'PRESS'):
-                    
-                    return self.finish_mesh(context)
-                
-                elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
-                    
-                    self.modal_state = 'NAVIGATING'
-                    self.post_update = True
-                    self.temporary_message_start(context, 'NAVIGATING')
-
-                    return {'PASS_THROUGH'}
-                
-                #ZOOM KEYS
-                elif (event.type in  {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and not 
-                        (event.ctrl or event.shift)):
-                    
-                    self.post_update = True
-                    self.temporary_message_start(context, 'ZOOM')
-                    return{'PASS_THROUGH'}
-                
-                elif event.type == 'TAB' and event.value == 'PRESS':
-                    self.mode = 'LOOP'
-                    self.snap_circle = []
-                    
-                    if self.selected_path:
-                        self.selected_path.unhighlight(settings)
-                        
-                    if self._timer:
-                        context.window_manager.event_timer_remove(self._timer)
-                        self._timer = None
-                
-                    context.area.header_text_set(text = self.loop_msg)
+                if self.selected_path.seg_lock:
+                    self.temporary_message_start(context, 'PATH SEGMENTS: Path is locked, cannot adjust segments')
                     return {'RUNNING_MODAL'}
                 
-                elif event.type == 'C' and event.value == 'PRESS':
-                    #center cursor
-                    bpy.ops.view3d.view_center_cursor()
-                    self.temporary_message_start(context, 'Center View to Cursor')
-                    return {'RUNNING_MODAL'}
+                self.selected_path.create_cut_nodes(context)
+                self.selected_path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
+                self.selected_path.cuts_on_path(context, self.original_form, self.bme)
+                self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                self.selected_path.update_visibility(context, self.original_form)
+                self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
+                #selected will hold old reference because all cuts are recreated (dumbly, it should just be the in between ones)
+                self.selected = self.selected_path.cuts[-1]
+                self.temporary_message_start(context, 'PATH SEGMENTS: %i' % self.selected_path.segments)
+           
+            if event_press in {'SHIFT+S','CTRL+S', 'ALT+S', 'S'}:
+                if event.shift:
+                    self.create_undo_snapshot('SMOOTH')
+                    #path.smooth_normals
+                    self.selected_path.average_normals(context, self.original_form, self.bme)
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
+                    self.temporary_message_start(context, 'Smooth normals based on drawn path')
                     
-                elif event.type == 'N' and event.value == 'PRESS':
-                    self.force_new = self.force_new != True
-                    #self.selected_path = None
-                    self.snap = None
-                    
-                    self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
-                    return {'RUNNING_MODAL'}
+                elif event.ctrl:
+                    self.create_undo_snapshot('SMOOTH')
+                    #smooth CoM path
+                    self.temporary_message_start(context, 'Smooth normals based on CoM path')
+                    self.selected_path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                 
-                
-                elif event.type == 'MOUSEMOVE':
+                elif event.alt:
+                    self.create_undo_snapshot('SMOOTH')
+                    #path.interpolate_endpoints
+                    self.temporary_message_start(context, 'Smoothly interpolate normals between the endpoints')
+                    self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
+                    self.selected_path.connect_cuts_to_make_mesh(self.original_form)
+                    self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
                     
-                    self.hover_guide_mode(context, settings, event)
+                else:
+                    half = math.floor(len(self.selected_path.cuts)/2)
                     
-                    return {'RUNNING_MODAL'}
-
-                    
-                elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                    if self.hover_target and self.hover_target.desc == 'CUT SERIES':
-                        self.hover_target.do_select(settings)
-                        self.selected_path = self.hover_target
-                        
-                        for path in self.cut_paths:
-                            if path != self.hover_target:
-                                path.deselect(settings)
+                    if math.fmod(len(self.selected_path.cuts), 2):  #5 segments is 6 rings
+                        loc = 0.5 * (self.selected_path.cuts[half].plane_com + self.selected_path.cuts[half+1].plane_com)
                     else:
-                        self.create_undo_snapshot('DRAW_PATH')
-                        self.modal_state = 'DRAWING'
-                        self.temporary_message_start(context, 'DRAWING')
+                        loc = self.selected_path.cuts[half].plane_com
                     
-                    return {'RUNNING_MODAL'}    
+                    context.scene.cursor_location = loc
+        
+        elif current_state == 'GUIDE.DRAWING':
                 
-                if self.selected_path:
-
-                    if event.type in {'X', 'DEL'} and event.value == 'PRESS':
-                        
-                        self.create_undo_snapshot('DELETE')
-                        self.cut_paths.remove(self.selected_path)
-                        self.selected_path = None
-                        self.modal_state = 'WAITING'
-                        self.temporary_message_start(context, 'DELETED PATH')
-                        
-                        return {'RUNNING_MODAL'}
-                    
-                    elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
-                          event.value == 'PRESS'):
-                        
-                        self.create_undo_snapshot('PATH_SHIFT')
-                        self.guide_arrow_shift(context, event)
-                          
-                        #shift entire segment
-                        self.temporary_message_start(context, 'Shift entire segment')
-                        return {'RUNNING_MODAL'}
-                        
-                    elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
-                          (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS')):
-                          
-                        #if not selected_path.lock:
-                        #TODO: path.locked
-                        #TODO:  dont recalc the path when no change happens
-                        if event.type in {'WHEELUPMOUSE','NUMPAD_PLUS'}:
-                            if not self.selected_path.seg_lock:                            
-                                self.create_undo_snapshot('PATH_SEGMENTS')
-                                self.selected_path.segments += 1
-                        elif event.type in {'WHEELDOWNMOUSE', 'NUMPAD_MINUS'} and self.selected_path.segments > 3:
-                            if not self.selected_path.seg_lock:
-                                self.create_undo_snapshot('PATH_SEGMENTS')
-                                self.selected_path.segments -= 1
-                    
-                        if not self.selected_path.seg_lock:
-                            self.selected_path.create_cut_nodes(context)
-                            self.selected_path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
-                            self.selected_path.cuts_on_path(context, self.original_form, self.bme)
-                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            self.selected_path.update_visibility(context, self.original_form)
-                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                            #selected will hold old reference because all cuts are recreated (dumbly, it should just be the in between ones)
-                            self.selected = self.selected_path.cuts[-1]
-                            self.temporary_message_start(context, 'PATH SEGMENTS: %i' % self.selected_path.segments)
-                            
-                            
-                        else:
-                            self.temporary_message_start(context, 'PATH SEGMENTS: Path is locked, cannot adjust segments')
-                        return {'RUNNING_MODAL'}
-                   
-                    elif event.type == 'S' and event.value == 'PRESS':
-
-                        if event.shift:
-                            self.create_undo_snapshot('SMOOTH')
-                            #path.smooth_normals
-                            self.selected_path.average_normals(context, self.original_form, self.bme)
-                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                            self.temporary_message_start(context, 'Smooth normals based on drawn path')
-                            
-                        elif event.ctrl:
-                            self.create_undo_snapshot('SMOOTH')
-                            #smooth CoM path
-                            self.temporary_message_start(context, 'Smooth normals based on CoM path')
-                            self.selected_path.smooth_normals_com(context, self.original_form, self.bme, iterations = 2)
-                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                        elif event.alt:
-                            self.create_undo_snapshot('SMOOTH')
-                            #path.interpolate_endpoints
-                            self.temporary_message_start(context, 'Smoothly interpolate normals between the endpoints')
-                            self.selected_path.interpolate_endpoints(context, self.original_form, self.bme)
-                            self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-                            self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                            
-                        else:
-                            half = math.floor(len(self.selected_path.cuts)/2)
-                            
-                            if math.fmod(len(self.selected_path.cuts), 2):  #5 segments is 6 rings
-                                loc = 0.5 * (self.selected_path.cuts[half].plane_com + self.selected_path.cuts[half+1].plane_com)
-                            else:
-                                loc = self.selected_path.cuts[half].plane_com
-                            
-                            context.scene.cursor_location = loc
-                    
-                        return{'RUNNING_MODAL'}
-                        
-            if self.modal_state == 'DRAWING':
+            if event.type == 'MOUSEMOVE':
+                action = 'GUIDE MODE: Drawing'
+                x = str(event.mouse_region_x)
+                y = str(event.mouse_region_y)
+                #record screen drawing
+                self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))   
                 
-                if event.type == 'MOUSEMOVE':
-                    action = 'GUIDE MODE: Drawing'
-                    x = str(event.mouse_region_x)
-                    y = str(event.mouse_region_y)
-                    #record screen drawing
-                    self.draw_cache.append((event.mouse_region_x,event.mouse_region_y))   
-                    
-                    return {'RUNNING_MODAL'}
-                    
-                if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-                    if len(self.draw_cache) > 10:
-                        
-                        for path in self.cut_paths:
-                            path.deselect(settings)
-                            
-                        self.selected_path  = self.new_path_from_draw(context, settings)
-                        if self.selected_path:
-                            self.selected_path.do_select(settings)
-                            if self.selected_path.cuts:
-                                self.selected = self.selected_path.cuts[-1]
-                            else:
-                                self.selected = None
-                            if self.selected:
-                                self.selected.do_select(settings)
-                        
-                        self.drag = False #TODO: is self.drag still needed?
-                        self.force_new = False
-                    
+            if event_release == 'LEFTMOUSE':
+                if len(self.draw_cache) < 10:
+                    # too short!
                     self.draw_cache = []
-                    
                     self.modal_state = 'WAITING'
-                    return{'RUNNING_MODAL'}
+                    return {'RUNNING_MODAL'}
                 
+                for path in self.cut_paths:
+                    path.deselect(settings)
+                    
+                self.selected_path  = self.new_path_from_draw(context, settings)
+                if self.selected_path:
+                    self.selected_path.do_select(settings)
+                    if self.selected_path.cuts:
+                        self.selected = self.selected_path.cuts[-1]
+                    else:
+                        self.selected = None
+                    if self.selected:
+                        self.selected.do_select(settings)
                 
-            return{'RUNNING_MODAL'}
-            
+                self.drag = False #TODO: is self.drag still needed?
+                self.force_new = False
+                self.draw_cache = []
+                self.modal_state = 'WAITING'
+        
+        else:
+            # stuck in bad state!
+            assert False, 'WARNING: unhandled state (%s)' % current_state
+        
+        return{'RUNNING_MODAL'}
+        
     
                         
     def create_undo_snapshot(self, action):
@@ -2161,6 +1997,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         #'LOOP' or 'GUIDE'
         
         self.modal_state = 'WAITING'
+        
+        self.is_navigating = False
         
         #does the user want to extend an existing cut or make a new segment
         self.force_new = False
