@@ -2189,7 +2189,7 @@ def poly_sketch_draw_callback(self,context):
         contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
         contour_utilities.draw_3d_points(context, self.sample_points, (1,.5, .5,1), 5)
         blf.position(0, 20, 20, 0)
-        blf.size(0,20,20)
+        blf.size(0,20, 72)
         blf.draw(0, str(round(self.world_width,3)))
     
 #Poly Sketch Branch
