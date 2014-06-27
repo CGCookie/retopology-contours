@@ -2370,7 +2370,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             widths = []
             
             if center_ray[2] != -1:
-                
+                self.sample_points = []
                 self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, self.quad_screen_radius, 20)
                 vec1, top_ray = contour_utilities.ray_cast_region2d(region, rv3d, top, self.original_form, settings)
                 vec2, left_ray = contour_utilities.ray_cast_region2d(region, rv3d, left, self.original_form, settings)
@@ -2392,8 +2392,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 
                 if len(widths):
                     #average and correct for the view being parallel to the surfaec normal
-                    self.world_width = sum(widths)/len(widths) * vec.dot(center_ray[1].normalized())
-                    
+                    self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))
+                else:
+                    #defalt quad size in case we don't get to raycast succesfully
+                    self.world_width = self.original_form.dimensions.length * 1/settings.density_factor
                     
             else:
                 self.mouse_circle = []
@@ -2452,7 +2454,9 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                         sketch = PolySkecthLine(context, self.draw_cache,
                                                 cull_factor = settings.cull_factor, 
                                                 smooth_factor = settings.smooth_factor,
-                                                feature_factor = settings.feature_factor)
+                                                feature_factor = settings.feature_factor,
+                                                quad_width = 2*self.world_width,
+                                                quad_length = 2*self.world_width)
                         
                         #cast onto object
                         sketch.ray_cast_path(context, self.original_form)
@@ -2822,7 +2826,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
         #TODO Settings harmony CODE REVIEW
         self.settings = settings
-        self.quad_screen_radius = settings.quad_prev_radius
+        
         #if edit mode
         if context.mode == 'EDIT_MESH':
             
@@ -3017,6 +3021,8 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #mouse preview circle
         self.mouse_circle = []
         self.sample_points = []
+        self.quad_screen_radius = settings.quad_prev_radius
+        self.world_width = self.original_form.dimensions.length * 1/settings.density_factor
         
         
         self.sketch_intersections = []

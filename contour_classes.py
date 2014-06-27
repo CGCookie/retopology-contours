@@ -1774,7 +1774,9 @@ class PolySkecthLine(object):
     def __init__(self, context, raw_points,
                  cull_factor = 3,
                  smooth_factor = 5,
-                 feature_factor = 5):
+                 feature_factor = 5,
+                 quad_width = None,
+                 quad_length = None):
         
         settings = context.user_preferences.addons[AL.FolderName].preferences
         ####IDENTIFIER###
@@ -1846,8 +1848,8 @@ class PolySkecthLine(object):
         #this is an interesting connundrum
         #do we aim for n segmetns or a density/quad size
         self.segments = 10
-        self.quad_width = 1
-        self.quad_length = 1
+        self.quad_width = quad_width
+        self.quad_length = quad_length
         
         ####VISULAIZTION STUFF####
         self.color1 = (settings.sketch_color1[0], settings.sketch_color1[1],settings.sketch_color1[2],1)
@@ -1910,8 +1912,10 @@ class PolySkecthLine(object):
     def ray_cast_path(self,context, ob):
         
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        self.quad_length = ob.dimensions.length * 1/settings.density_factor
-        self.quad_width = self.quad_length
+        if not self.quad_length:
+            self.quad_length = ob.dimensions.length * 1/settings.density_factor
+        if not self.quad_width:
+            self.quad_width = self.quad_length
         
         region = context.region  
         rv3d = context.space_data.region_3d
@@ -2836,7 +2840,8 @@ class PolySkecthLine(object):
         self.poly_nodes = []
         curve_len = contour_utilities.get_path_length(self.world_path)
         
-        if mode == 'QUAD_SIZE':
+        print(self.quad_length)
+        if mode == 'QUAD_SIZE' and self.quad_length:
             self.segments = round(curve_len/self.quad_length)
         
         elif mode == 'SEGMENTS' and self.segments > 0:
