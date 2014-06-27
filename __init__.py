@@ -208,7 +208,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     show_experimental = BoolProperty(
             name="Enable Experimental",
             description = "Enable experimental features and functions that are still in development, useful for experimenting and likely to crash",
-            default=False,
+            default=True,
             )
     
     vert_size = IntProperty(
@@ -410,6 +410,14 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max = 1000,
             )
     
+    quad_prev_radius = IntProperty(
+            name = "Quad Preview Pixel Radius",
+            description = "Default pixel width for poly sketch",
+            default=20,
+            min = 5,
+            max = 1000,
+            )
+    
     cull_factor = IntProperty(
             name = "Cull Factor",
             description = "Fraction of screen drawn points to throw away. Bigger = less detail",
@@ -538,6 +546,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row.prop(self, "cull_factor", text="Cull Factor")
             row.prop(self, "intersect_threshold", text="Intersection Threshold")
             row.prop(self, "density_factor", text="Density Factor")
+            row.prop(self, "quad_prev_radius", text = "Pixel Quad Width")
             
             row = box.row()
             row.prop(self, "merge_threshold", text="Merge Threshold")
@@ -2178,7 +2187,11 @@ def poly_sketch_draw_callback(self,context):
             
     if len(self.mouse_circle):
         contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
-
+        contour_utilities.draw_3d_points(context, self.sample_points, (1,.5, .5,1), 5)
+        blf.position(0, 20, 20, 0)
+        blf.size(0,20,20)
+        blf.draw(0, str(round(self.world_width,3)))
+    
 #Poly Sketch Branch
 class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
     '''Draw Polygon Strips on Surface for Retopology'''
@@ -2202,11 +2215,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             return False
         
     def modal(self, context, event):
+        #HINT Poly Sketch Modal
+        
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        
-        
-        
         
         if event.type == 'K' and self.selected and self.selected.desc == 'SKETCH_LINE':
             if event.value == 'PRESS':
@@ -2345,34 +2357,47 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             region = context.region  
             rv3d = context.space_data.region_3d
-            vec = region_2d_to_vector_3d(region, rv3d, (event.mouse_region_x,event.mouse_region_y))
-            loc = region_2d_to_location_3d(region, rv3d, (event.mouse_region_x,event.mouse_region_y), vec)
-            if rv3d.is_perspective:
-                #print('is perspe')
-                a = loc - 3000*vec
-                b = loc + 3000*vec
-            else:
-                #print('is not perspe')
-                b = loc - 3000 * vec
-                a = loc + 3000 * vec
-
-            mx = self.original_form.matrix_world
-            imx = mx.inverted()
-            hit = self.original_form.ray_cast(imx*a, imx*b)
-            if hit[2] != -1:
-                print('raycast the mouse')
-                world_v = mx * hit[0]
-                r = self.original_form.dimensions.length * 1/settings.density_factor
-                world_r = world_v + r * rv3d.view_rotation * Vector((1,0,0))
-                screen_r = location_3d_to_region_2d(region,rv3d, world_r)
-                screen_r_vec = Vector((event.mouse_region_x,event.mouse_region_y)) - screen_r
-                radius = screen_r_vec.length/2
-                self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, radius, 20)
-                self.mouse_circle.append(self.mouse_circle[0])
-            else:
-                print('didnt raycast the mouse')
-                self.mouse_circle = []
+            
+            #the mouse points and 4 sample points around the mouse
+            center = (event.mouse_region_x,event.mouse_region_y)
+            top =  (event.mouse_region_x,event.mouse_region_y + self.quad_screen_radius)
+            left =  (event.mouse_region_x - self.quad_screen_radius, event.mouse_region_y)
+            bottom =  (event.mouse_region_x,event.mouse_region_y - self.quad_screen_radius)
+            right =  (event.mouse_region_x + self.quad_screen_radius, event.mouse_region_y)
+            
+            vec, center_ray = contour_utilities.ray_cast_region2d(region, rv3d, center, self.original_form, settings)
+            vec.normalize()
+            widths = []
+            
+            if center_ray[2] != -1:
                 
+                self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, self.quad_screen_radius, 20)
+                vec1, top_ray = contour_utilities.ray_cast_region2d(region, rv3d, top, self.original_form, settings)
+                vec2, left_ray = contour_utilities.ray_cast_region2d(region, rv3d, left, self.original_form, settings)
+                vec3, bottom_ray = contour_utilities.ray_cast_region2d(region, rv3d, bottom, self.original_form, settings)
+                vec4, right_ray = contour_utilities.ray_cast_region2d(region, rv3d, right, self.original_form, settings)
+                
+                if top_ray[2] != -1:
+                    widths.append((top_ray[0] - center_ray[0]).length)
+                    self.sample_points.append(top_ray[0])
+                if left_ray[2] != -1:
+                    widths.append((left_ray[0] - center_ray[0]).length)
+                    self.sample_points.append(left_ray[0])
+                if bottom_ray[2] != -1:
+                    widths.append((bottom_ray[0] - center_ray[0]).length)
+                    self.sample_points.append(bottom_ray[0])
+                if right_ray[2] != -1:
+                    widths.append((right_ray[0] - center_ray[0]).length)
+                    self.sample_points.append(right_ray[0])
+                
+                if len(widths):
+                    #average and correct for the view being parallel to the surfaec normal
+                    self.world_width = sum(widths)/len(widths) * vec.dot(center_ray[1].normalized())
+                    
+                    
+            else:
+                self.mouse_circle = []
+                self.sample_points = []
                 
             if self.drag and self.draw:
                 
@@ -2795,9 +2820,9 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #TODO Settings harmon CODE REVIEW
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
-        #TODO Settings harmon CODE REVIEW
+        #TODO Settings harmony CODE REVIEW
         self.settings = settings
-        
+        self.quad_screen_radius = settings.quad_prev_radius
         #if edit mode
         if context.mode == 'EDIT_MESH':
             
@@ -2991,6 +3016,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
         #mouse preview circle
         self.mouse_circle = []
+        self.sample_points = []
         
         
         self.sketch_intersections = []
