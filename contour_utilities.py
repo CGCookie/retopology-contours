@@ -33,7 +33,8 @@ from collections import deque
 from bpy_extras import view3d_utils
 from mathutils import Vector, Matrix, Quaternion
 from mathutils.geometry import intersect_line_plane, intersect_point_line, distance_point_to_plane, intersect_line_line_2d, intersect_line_line
-from bpy_extras.view3d_utils import location_3d_to_region_2d
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
+
 
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
@@ -231,6 +232,68 @@ def simplify_RDP(splineVerts, error, method = 1):
             
     print('finished simplification with method %i in %f seconds' % (method, time.time() - start))
     return newVerts
+
+def ray_cast_visible(verts, ob, rv3d):
+    '''
+    returns list of Boolean values indicating whether the corresponding vert
+    is visible (not occluded by object) in region associated with rv3d
+    '''
+    view_dir = rv3d.view_rotation * Vector((0,0,1))
+    imx = ob.matrix_world.inverted()
+    
+    if rv3d.is_perspective:
+        eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
+        eyeloc_local = imx*eyeloc
+        source = [eyeloc_local for vert in verts]
+        target = [imx*(vert+ 0.01*view_dir) for vert in verts]
+    else:
+        source = [imx*(vert+10000*view_dir) for vert in verts]
+        target = [imx*(vert+ 0.01*view_dir) for vert in verts]
+    
+    return [ob.ray_cast(s,t)[2]==-1 for s,t in zip(source,target)]
+
+def ray_cast_region2d(region, rv3d, screen_coord, ob, settings):
+    '''
+    performs ray casting on object given region, rv3d, and coords wrt region.
+    returns tuple of ray vector (from coords of region) and hit info
+    '''
+    mx = ob.matrix_world
+    imx = mx.inverted()
+    
+    if True:
+        # JD's attempt at correcting bug #48
+        ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord).normalized()
+        ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+        if not rv3d.is_perspective:
+            # need to back up the ray's origin, because ortho projection has front and back
+            # projection planes at inf
+            ray_origin = ray_origin + ray_vector * 1000
+            ray_target = ray_origin - ray_vector * 2000
+            ray_vector = -ray_vector # why does this need to be negated?
+        else:
+            ray_target = ray_origin + ray_vector * 1000
+        #TODO: make a max ray depth or pull this depth from clip depth
+    else:
+        ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
+        ray_origin = region_2d_to_origin_3d(region, rv3d, screen_coord)
+        ray_target = ray_origin + (10000 * ray_vector) #TODO: make a max ray depth or pull this depth from clip depth
+    
+    ray_start_local  = imx * ray_origin
+    ray_target_local = imx * ray_target
+    
+    if settings.debug > 1:
+        print('ray_persp  = ' + str(rv3d.is_perspective))
+        print('ray_origin = ' + str(ray_origin))
+        print('ray_target = ' + str(ray_target))
+        print('ray_vector = ' + str(ray_vector))
+        print('ray_diff   = ' + str((ray_target - ray_origin).normalized()))
+        print('start:  ' + str(ray_start_local))
+        print('target: ' + str(ray_target_local))
+    
+    hit = ob.ray_cast(ray_start_local, ray_target_local)
+    
+    return (ray_vector, hit)
+
 
 def relax(verts, factor = .75, in_place = True):
     '''
@@ -543,6 +606,32 @@ def diagonal_verts(verts):
     
     return diag
 
+
+def calculate_com_normal(locs):
+    '''
+    computes a center of mass (CoM) and a normal of provided roughly planar locs
+    notes:
+    - uses random sampling
+    - does not assume a particular order of locs
+    - may compute the negative of "true" normal
+    '''
+    com = sum((loc for loc in locs), Vector((0,0,0))) / len(locs)
+    # get locations wrt to com
+    llocs = [loc-com for loc in locs]
+    ac = Vector((0,0,0))
+    first = True
+    for i in range(len(locs)):
+        lp0,lp1 = random.sample(llocs,2)
+        c = lp0.cross(lp1).normalized()
+        if first:
+            ac = c
+            first = False
+        else:
+            if ac.dot(c) < 0:
+                ac -= c
+            else:
+                ac += c
+    return (com, ac.normalized())
 
 #TODO: CREDIT
 #TODO: LINK
@@ -1069,7 +1158,7 @@ def vert_cycle(vert, pt, no, prev_eds, verts):#, connection):
                 elif result[0] == 'COPLANAR':
                     cop_face = 0
                     for face in ed.link_faces:
-                        if face.no.cross(no) == 0:
+                        if face.normal.cross(no) == 0:
                             cop_face += 1
                             print('found a coplanar face')
     
@@ -1405,8 +1494,8 @@ def discrete_curl(verts, z): #Adapted from Open Dental CAD by Patrick Moore
        
     '''
     if len(verts) < 3:
-        print('not posisble for this to be a loop!')
-        return
+        print('not possible for this to be a loop!')
+        return None
     
     curl = 0
     
@@ -2184,7 +2273,7 @@ def cross_section_seed_ver0(bme, mx,
             
     if not len(seeds):
         print('cancelling until your programmer gets smarter')
-        return None
+        return (None,None)
         
     #we have found one edge that crosses, now, baring any terrible disconnections in the mesh,
     #we traverse through the link faces, wandering our way through....removing edges from our list
@@ -2261,7 +2350,7 @@ def cross_section_seed_ver0(bme, mx,
             
         return (verts, eds)
     else:
-        return None
+        return (None, None)
 
 
 
@@ -2270,15 +2359,23 @@ def find_bmedges_crossing_plane(pt, no, edges, epsilon):
     returns list of edges that *cross* plane and corresponding intersection points
     '''
     
+    coords = {}
+    for edge in edges:
+        v0,v1 = edge.verts
+        if v0 not in coords: coords[v0] = no.dot(v0.co-pt)
+        if v1 not in coords: coords[v1] = no.dot(v1.co-pt)
+    #print(str(coords))
+    
     ret = []
     for edge in edges:
         v0,v1 = edge.verts
-        co0,co1 = v0.co, v1.co
-        s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
-        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
-            continue
+        s0,s1 = coords[v0],coords[v1]
+        if s0 > epsilon and s1 > epsilon: continue
+        if s0 < -epsilon and s1 < -epsilon: continue
+        #if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+        #    continue
         
-        i = intersect_line_plane(co0, co1, pt, no)
+        i = intersect_line_plane(v0.co, v1.co, pt, no)
         ret += [(edge,i)]
     return ret
 
@@ -2306,8 +2403,10 @@ def find_distant_bmedge_crossing_plane(pt, no, edges, epsilon, eind_from, co_fro
         v0,v1 = edge.verts
         co0,co1 = v0.co, v1.co
         s0,s1 = no.dot(co0 - pt), no.dot(co1 - pt)
-        if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
-            continue
+        if s0 > epsilon and s1 > epsilon: continue
+        if s0 < -epsilon and s1 < -epsilon: continue
+        #if not ((s0>epsilon and s1<-epsilon) or (s0<-epsilon and s1>epsilon)):      # edge cross plane?
+        #    continue
         
         i = intersect_line_plane(co0, co1, pt, no)
         d = (co_from - i).length
@@ -2385,12 +2484,19 @@ def cross_section_seed_ver1(bme, mx,
         # shift pt so plane crosses face
         shift_dist = (min(ld)+epsilon) if ld[0] > epsilon else (max(ld)-epsilon)
         pt += no * shift_dist
+        print('>>> shifting')
+        print('>>> ' + str(ld))
+        print('>>> ' + shift_dist)
+        print('>>> ' + no*shift_dist)
     
     # find intersections of edges and cutting plane
-    ei_init = find_bmedges_crossing_plane(pt, no, bme.faces[seed_index].edges, epsilon)
+    bmface = bme.faces[seed_index]
+    bmedges = bmface.edges
+    ei_init = find_bmedges_crossing_plane(pt, no, bmedges, epsilon)
     
     if len(ei_init) < 2:
         print('warning: it should not reach here! len(ei_init) = %d' % len(ei_init))
+        print('lengths = ' + str([(edge.verts[0].co-edge.verts[1].co).length for edge in bmedges]))
         return (None,None)
     elif len(ei_init) == 2:
         # simple case
@@ -2434,6 +2540,7 @@ def cross_section_seed_ver1(bme, mx,
     return (verts, edges)
 
 
+
 def cross_section_seed(bme, mx, 
                        point, normal, 
                        seed_index, 
@@ -2464,8 +2571,10 @@ def cross_section_seed(bme, mx,
     calc_time = time.time()
     
     print('the new method was used: %r' % method)
-    print('%i verts were found in %f seconds' % (len(ret[0]), (calc_time - start)))
-
+    if ret[0]:
+        print('%i verts were found in %f seconds' % (len(ret[0]), (calc_time - start)))
+    else:
+        print('Cutting failed')
     
     return ret
 
@@ -2532,14 +2641,14 @@ def cross_section_seed_direction(bme, mx,
             else:
                 seeds[len(verts)-1] = None
                 print('seed face is an edge of mesh face')
- 
+    
     if len(verts) < 2:
-        print('critical error, probably machine error')
+        print('critical error, probably machine error (len(verts) = %d)' % len(verts))
         #TODO: debug and dump relevant info
         return (None, None)
     
     elif len(verts) > 2:
-        print('critial error probably concave ngong or something')
+        print('critial error probably concave ngon or something (len(verts) = %d)' % len(verts))
         #TODO: debug and dump relevant info
         return (None, None) 
       
@@ -2625,7 +2734,7 @@ def intersect_path_plane(verts, pt, no, mode = 'FIRST'):
     #TODO:  input quality checks for variables
     
     intersects = []
-    n = len(verts)
+    n = len(verts) if verts else 0
     
     for i in range(0,n-1):
         cross = cross_edge(verts[i], verts[i+1], pt, no)
