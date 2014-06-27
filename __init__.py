@@ -1072,7 +1072,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         contour_utilities.callback_cleanup(self,context)
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
-        
+        context.window.cursor_modal_restore()
         print('finished mesh!')
         return {'FINISHED'}
         
@@ -1177,11 +1177,23 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         
         context.area.header_text_set(text = message)    
                                                  
-    
+        
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
+        t_panel = context.area.regions[1]
+        n_panel = context.area.regions[3]
+        view_3d_region_x = Vector((context.area.x + t_panel.width, context.area.x + context.area.width - n_panel.width))
+        view_3d_region_y = Vector((context.region.y, context.region.y+context.region.height))
+        
+        in_view_3d = False
+        ### check if mouse is in 3d viewport
+        if event.mouse_x > view_3d_region_x[0] and event.mouse_x < view_3d_region_x[1] and event.mouse_y > view_3d_region_y[0] and event.mouse_y < view_3d_region_y[1]:
+            in_view_3d = True
+        else:
+            return {'PASS_THROUGH'}    
+            
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
             self.temporary_message_start(context, "Undo Action")
             self.undo_action()
@@ -1232,6 +1244,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     event.value == 'PRESS'):
                     
                     context.area.header_text_set()
+                    context.window.cursor_modal_restore()
                     contour_utilities.callback_cleanup(self,context)
                     if self._timer:
                         context.window_manager.event_timer_remove(self._timer)
@@ -1243,6 +1256,8 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     
                     self.mode = 'GUIDE'
                     self.selected = None  #WHY?
+                    context.window.cursor_modal_set('PAINT_BRUSH')
+                    
                     if self.selected_path:
                         self.selected_path.highlight(settings)
                     
@@ -1601,6 +1616,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     event.value == 'PRESS'):
                     
                     context.area.header_text_set()
+                    context.window.cursor_modal_restore()
                     contour_utilities.callback_cleanup(self,context)
                     if self._timer:
                         context.window_manager.event_timer_remove(self._timer)
@@ -1631,6 +1647,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 elif event.type == 'TAB' and event.value == 'PRESS':
                     self.mode = 'LOOP'
                     self.snap_circle = []
+                    context.window.cursor_modal_set('KNIFE')
                     
                     if self.selected_path:
                         self.selected_path.unhighlight(settings)
@@ -2097,6 +2114,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
         ####MODE, UI, DRAWING, and MODAL variables###
         self.mode = 'LOOP'
+        context.window.cursor_modal_set('KNIFE')
         #'LOOP' or 'GUIDE'
         
         self.modal_state = 'WAITING'
@@ -2204,9 +2222,28 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
+        t_panel = context.area.regions[1]
+        n_panel = context.area.regions[3]
+        view_3d_region_x = Vector((context.area.x + t_panel.width, context.area.x + context.area.width - n_panel.width))
+        view_3d_region_y = Vector((context.region.y, context.region.y+context.region.height))
         
         
-        
+        ### check if mouse is in 3d viewport
+        if event.mouse_x > view_3d_region_x[0] and event.mouse_x < view_3d_region_x[1] and event.mouse_y > view_3d_region_y[0] and event.mouse_y < view_3d_region_y[1]:
+            if self.in_view_3d != True:  #meaning we have moved into the 3d viewport
+                self.in_view_3d = True
+                if self.draw:
+                    context.window.cursor_modal_set("PAINT_BRUSH")
+                    
+                else:
+                    context.window.cursor_modal_restore()
+        else:
+            if self.in_view_3d != False:
+                self.in_view_3d = False
+                context.window.cursor_modal_restore()
+            
+            return {'PASS_THROUGH'}    
+
         if event.type == 'K' and self.selected and self.selected.desc == 'SKETCH_LINE':
             if event.value == 'PRESS':
                 self.selected.cut_by_endpoints(self.original_form, self.bme)
@@ -2316,8 +2353,12 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             #toggle drawing
             if event.value == 'PRESS':
                 #toggle the draw on press
-                self.draw = self.draw == False
-            
+                if self.draw:
+                    self.draw = False
+                    context.window.cursor_modal_restore()
+                else:
+                    self.draw = True
+                    context.window.cursor_modal_set('PAINT_BRUSH')
             
             if self.draw:
                 message = "Draw Mode Active: draw lines with LMB to generate poly strips"
@@ -2532,6 +2573,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         elif event.type == 'ESC':
             contour_utilities.callback_cleanup(self,context)
             context.area.header_text_set()
+            context.window.cursor_modal_restore()
             return {'CANCELLED'}
             
         elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
@@ -2622,9 +2664,10 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             context.scene.update()
             
             context.area.header_text_set()
+            context.window.cursor_modal_restore()
             contour_utilities.callback_cleanup(self,context)
             bm.free()
-
+            
             return{'FINISHED'}
             
                 
@@ -3004,6 +3047,11 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         self.drag = False
         self.navigating = False
         self.draw = False
+        t_panel = context.area.regions[1]
+        n_panel = context.area.regions[3]
+        view_3d_region_x = Vector((context.area.x + t_panel.width, context.area.x + context.area.width - n_panel.width))
+        view_3d_region_y = Vector((context.region.y, context.region.y+context.region.height))
+        self.in_view_3d = event.mouse_x > view_3d_region_x[0] and event.mouse_x < view_3d_region_x[1] and event.mouse_y > view_3d_region_y[0] and event.mouse_y < view_3d_region_y[1]
         
         #what is the user dragging..a cutline, a handle etc
         self.drag_target = None
