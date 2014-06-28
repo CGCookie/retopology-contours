@@ -60,7 +60,7 @@ import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities, general_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver
+from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySketchLine, ContourCutSeries, ContourStatePreserver
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
@@ -2423,7 +2423,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                     if len(self.draw_cache) > 10:
                         #new sketch
                         
-                        sketch = PolySkecthLine(context, self.draw_cache,
+                        sketch = PolySketchLine(context, self.draw_cache,
                                                 cull_factor = settings.cull_factor, 
                                                 smooth_factor = settings.smooth_factor,
                                                 feature_factor = settings.feature_factor)
@@ -2761,7 +2761,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             
             for seg in segments1:
                 #make a blank new stroke
-                sketch = PolySkecthLine(context, [])
+                sketch = PolySketchLine(context, [])
                 sketch.raw_world = seg
                 sketch.world_path = seg
                 sketch.snap_to_object(self.original_form)
@@ -2774,7 +2774,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                 
             for seg in segments2:
                 #make a new stroke
-                sketch = PolySkecthLine(context, [])
+                sketch = PolySketchLine(context, [])
                 sketch.raw_world = seg
                 sketch.world_path = seg
                 sketch.quad_length = stroke2.quad_length
