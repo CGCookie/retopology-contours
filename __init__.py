@@ -1187,11 +1187,19 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         view_3d_region_x = Vector((context.area.x + t_panel.width, context.area.x + context.area.width - n_panel.width))
         view_3d_region_y = Vector((context.region.y, context.region.y+context.region.height))
         
-        in_view_3d = False
+        
         ### check if mouse is in 3d viewport
         if event.mouse_x > view_3d_region_x[0] and event.mouse_x < view_3d_region_x[1] and event.mouse_y > view_3d_region_y[0] and event.mouse_y < view_3d_region_y[1]:
-            in_view_3d = True
+            if self.in_view_3d != True:
+                
+                self.in_view_3d = False
+                if self.mode == 'LOOP':
+                    context.window.cursor_modal_set('KNIFE')
+                else:
+                    context.window.cursor_modal_set('PAINT_BRUSH')
+            
         else:
+            self.in_view_3d = False
             return {'PASS_THROUGH'}    
             
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
@@ -2114,6 +2122,12 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
         ####MODE, UI, DRAWING, and MODAL variables###
         self.mode = 'LOOP'
+        t_panel = context.area.regions[1]
+        n_panel = context.area.regions[3]
+        view_3d_region_x = Vector((context.area.x + t_panel.width, context.area.x + context.area.width - n_panel.width))
+        view_3d_region_y = Vector((context.region.y, context.region.y+context.region.height))
+        
+        self.in_view_3d = event.mouse_x > view_3d_region_x[0] and event.mouse_x < view_3d_region_x[1] and event.mouse_y > view_3d_region_y[0] and event.mouse_y < view_3d_region_y[1]
         context.window.cursor_modal_set('KNIFE')
         #'LOOP' or 'GUIDE'
         
