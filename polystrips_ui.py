@@ -72,6 +72,16 @@ def polystrips_draw_callback(self, context):
                 p3d = [cur1,cur0]
             prev0,prev1 = cur0,cur1
         contour_utilities.draw_polyline_from_3dpoints(context, p3d, (1,.5,.5,.8), 1, "GL_LINE_SMOOTH")
+    for gedge0,gedge1 in zip(self.polystrips.gedges[:-1],self.polystrips.gedges[1:]):
+        if len(gedge0.cache_igverts) and len(gedge1.cache_igverts):
+            gv0 = gedge0.cache_igverts[-2]
+            gv1 = gedge1.cache_igverts[1]
+            p0 = gv0.position+gv0.tangent_y*gv0.radius
+            p1 = gv0.position-gv0.tangent_y*gv0.radius
+            p2 = gv1.position-gv1.tangent_y*gv1.radius
+            p3 = gv1.position+gv1.tangent_y*gv1.radius
+            p3d = [p0,p1,p2,p3,p0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.5,.5,1,.8), 1, "GL_LINE_SMOOTH")
 
 
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
@@ -141,23 +151,27 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if event_press == 'CTRL+NUMPAD_PLUS':
             self.polystrips.gverts[0].radius *= 1.1
-            self.polystrips.gedges[0].recalc_igverts_approx()
-            self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
+            for gedge in self.polystrips.gedges:
+                gedge.recalc_igverts_approx()
+                gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+NUMPAD_MINUS':
             self.polystrips.gverts[0].radius /= 1.1
-            self.polystrips.gedges[0].recalc_igverts_approx()
-            self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
+            for gedge in self.polystrips.gedges:
+                gedge.recalc_igverts_approx()
+                gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+SHIFT+NUMPAD_PLUS':
             self.polystrips.gverts[3].radius *= 1.1
-            self.polystrips.gedges[0].recalc_igverts_approx()
-            self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
+            for gedge in self.polystrips.gedges:
+                gedge.recalc_igverts_approx()
+                gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+SHIFT+NUMPAD_MINUS':
             self.polystrips.gverts[3].radius /= 1.1
-            self.polystrips.gedges[0].recalc_igverts_approx()
-            self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
+            for gedge in self.polystrips.gedges:
+                gedge.recalc_igverts_approx()
+                gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         
         return{'RUNNING_MODAL'}
@@ -178,39 +192,39 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         xform = bpy.data.objects['BezierCurve'].matrix_world
         data = bpy.data.objects['BezierCurve'].data
-        p0 = xform * data.splines[0].bezier_points[0].co
-        r0 = .2
-        n0  = Vector((0,0,1))
-        tx0 = Vector((1,0,0))
-        ty0 = Vector((0,1,0))
-        p1 = xform * data.splines[0].bezier_points[0].handle_right
-        r1 = .1
-        n1  = Vector((0,0,1))
-        tx1 = Vector((1,0,0))
-        ty1 = Vector((0,1,0))
-        p2 = xform * data.splines[0].bezier_points[1].handle_left
-        r2 = .1
-        n2  = Vector((0,0,1))
-        tx2 = Vector((1,0,0))
-        ty2 = Vector((0,1,0))
-        p3 = xform * data.splines[0].bezier_points[1].co
-        r3 = .2
-        n3  = Vector((0,0,1))
-        tx3 = Vector((1,0,0))
-        ty3 = Vector((0,1,0))
-        
-        gv0 = GVert(p0,r0,n0,tx0,ty0)
-        gv1 = GVert(p1,r1,n1,tx1,ty1)
-        gv2 = GVert(p2,r2,n2,tx2,ty2)
-        gv3 = GVert(p3,r3,n3,tx3,ty3)
-        
-        ge0 = GEdge(gv0,gv1,gv2,gv3)
-        ge0.recalc_igverts_approx()
-        ge0.snap_igverts_to_object(self.obj)
         
         self.polystrips = PolyStrips(context, self.obj)
-        self.polystrips.gverts = [gv0,gv1,gv2,gv3]
-        self.polystrips.gedges = [ge0]
+        
+        def create_gvert(xform, co):
+            p0 = xform * co
+            r0 = .2
+            n0  = Vector((0,0,1))
+            tx0 = Vector((1,0,0))
+            ty0 = Vector((0,1,0))
+            return GVert(p0,r0,n0,tx0,ty0)
+            
+        for spline in data.splines:
+            pregv = None
+            for bp0,bp1 in zip(spline.bezier_points[:-1],spline.bezier_points[1:]):
+                if pregv:
+                    gv0 = pregv
+                else:
+                    gv0 = create_gvert(xform, bp0.co)
+                    
+                gv1 = create_gvert(xform, bp0.handle_right)
+                gv2 = create_gvert(xform, bp1.handle_left)
+                gv3 = create_gvert(xform, bp1.co)
+                
+                ge0 = GEdge(gv0,gv1,gv2,gv3)
+                ge0.recalc_igverts_approx()
+                ge0.snap_igverts_to_object(self.obj)
+                
+                if pregv:
+                    self.polystrips.gverts += [gv1,gv2,gv3]
+                else:
+                    self.polystrips.gverts += [gv0,gv1,gv2,gv3]
+                self.polystrips.gedges += [ge0]
+                pregv = gv3
         
         # switch to modal
         self._handle = bpy.types.SpaceView3D.draw_handler_add(

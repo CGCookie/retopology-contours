@@ -110,14 +110,17 @@ class GEdge:
         print('cmin = %i' % cmin)
         print('cmax = %i' % cmax)
         c = 0
-        for ctest in range(cmin-2,cmax+1):
+        for ctest in range(max(4,cmin-2),cmax+1):
             s = (r3-r0) / (ctest-1)
             tot = r0*(ctest+1) + s*(ctest+1)*ctest/2
             if tot > l:
                 break
             if ctest % 2 == 1:
                 c = ctest
-        #assert c%2 == 1, str(c)
+        if c <= 1:
+            print('TOO BIG!')
+            self.cache_igverts = []
+            return
         print('c = ' + str(c))
         
         # compute difference for smoothly interpolating radii
