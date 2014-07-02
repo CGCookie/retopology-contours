@@ -33,3 +33,9 @@ class AddonLocator(object):
 
 def range_mod(m):
     for i in range(m): yield(i,(i+1)%m)
+
+def iter_running_sum(lw):
+    s = 0
+    for w in lw:
+        s += w
+        yield (w,s)

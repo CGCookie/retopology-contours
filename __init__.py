@@ -65,6 +65,9 @@ from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
 
+from polystrips_ui import CGCOOKIE_OT_polystrips
+
+
 # Create a class that contains all location information for addons
 AL = general_utilities.AddonLocator()
 
@@ -619,6 +622,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
             col.label(text='No 2nd Object!')
         col = box.column()
         col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
+        col.operator("cgcookie.polystrips", icon="MESH_UVSPHERE")
         
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
         
@@ -2928,19 +2932,22 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         
         return {'RUNNING_MODAL'}
+
 # Used to store keymaps for addon
 addon_keymaps = []
-
 
 #registration
 def register():
     bpy.utils.register_class(ContourToolsAddonPreferences)
+    
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_panel)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_poly_sketch)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_menu)
-
+    
+    bpy.utils.register_class(CGCOOKIE_OT_polystrips)
+    
     # Create the addon hotkeys
     kc = bpy.context.window_manager.keyconfigs.addon
    
@@ -2955,13 +2962,16 @@ def register():
 #unregistration
 def unregister():
     clear_mesh_cache()
+    bpy.utils.unregister_class(CGCOOKIE_OT_polystrips)
+    
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_panel)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_menu)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_poly_sketch)
+    
     bpy.utils.unregister_class(ContourToolsAddonPreferences)
-
+    
     # Remove addon hotkeys
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
