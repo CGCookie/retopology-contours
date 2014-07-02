@@ -106,17 +106,19 @@ class GEdge:
         l = self.get_length()
         print('l = %f' % l)
         
-        cmin,cmax = math.floor(l/max(r0,r3)),math.floor(l/min(r0,r3))
+        cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
         print('cmin = %i' % cmin)
         print('cmax = %i' % cmax)
-        c = cmin
-        for ctest in range(cmin,cmax+1):
-            if not (ctest % 2): continue
+        c = 0
+        for ctest in range(cmin-2,cmax+1):
             s = (r3-r0) / (ctest-1)
             tot = r0*(ctest+1) + s*(ctest+1)*ctest/2
-            if tot > l: break
-            c = ctest
-        print('c = %i' % c)
+            if tot > l:
+                break
+            if ctest % 2 == 1:
+                c = ctest
+        #assert c%2 == 1, str(c)
+        print('c = ' + str(c))
         
         # compute difference for smoothly interpolating radii
         s = (r3-r0) / (c-1)

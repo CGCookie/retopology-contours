@@ -63,7 +63,8 @@ def polystrips_draw_callback(self, context):
         p3d = []
         prev0,prev1 = None,None
         for i,gvert in enumerate(gedge.cache_igverts):
-            if not (i%2): continue
+            if i%2 == 0:
+                continue
             cur0,cur1 = gvert.position+gvert.tangent_y*gvert.radius,gvert.position-gvert.tangent_y*gvert.radius
             if prev0 and prev1:
                 p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
@@ -145,6 +146,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+NUMPAD_MINUS':
             self.polystrips.gverts[0].radius /= 1.1
+            self.polystrips.gedges[0].recalc_igverts_approx()
+            self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
+            return {'RUNNING_MODAL'}
+        if event_press == 'CTRL+SHIFT+NUMPAD_PLUS':
+            self.polystrips.gverts[3].radius *= 1.1
+            self.polystrips.gedges[0].recalc_igverts_approx()
+            self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
+            return {'RUNNING_MODAL'}
+        if event_press == 'CTRL+SHIFT+NUMPAD_MINUS':
+            self.polystrips.gverts[3].radius /= 1.1
             self.polystrips.gedges[0].recalc_igverts_approx()
             self.polystrips.gedges[0].snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
