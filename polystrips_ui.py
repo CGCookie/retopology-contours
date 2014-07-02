@@ -76,10 +76,29 @@ def polystrips_draw_callback(self, context):
                 p3d = [cur1,cur0]
             prev0,prev1 = cur0,cur1
         contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
-    for gedge0,gedge1 in zip(self.polystrips.gedges[:-1],self.polystrips.gedges[1:]):
-        if len(gedge0.cache_igverts) and len(gedge1.cache_igverts):
-            gv0 = gedge0.cache_igverts[-2]
-            gv1 = gedge1.cache_igverts[1]
+    
+    for gv in self.polystrips.gverts:
+        gedge0 = gv.gedge0
+        gedge1 = gv.gedge1
+        gedge2 = gv.gedge2
+        gedge3 = gv.gedge3
+        
+        if gedge0 and not (gedge1 or gedge2 or gedge3):
+            # draw endpoint
+            at_front = (gedge0.gvert0 == gv)
+            gv0 = gedge0.cache_igverts[1] if at_front else gedge0.cache_igverts[-2]
+            gv1 = gedge0.cache_igverts[0] if at_front else gedge0.cache_igverts[-1]
+            p0 = gv0.position+gv0.tangent_y*gv0.radius
+            p1 = gv0.position-gv0.tangent_y*gv0.radius
+            p2 = gv1.position-gv1.tangent_y*gv.radius+gv1.tangent_x*gv.radius*(-1 if at_front else 1)
+            p3 = gv1.position+gv1.tangent_y*gv.radius+gv1.tangent_x*gv.radius*(-1 if at_front else 1)
+            p3d = [p0,p1,p2,p3,p0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.2,.2,.5,.8), 1, "GL_LINE_SMOOTH")
+            
+        if gedge0 and gedge2 and not (gedge1 or gedge3):
+            # draw end-to-end junction
+            gv0 = gedge0.cache_igverts[1] if gedge0.gvert0 == gv else gedge0.cache_igverts[-2]
+            gv1 = gedge2.cache_igverts[1] if gedge2.gvert0 == gv else gedge2.cache_igverts[-2]
             p0 = gv0.position+gv0.tangent_y*gv0.radius
             p1 = gv0.position-gv0.tangent_y*gv0.radius
             p2 = gv1.position-gv1.tangent_y*gv1.radius
@@ -153,37 +172,30 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             contour_utilities.callback_cleanup(self, context)
             return {'CANCELLED'}
         
-        ind0 = self.mod_ind*3
-        ind1 = (self.mod_ind+1)*3
-        if event_press == 'CTRL+NUMPAD_PLUS':
-            self.polystrips.gverts[ind0].radius *= 1.1
-            for gedge in self.polystrips.gedges:
-                gedge.recalc_igverts_approx()
-                gedge.snap_igverts_to_object(self.obj)
-            return {'RUNNING_MODAL'}
-        if event_press == 'CTRL+NUMPAD_MINUS':
-            self.polystrips.gverts[ind0].radius /= 1.1
-            for gedge in self.polystrips.gedges:
-                gedge.recalc_igverts_approx()
-                gedge.snap_igverts_to_object(self.obj)
-            return {'RUNNING_MODAL'}
-        if event_press == 'CTRL+SHIFT+NUMPAD_PLUS':
-            self.polystrips.gverts[ind1].radius *= 1.1
-            for gedge in self.polystrips.gedges:
-                gedge.recalc_igverts_approx()
-                gedge.snap_igverts_to_object(self.obj)
-            return {'RUNNING_MODAL'}
-        if event_press == 'CTRL+SHIFT+NUMPAD_MINUS':
-            self.polystrips.gverts[ind1].radius /= 1.1
-            for gedge in self.polystrips.gedges:
-                gedge.recalc_igverts_approx()
-                gedge.snap_igverts_to_object(self.obj)
-            return {'RUNNING_MODAL'}
+        if self.mod_ind < len(self.polystrips.gedges):
+            gv0 = self.polystrips.gedges[self.mod_ind].gvert0
+            gv3 = self.polystrips.gedges[self.mod_ind].gvert3
+            if event_press == 'CTRL+NUMPAD_PLUS':
+                gv0.radius *= 1.1
+                gv0.update_gedges()
+                return {'RUNNING_MODAL'}
+            if event_press == 'CTRL+NUMPAD_MINUS':
+                gv0.radius /= 1.1
+                gv0.update_gedges()
+                return {'RUNNING_MODAL'}
+            if event_press == 'CTRL+SHIFT+NUMPAD_PLUS':
+                gv3.radius *= 1.1
+                gv3.update_gedges()
+                return {'RUNNING_MODAL'}
+            if event_press == 'CTRL+SHIFT+NUMPAD_MINUS':
+                gv3.radius /= 1.1
+                gv3.update_gedges()
+                return {'RUNNING_MODAL'}
         
         if event_press == 'N':
-            self.mod_ind += 1
+            self.mod_ind = min(len(self.polystrips.gedges)-1,self.mod_ind+1)
         elif event_press == 'P':
-            self.mod_ind -= 1
+            self.mod_ind = max(0, self.mod_ind-1)
         
         return{'RUNNING_MODAL'}
     
@@ -228,9 +240,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv2 = create_gvert(xform, bp1.handle_left)
                 gv3 = create_gvert(xform, bp1.co)
                 
-                ge0 = GEdge(gv0,gv1,gv2,gv3)
+                ge0 = GEdge(self.obj, gv0, gv1, gv2, gv3)
                 ge0.recalc_igverts_approx()
-                ge0.snap_igverts_to_object(self.obj)
+                ge0.snap_igverts_to_object()
                 
                 if pregv:
                     self.polystrips.gverts += [gv1,gv2,gv3]

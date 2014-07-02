@@ -46,17 +46,56 @@ class GVert:
         self.normal    = normal
         self.tangent_x = tangent_x
         self.tangent_y = tangent_y
+        
+        self.gedge0 = None
+        self.gedge1 = None
+        self.gedge2 = None
+        self.gedge3 = None
+    
+    def connect_gedge(self, gedge):
+        gedge_count = int(bool(self.gedge0)) + int(bool(self.gedge1)) + int(bool(self.gedge2)) + int(bool(self.gedge3))
+        
+        if gedge_count == 0:
+            # first to be connected
+            self.gedge0 = gedge
+            return
+        
+        if gedge_count == 1:
+            # TODO: test if new edge should be end-to-end
+            self.gedge2 = gedge
+            return
+        
+        # TODO: handle other cases
+        assert False
+    
+    def update_gedges(self):
+        if self.gedge0:
+            self.gedge0.recalc_igverts_approx()
+            self.gedge0.snap_igverts_to_object()
+        if self.gedge1:
+            self.gedge1.recalc_igverts_approx()
+            self.gedge1.snap_igverts_to_object()
+        if self.gedge2:
+            self.gedge2.recalc_igverts_approx()
+            self.gedge2.snap_igverts_to_object()
+        if self.gedge3:
+            self.gedge3.recalc_igverts_approx()
+            self.gedge3.snap_igverts_to_object()
 
 class GEdge:
     '''
     Graph Edge (GEdge) stores end points and "way points" (cubic bezier)
     '''
-    def __init__(self, gvert0, gvert1, gvert2, gvert3):
+    def __init__(self, obj, gvert0, gvert1, gvert2, gvert3):
         # store end gvertices
+        self.obj = obj
         self.gvert0 = gvert0
         self.gvert1 = gvert1
         self.gvert2 = gvert2
         self.gvert3 = gvert3
+        
+        gvert0.connect_gedge(self)
+        gvert3.connect_gedge(self)
         
         # create caching vars
         self.cache_igverts = []             # cached interval gverts
@@ -152,21 +191,19 @@ class GEdge:
         # create igverts!
         self.cache_igverts = [GVert(p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
     
-    def snap_igverts_to_object(self, obj):
+    def snap_igverts_to_object(self):
         '''
         snaps already computed igverts to surface of object ob
         '''
-        mx = obj.matrix_world
+        mx = self.obj.matrix_world
         mx3x3 = mx.to_3x3()
         imx = mx.inverted()
         
         for igv in self.cache_igverts:
-            l,n,i = obj.closest_point_on_mesh(imx * igv.position)
+            l,n,i = self.obj.closest_point_on_mesh(imx * igv.position)
             igv.position = mx * l
             igv.normal = (mx3x3 * n).normalized()
             igv.tangent_y = igv.tangent_x.cross(igv.normal).normalized()
-
-
 
 class PolyStrips(object):
     def __init__(self, context, obj):
