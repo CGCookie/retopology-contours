@@ -59,7 +59,11 @@ def polystrips_draw_callback(self, context):
     settings = context.user_preferences.addons[AL.FolderName].preferences
     cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
     
-    for gedge in self.polystrips.gedges:
+    for ind,gedge in enumerate(self.polystrips.gedges):
+        if ind == self.mod_ind:
+            col = (.5,1,.5,.8)
+        else:
+            col = (1,.5,.5,.8)
         p3d = []
         prev0,prev1 = None,None
         for i,gvert in enumerate(gedge.cache_igverts):
@@ -71,7 +75,7 @@ def polystrips_draw_callback(self, context):
             else:
                 p3d = [cur1,cur0]
             prev0,prev1 = cur0,cur1
-        contour_utilities.draw_polyline_from_3dpoints(context, p3d, (1,.5,.5,.8), 1, "GL_LINE_SMOOTH")
+        contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
     for gedge0,gedge1 in zip(self.polystrips.gedges[:-1],self.polystrips.gedges[1:]):
         if len(gedge0.cache_igverts) and len(gedge1.cache_igverts):
             gv0 = gedge0.cache_igverts[-2]
@@ -149,30 +153,37 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             contour_utilities.callback_cleanup(self, context)
             return {'CANCELLED'}
         
+        ind0 = self.mod_ind*3
+        ind1 = (self.mod_ind+1)*3
         if event_press == 'CTRL+NUMPAD_PLUS':
-            self.polystrips.gverts[0].radius *= 1.1
+            self.polystrips.gverts[ind0].radius *= 1.1
             for gedge in self.polystrips.gedges:
                 gedge.recalc_igverts_approx()
                 gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+NUMPAD_MINUS':
-            self.polystrips.gverts[0].radius /= 1.1
+            self.polystrips.gverts[ind0].radius /= 1.1
             for gedge in self.polystrips.gedges:
                 gedge.recalc_igverts_approx()
                 gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+SHIFT+NUMPAD_PLUS':
-            self.polystrips.gverts[3].radius *= 1.1
+            self.polystrips.gverts[ind1].radius *= 1.1
             for gedge in self.polystrips.gedges:
                 gedge.recalc_igverts_approx()
                 gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
         if event_press == 'CTRL+SHIFT+NUMPAD_MINUS':
-            self.polystrips.gverts[3].radius /= 1.1
+            self.polystrips.gverts[ind1].radius /= 1.1
             for gedge in self.polystrips.gedges:
                 gedge.recalc_igverts_approx()
                 gedge.snap_igverts_to_object(self.obj)
             return {'RUNNING_MODAL'}
+        
+        if event_press == 'N':
+            self.mod_ind += 1
+        elif event_press == 'P':
+            self.mod_ind -= 1
         
         return{'RUNNING_MODAL'}
     
@@ -189,6 +200,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         me.update()
         self.bme = bmesh.new()
         self.bme.from_mesh(me)
+        
+        self.mod_ind = 0
         
         xform = bpy.data.objects['BezierCurve'].matrix_world
         data = bpy.data.objects['BezierCurve'].data
