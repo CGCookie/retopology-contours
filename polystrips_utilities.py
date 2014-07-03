@@ -25,7 +25,7 @@ import bpy
 import math
 import time
 import copy
-from mathutils import Vector, Quaternion
+from mathutils import Vector, Quaternion, Matrix
 from mathutils.geometry import intersect_point_line, intersect_line_plane
 import contour_utilities, general_utilities
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
@@ -86,103 +86,95 @@ def cubic_bezier_derivative(p0, p1, p2, p3, t):
     q2 = 3*(p3-p2)
     return quadratic_bezier_blend_t(q0, q1, q2, t)
 
-def cubic_bezier_fit_value(l_v):
-    v0 = l_v[0]
-    v1 = l_v[int(len(l_v)*1/3)]
-    v2 = l_v[int(len(l_v)*2/3)]
-    v3 = l_v[-1]
+def cubic_bezier_fit_value(l_v, l_t):
+    def compute_error(v0,v1,v2,v3,l_v,l_t):
+        return math.sqrt(sum((cubic_bezier_blend_t(v0,v1,v2,v3,t)-v)**2 for v,t in zip(l_v,l_t)))
     
-    chk_t0 = 0.35
-    chk_t1 = 1.00-chk_t0
+    #########################################################
+    # http://nbviewer.ipython.org/gist/anonymous/5688579
     
-    l_dists = [abs(v0-v1) for v0,v1 in zip(l_v[:-1],l_v[1:])]
-    dist    = sum(l_dists)
-    l_t = [0] + [s/dist for d,s in general_utilities.iter_running_sum(l_dists)]
-    ind_q0,ind_mid,ind_q1  = -1,-1,-1
-    for i,t in enumerate(l_t):
-        if t > 0.50 and ind_mid == -1: ind_mid = i
-        if t > chk_t0 and ind_q0 == -1:
-            ind_q0 = i
-            chk_t0 = t
-        if t > chk_t1 and ind_q1 == -1:
-            ind_q1 = i
-            chk_t1 = t
-    assert ind_mid != -1
-    assert ind_q0 != -1
-    assert ind_q1 != -1
-    v_q0,v_mid,v_q1  = l_v[ind_q0],l_v[ind_mid],l_v[ind_q1]
-    
-    nl_v,nl_t = [],[]
-    cur_t = -1
-    for v,t in zip(l_v,l_t):
-        if t-cur_t<0.1: continue
-        nl_v += [v]
-        nl_t += [t]
-        cur_t = t
-    print('len(l_v) = %i, len(nl_v) = %i' % (len(l_v),len(nl_v)))
-    print(str(nl_t))
-    l_v,l_t = nl_v,nl_t
-    
-    def compute_errors(v0,v1,v2,v3,l_v,l_t):
-        error_left  = sum(((cubic_bezier_blend_t(v0,v1,v2,v3,t)-v))**2 for v,t in zip(l_v,l_t) if t < 0.5)
-        error_right = sum(((cubic_bezier_blend_t(v0,v1,v2,v3,t)-v))**2 for v,t in zip(l_v,l_t) if t > 0.5)
-        return (math.sqrt(error_left)/len(l_v),math.sqrt(error_right)/len(l_v))
-    
-    #print('---------------')
-    b25 = cubic_bezier_weights(chk_t0)
-    b50 = cubic_bezier_weights(0.50)
-    b75 = cubic_bezier_weights(chk_t1)
-    for iters in range(1000):
-        v_q0_diff  = v_q0  - cubic_bezier_blend_weights(v0,v1,v2,v3,b25)
-        v_mid_diff = v_mid - cubic_bezier_blend_weights(v0,v1,v2,v3,b50)
-        v_q1_diff  = v_q1  - cubic_bezier_blend_weights(v0,v1,v2,v3,b75)
-        err0,err1 = compute_errors(v0,v1,v2,v3,l_v,l_t)
-        error_tot = err0+err1
+    # make the summation functions for A (16 of them)
+    A_fns = [
+        lambda l_t: sum([  2*t**0*(t-1)**6 for t in l_t]),
+        lambda l_t: sum([ -6*t**1*(t-1)**5 for t in l_t]),
+        lambda l_t: sum([  6*t**2*(t-1)**4 for t in l_t]),
+        lambda l_t: sum([ -2*t**3*(t-1)**3 for t in l_t]),
         
-        #if abs(v_q0_diff) < 0.00001 and abs(v_mid_diff) < 0.0001 and abs(v_q1_diff) < 0.00001: break
-        if error_tot < 0.0001:
-            break
+        lambda l_t: sum([ -6*t**1*(t-1)**5 for t in l_t]),
+        lambda l_t: sum([ 18*t**2*(t-1)**4 for t in l_t]),
+        lambda l_t: sum([-18*t**3*(t-1)**3 for t in l_t]),
+        lambda l_t: sum([  6*t**4*(t-1)**2 for t in l_t]),
         
-        mult = 1.0
-        while mult > 0.1:
-            nv1,nv2 = v1,v2
-            nv1 += mult * (v_q0_diff + v_mid_diff * err0/error_tot)
-            nv2 += mult * (v_q1_diff + v_mid_diff * err1/error_tot)
-            nerr0,nerr1 = compute_errors(v0,nv1,nv2,v3,l_v,l_t)
-            if nerr0+nerr1 < error_tot:
-                print('%f, %f, %f.  %f, %f (%f)  %f' % (v_q0_diff,v_mid_diff,v_q1_diff,err0/error_tot,err1/error_tot,error_tot,mult))
-                v1,v2 = nv1,nv2
-                break
-            mult -= 0.05
+        lambda l_t: sum([  6*t**2*(t-1)**4 for t in l_t]),
+        lambda l_t: sum([-18*t**3*(t-1)**3 for t in l_t]),
+        lambda l_t: sum([ 18*t**4*(t-1)**2 for t in l_t]),
+        lambda l_t: sum([ -6*t**5*(t-1)**1 for t in l_t]),
+        
+        lambda l_t: sum([ -2*t**3*(t-1)**3 for t in l_t]),
+        lambda l_t: sum([  6*t**4*(t-1)**2 for t in l_t]),
+        lambda l_t: sum([ -6*t**5*(t-1)**1 for t in l_t]),
+        lambda l_t: sum([  2*t**6*(t-1)**0 for t in l_t])
+        ]
     
-    err0,err1 = compute_errors(v0,v1,v2,v3,l_v,l_t)
+    # make the summation functions for b (4 of them)
+    b_fns = [
+        lambda l_t,l_v: sum([-2*v*t**0*(t-1)**3 for t,v in zip(l_t,l_v)]),
+        lambda l_t,l_v: sum([ 6*v*t**1*(t-1)**2 for t,v in zip(l_t,l_v)]),
+        lambda l_t,l_v: sum([-6*v*t**2*(t-1)**1 for t,v in zip(l_t,l_v)]),
+        lambda l_t,l_v: sum([ 2*v*t**3*(t-1)**0 for t,v in zip(l_t,l_v)])
+        ]
     
-    return (err0+err1,v0,v1,v2,v3)
+    # compute the data we will put into matrix A
+    A_values = [fn(l_t) for fn in A_fns]
+    # fill the A matrix with data
+    A_matrix = Matrix(tuple(zip(*[iter(A_values)]*4)))
+    A_inv    = A_matrix.inverted()
+    
+    # compute the data we will put into the b vector
+    b_values = [fn(l_t, l_v) for fn in b_fns]
+    # fill the b vector with data
+    b_vector = Vector(b_values)
+    
+    # solve for the unknowns in vector x
+    v0,v1,v2,v3 = A_inv * b_vector
+    
+    err = compute_error(v0,v1,v2,v3,l_v,l_t) / len(l_v)
+    
+    return (err,v0,v1,v2,v3)
+
 
 def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
-    ex,x0,x1,x2,x3 = cubic_bezier_fit_value([co[0] for co in l_co])
-    ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co])
-    ez,z0,z1,z2,z3 = cubic_bezier_fit_value([co[2] for co in l_co])
+    l_d  = [0] + [(v0-v1).length for v0,v1 in zip(l_co[:-1],l_co[1:])]
+    dist = sum(l_d)
+    l_t  = [s/dist for d,s in general_utilities.iter_running_sum(l_d)]
     
-    #print('%f %f %f' % (ex,ey,ez))
-    if ex+ey+ez < 0.01 or depth == 4 or len(l_co)<16:
+    ex,x0,x1,x2,x3 = cubic_bezier_fit_value([co[0] for co in l_co], l_t)
+    ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co], l_t)
+    ez,z0,z1,z2,z3 = cubic_bezier_fit_value([co[2] for co in l_co], l_t)
+    
+    if ex+ey+ez < 0.0001 or depth == 4 or len(l_co)<=21:
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
         return [(t0,t3,p0,p1,p2,p3)]
     
-    #print('split!')
-    ind_split = 16
+    # too much error in fit.  split sequence in two, and fit each sub-sequence
+    
+    # find a good split point
+    ind_split = -1
     mindot = 1.0
-    for ind in range(16,len(l_co)-16):
-        v0 = l_co[ind-8]
+    for ind in range(5,len(l_co)-5):
+        if l_t[ind] < 0.2: continue
+        if l_t[ind] > 0.8: break
+        
+        v0 = l_co[ind-4]
         v1 = l_co[ind+0]
-        v2 = l_co[ind+8]
+        v2 = l_co[ind+4]
         d0 = (v1-v0).normalized()
         d1 = (v2-v1).normalized()
         dot01 = d0.dot(d1)
-        if dot01 < mindot:
+        if ind_split==-1 or dot01 < mindot:
             ind_split = ind
             mindot = dot01
-    l_co_left = l_co[:ind_split]
+    l_co_left  = l_co[:ind_split]
     l_co_right = l_co[ind_split:]
     tsplit = ind_split / (len(l_co)-1)
     return cubic_bezier_fit_points(l_co_left, depth+1, t0, tsplit) + cubic_bezier_fit_points(l_co_right, depth+1, tsplit, t3)

@@ -95,7 +95,7 @@ def polystrips_draw_callback(self, context):
     for gv in self.polystrips.gverts:
         p0,p1,p2,p3 = gv.get_corners()
         
-        #if gv.is_unconnected(): continue
+        if gv.is_unconnected(): continue
         
         if gv.is_unconnected(): col = (.2,.2,.2,.8)
         elif gv.is_endpoint():  col = (.2,.2,.5,.8)
@@ -239,7 +239,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         gp = self.obj.grease_pencil
         gp_layers = gp.layers
-        gp_layers = [gp.layers[0]]
+        #gp_layers = [gp.layers[0]]
         strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for stroke in layer.frames[0].strokes]
         
         self.polystrips = PolyStrips(context, self.obj)
