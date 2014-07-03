@@ -89,18 +89,36 @@ class GVert:
             if dot01 < -0.9:
                 print('end-to-end')
                 self.gedge2 = gedge
-            elif vec0.cross(vec1).dot(self.normal) > 0:
-                print('l-junction with swap')
-                self.gedge1 = self.gedge0
-                self.gedge0 = gedge
             else:
-                print('l-junction')
-                self.gedge1 = gedge
+                print('vec0 = ' + str(vec0))
+                print('vec1 = ' + str(vec1))
+                print('norm = ' + str(self.normal))
+                print('snap = ' + str(self.snap_norm))
+                dot01n = vec0.cross(vec1).dot(self.snap_norm)
+                print('dot01n = %f' % dot01n)
+                #self.gedge1 = gedge
+                if dot01n > 0:
+                    print('l-junction with swap')
+                    self.gedge1 = self.gedge0
+                    self.gedge0 = gedge
+                else:
+                    print('l-junction')
+                    self.gedge1 = gedge
             self.update()
             return
         
         # TODO: handle other cases
         assert False
+    
+    def snap_corners(self):
+        mx = self.obj.matrix_world
+        mx3x3 = mx.to_3x3()
+        imx = mx.inverted()
+        
+        self.corner0 = mx * self.obj.closest_point_on_mesh(imx*self.corner0)[0]
+        self.corner1 = mx * self.obj.closest_point_on_mesh(imx*self.corner1)[0]
+        self.corner2 = mx * self.obj.closest_point_on_mesh(imx*self.corner2)[0]
+        self.corner3 = mx * self.obj.closest_point_on_mesh(imx*self.corner3)[0]
     
     def update(self):
         mx = self.obj.matrix_world
@@ -123,6 +141,7 @@ class GVert:
             self.corner1 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
             self.corner2 = self.snap_pos - self.snap_tanx*self.radius - self.snap_tany*self.radius
             self.corner3 = self.snap_pos + self.snap_tanx*self.radius - self.snap_tany*self.radius
+            self.snap_corners()
             return
         
         self.tangent_x = self.gedge0.get_derivative_at(self).normalized()
@@ -139,6 +158,7 @@ class GVert:
             self.corner0 = igv0.position + igv0.tangent_y*r0
             self.corner3 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
             self.corner2 = self.snap_pos - self.snap_tanx*self.radius - self.snap_tany*self.radius
+            self.snap_corners()
             return
         
         if self.is_endtoend():
@@ -153,6 +173,7 @@ class GVert:
             self.corner0 = igv0.position + igv0.tangent_y*r0
             self.corner3 = igv2.position + igv2.tangent_y*r2
             self.corner2 = igv2.position - igv2.tangent_y*r2
+            self.snap_corners()
             return
         
         if self.is_ljunction():
@@ -163,12 +184,14 @@ class GVert:
             der1 = self.gedge1.get_derivative_at(self).normalized()
             flip0 = 1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1
             flip1 = 1 if igv1.tangent_x.dot(self.snap_tany)>0 else -1
+            print('flip = %i %i' % (flip0,flip1))
             r0 = igv0.radius*flip0
             r1 = igv1.radius*flip1
             self.corner0 = igv0.position + igv0.tangent_y*r0
             self.corner1 = ((igv0.position - igv0.tangent_y*r0) + (igv1.position - igv1.tangent_y*r1)) / 2
             self.corner2 = igv1.position + igv1.tangent_y*r1
             self.corner3 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
+            self.snap_corners()
             return
         
         assert False, "other junctions not handled, yet"
