@@ -26,7 +26,8 @@ import math
 import sys
 import copy
 import time
-from mathutils import Vector
+from mathutils import Vector, Matrix
+from math import sqrt
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities, general_utilities
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver
@@ -86,11 +87,15 @@ def polystrips_draw_callback(self, context):
                 p3d = [cur1,cur0]
             prev0,prev1 = cur0,cur1
         contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+        
+        p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
+        p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
+        contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.1,.1,.1,.8), 1, "GL_LINE_SMOOTH")
     
     for gv in self.polystrips.gverts:
         p0,p1,p2,p3 = gv.get_corners()
         
-        if gv.is_unconnected(): continue
+        #if gv.is_unconnected(): continue
         
         if gv.is_unconnected(): col = (.2,.2,.2,.8)
         elif gv.is_endpoint():  col = (.2,.2,.5,.8)
@@ -196,6 +201,74 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         return{'RUNNING_MODAL'}
     
+    def create_gvert(self, mx, co, radius):
+        p0  = mx * co
+        r0  = radius
+        n0  = Vector((0,0,1))
+        tx0 = Vector((1,0,0))
+        ty0 = Vector((0,1,0))
+        return GVert(self.obj,p0,r0,n0,tx0,ty0)
+    
+    def create_polystrips_from_bezier(self, context, ob_bezier):
+        data  = ob_bezier.data
+        mx    = ob_bezier.matrix_world
+        
+        self.polystrips = PolyStrips(context, self.obj)
+        
+        for spline in data.splines:
+            pregv = None
+            for bp0,bp1 in zip(spline.bezier_points[:-1],spline.bezier_points[1:]):
+                gv0 = pregv if pregv else self.create_gvert(mx, bp0.co, 0.2)
+                gv1 = self.create_gvert(mx, bp0.handle_right, 0.2)
+                gv2 = self.create_gvert(mx, bp1.handle_left, 0.2)
+                gv3 = self.create_gvert(mx, bp1.co, 0.2)
+                
+                ge0 = GEdge(self.obj, gv0, gv1, gv2, gv3)
+                ge0.recalc_igverts_approx()
+                ge0.snap_igverts_to_object()
+                
+                if pregv:
+                    self.polystrips.gverts += [gv1,gv2,gv3]
+                else:
+                    self.polystrips.gverts += [gv0,gv1,gv2,gv3]
+                self.polystrips.gedges += [ge0]
+                pregv = gv3
+    
+    def create_polystrips_from_greasepencil(self, context):
+        mx = Matrix()
+        
+        gp = self.obj.grease_pencil
+        gp_layers = gp.layers
+        gp_layers = [gp.layers[0]]
+        strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for stroke in layer.frames[0].strokes]
+        
+        self.polystrips = PolyStrips(context, self.obj)
+        
+        for stroke in strokes:
+            print('='*80)
+            print('='*80)
+            print('='*80)
+            dist = sum((p0[0]-p1[0]).length for p0,p1 in zip(stroke[:-1],stroke[1:]))
+            if dist < 0.01: continue
+            l_p = cubic_bezier_fit_points([pt for pt,pr in stroke])
+            r0,r3 = 0.01,0.01
+            pregv = None
+            for t0,t3,p0,p1,p2,p3 in l_p:
+                #r0,r3 = stroke[0][1],stroke[-1][1]
+                
+                gv0 = pregv if pregv else self.create_gvert(mx, p0, sqrt(r0)*0.01)
+                gv1 = self.create_gvert(mx, p1, 0.01)
+                gv2 = self.create_gvert(mx, p2, 0.01)
+                gv3 = self.create_gvert(mx, p3, sqrt(r3)*0.01)
+                
+                ge0 = GEdge(self.obj, gv0, gv1, gv2, gv3)
+                ge0.recalc_igverts_approx()
+                ge0.snap_igverts_to_object()
+                
+                self.polystrips.gverts += ([gv0] if not pregv else []) + [gv1,gv2,gv3]
+                self.polystrips.gedges += [ge0]
+                
+                pregv = gv3
     
     def invoke(self, context, event):
         #settings = context.user_preferences.addons[AL.FolderName].preferences
@@ -211,42 +284,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.bme.from_mesh(me)
         
         self.mod_ind = 0
-        
-        xform = bpy.data.objects['BezierCurve'].matrix_world
-        data = bpy.data.objects['BezierCurve'].data
-        
-        self.polystrips = PolyStrips(context, self.obj)
-        
-        def create_gvert(xform, co):
-            p0 = xform * co
-            r0 = .2
-            n0  = Vector((0,0,1))
-            tx0 = Vector((1,0,0))
-            ty0 = Vector((0,1,0))
-            return GVert(self.obj,p0,r0,n0,tx0,ty0)
-            
-        for spline in data.splines:
-            pregv = None
-            for bp0,bp1 in zip(spline.bezier_points[:-1],spline.bezier_points[1:]):
-                if pregv:
-                    gv0 = pregv
-                else:
-                    gv0 = create_gvert(xform, bp0.co)
-                    
-                gv1 = create_gvert(xform, bp0.handle_right)
-                gv2 = create_gvert(xform, bp1.handle_left)
-                gv3 = create_gvert(xform, bp1.co)
-                
-                ge0 = GEdge(self.obj, gv0, gv1, gv2, gv3)
-                ge0.recalc_igverts_approx()
-                ge0.snap_igverts_to_object()
-                
-                if pregv:
-                    self.polystrips.gverts += [gv1,gv2,gv3]
-                else:
-                    self.polystrips.gverts += [gv0,gv1,gv2,gv3]
-                self.polystrips.gedges += [ge0]
-                pregv = gv3
+        #self.create_polystrips_from_bezier(context, bpy.data.objects['BezierCurve'])
+        self.create_polystrips_from_greasepencil(context)
         
         # switch to modal
         self._handle = bpy.types.SpaceView3D.draw_handler_add(

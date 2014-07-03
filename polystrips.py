@@ -39,6 +39,7 @@ from general_utilities import iter_running_sum
 AL = general_utilities.AddonLocator()
 
 
+
 class GVert:
     def __init__(self, obj, position, radius, normal, tangent_x, tangent_y):
         # store info
@@ -86,7 +87,7 @@ class GVert:
             vec1 = gedge.get_derivative_at(self).normalized()
             dot01 = vec0.dot(vec1)
             print('dot = %f' % dot01)
-            if dot01 < -0.9:
+            if dot01 < -0.3:
                 print('end-to-end')
                 self.gedge2 = gedge
             else:
@@ -243,9 +244,13 @@ class GEdge:
     
     def get_igvert_at(self, gv):
         if self.gvert0 == gv:
-            return self.cache_igverts[1]
+            if len(self.cache_igverts):
+                return self.cache_igverts[1]
+            return self.gvert0
         if self.gvert3 == gv:
-            return self.cache_igverts[-2]
+            if len(self.cache_igverts):
+                return self.cache_igverts[-2]
+            return self.gvert3
         assert False, "gv is not an endpoint"
     
     def get_positions(self):
