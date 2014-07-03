@@ -66,45 +66,42 @@ def polystrips_draw_callback(self, context):
             col = (1,.5,.5,.8)
         p3d = []
         prev0,prev1 = None,None
+        l = len(gedge.cache_igverts)
         for i,gvert in enumerate(gedge.cache_igverts):
-            if i%2 == 0:
-                continue
-            cur0,cur1 = gvert.position+gvert.tangent_y*gvert.radius,gvert.position-gvert.tangent_y*gvert.radius
+            if i%2 == 0: continue
+            
+            if i == 1:
+                gv0 = gedge.gvert0
+                cur0,cur1 = gv0.get_corners_of(gedge)
+            elif i == l-2:
+                gv3 = gedge.gvert3
+                cur1,cur0 = gv3.get_corners_of(gedge)
+            else:
+                cur0 = gvert.position+gvert.tangent_y*gvert.radius
+                cur1 = gvert.position-gvert.tangent_y*gvert.radius
+            
             if prev0 and prev1:
                 p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
             else:
                 p3d = [cur1,cur0]
             prev0,prev1 = cur0,cur1
-        contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
+        contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
     
     for gv in self.polystrips.gverts:
-        gedge0 = gv.gedge0
-        gedge1 = gv.gedge1
-        gedge2 = gv.gedge2
-        gedge3 = gv.gedge3
+        p0,p1,p2,p3 = gv.get_corners()
         
-        if gedge0 and not (gedge1 or gedge2 or gedge3):
-            # draw endpoint
-            at_front = (gedge0.gvert0 == gv)
-            gv0 = gedge0.cache_igverts[1] if at_front else gedge0.cache_igverts[-2]
-            gv1 = gedge0.cache_igverts[0] if at_front else gedge0.cache_igverts[-1]
-            p0 = gv0.position+gv0.tangent_y*gv0.radius
-            p1 = gv0.position-gv0.tangent_y*gv0.radius
-            p2 = gv1.position-gv1.tangent_y*gv.radius+gv1.tangent_x*gv.radius*(-1 if at_front else 1)
-            p3 = gv1.position+gv1.tangent_y*gv.radius+gv1.tangent_x*gv.radius*(-1 if at_front else 1)
-            p3d = [p0,p1,p2,p3,p0]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.2,.2,.5,.8), 1, "GL_LINE_SMOOTH")
-            
-        if gedge0 and gedge2 and not (gedge1 or gedge3):
-            # draw end-to-end junction
-            gv0 = gedge0.cache_igverts[1] if gedge0.gvert0 == gv else gedge0.cache_igverts[-2]
-            gv1 = gedge2.cache_igverts[1] if gedge2.gvert0 == gv else gedge2.cache_igverts[-2]
-            p0 = gv0.position+gv0.tangent_y*gv0.radius
-            p1 = gv0.position-gv0.tangent_y*gv0.radius
-            p2 = gv1.position-gv1.tangent_y*gv1.radius
-            p3 = gv1.position+gv1.tangent_y*gv1.radius
-            p3d = [p0,p1,p2,p3,p0]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.5,.5,1,.8), 1, "GL_LINE_SMOOTH")
+        if gv.is_unconnected(): continue
+        
+        if gv.is_unconnected(): col = (.2,.2,.2,.8)
+        elif gv.is_endpoint():  col = (.2,.2,.5,.8)
+        elif gv.is_endtoend():  col = (.5,.5,1,.8)
+        elif gv.is_ljunction(): col = (1,.5,1,.8)
+        elif gv.is_tjunction(): col = (1,1,.5,.8)
+        elif gv.is_cross():     col = (1,1,1,.8)
+        else: assert False, "unhandled GVert type"
+        
+        p3d = [p0,p1,p2,p3,p0]
+        contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
 
 
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
@@ -177,19 +174,19 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             gv3 = self.polystrips.gedges[self.mod_ind].gvert3
             if event_press == 'CTRL+NUMPAD_PLUS':
                 gv0.radius *= 1.1
-                gv0.update_gedges()
+                gv0.update()
                 return {'RUNNING_MODAL'}
             if event_press == 'CTRL+NUMPAD_MINUS':
                 gv0.radius /= 1.1
-                gv0.update_gedges()
+                gv0.update()
                 return {'RUNNING_MODAL'}
             if event_press == 'CTRL+SHIFT+NUMPAD_PLUS':
                 gv3.radius *= 1.1
-                gv3.update_gedges()
+                gv3.update()
                 return {'RUNNING_MODAL'}
             if event_press == 'CTRL+SHIFT+NUMPAD_MINUS':
                 gv3.radius /= 1.1
-                gv3.update_gedges()
+                gv3.update()
                 return {'RUNNING_MODAL'}
         
         if event_press == 'N':
@@ -226,7 +223,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             n0  = Vector((0,0,1))
             tx0 = Vector((1,0,0))
             ty0 = Vector((0,1,0))
-            return GVert(p0,r0,n0,tx0,ty0)
+            return GVert(self.obj,p0,r0,n0,tx0,ty0)
             
         for spline in data.splines:
             pregv = None
