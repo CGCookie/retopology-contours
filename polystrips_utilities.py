@@ -152,7 +152,7 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
     ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co], l_t)
     ez,z0,z1,z2,z3 = cubic_bezier_fit_value([co[2] for co in l_co], l_t)
     
-    if ex+ey+ez < 0.0001 or depth == 4 or len(l_co)<=21:
+    if ex+ey+ez < 0.0001 or depth == 4 or len(l_co)<=15:
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
         return [(t0,t3,p0,p1,p2,p3)]
     
@@ -174,6 +174,11 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
         if ind_split==-1 or dot01 < mindot:
             ind_split = ind
             mindot = dot01
+    
+    if ind_split == -1:
+        p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
+        return [(t0,t3,p0,p1,p2,p3)]
+    
     l_co_left  = l_co[:ind_split]
     l_co_right = l_co[ind_split:]
     tsplit = ind_split / (len(l_co)-1)

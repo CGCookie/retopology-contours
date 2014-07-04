@@ -86,17 +86,11 @@ class GVert:
             vec0 = self.gedge0.get_derivative_at(self).normalized()
             vec1 = gedge.get_derivative_at(self).normalized()
             dot01 = vec0.dot(vec1)
-            print('dot = %f' % dot01)
             if dot01 < -0.3:
                 print('end-to-end')
                 self.gedge2 = gedge
             else:
-                print('vec0 = ' + str(vec0))
-                print('vec1 = ' + str(vec1))
-                print('norm = ' + str(self.normal))
-                print('snap = ' + str(self.snap_norm))
                 dot01n = vec0.cross(vec1).dot(self.snap_norm)
-                print('dot01n = %f' % dot01n)
                 #self.gedge1 = gedge
                 if dot01n > 0:
                     print('l-junction with swap')
@@ -105,6 +99,34 @@ class GVert:
                 else:
                     print('l-junction')
                     self.gedge1 = gedge
+            self.update()
+            return
+        
+        if self.is_endtoend():
+            vec0 = self.gedge0.get_derivative_at(self).normalized()
+            vec  = gedge.get_derivative_at(self).normalized()
+            vec2 = self.gedge2.get_derivative_at(self).normalized()
+            
+            dot01n = vec0.cross(vec).dot(self.snap_norm)
+            if dot01n > 0:
+                print('t-junction from end-to-end with swap')
+                self.gedge0,self.gedge1,self.gedge2 = self.gedge2,gedge,self.gedge0
+            else:
+                print('t-junction from end-to-end')
+                self.gedge1 = gedge
+            self.update()
+            return
+        
+        if self.is_ljunction():
+            vec0 = self.gedge0.get_derivative_at(self).normalized()
+            vec1 = self.gedge1.get_derivative_at(self).normalized()
+            vec  = gedge.get_derivative_at(self).normalized()
+            if vec0.dot(vec) < -0.3:
+                print('t-junction from l-junction with swap')
+                self.gedge0,self.gedge1,self.gedge3 = self.gedge1,gedge,self.gedge0
+            else:
+                print('t-junction from l-junction')
+                self.gedge3 = gedge
             self.update()
             return
         
@@ -192,6 +214,28 @@ class GVert:
             self.corner1 = ((igv0.position - igv0.tangent_y*r0) + (igv1.position - igv1.tangent_y*r1)) / 2
             self.corner2 = igv1.position + igv1.tangent_y*r1
             self.corner3 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
+            self.snap_corners()
+            return
+        
+        if self.is_tjunction():
+            print('update t-junction')
+            igv0 = self.gedge0.get_igvert_at(self)
+            igv1 = self.gedge1.get_igvert_at(self)
+            igv3 = self.gedge3.get_igvert_at(self)
+            der0 = self.gedge0.get_derivative_at(self).normalized()
+            der1 = self.gedge1.get_derivative_at(self).normalized()
+            der3 = self.gedge3.get_derivative_at(self).normalized()
+            flip0 = 1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1
+            flip1 = 1 if igv1.tangent_x.dot(self.snap_tany)>0 else -1
+            flip3 = 1 if igv3.tangent_x.dot(self.snap_tany)<0 else -1
+            print('flip = %i %i %i' % (flip0,flip1,flip3))
+            r0 = igv0.radius*flip0
+            r1 = igv1.radius*flip1
+            r3 = igv3.radius*flip3
+            self.corner0 = ((igv0.position + igv0.tangent_y*r0) + (igv3.position + igv3.tangent_y*r3)) / 2
+            self.corner1 = ((igv0.position - igv0.tangent_y*r0) + (igv1.position - igv1.tangent_y*r1)) / 2
+            self.corner2 = igv1.position + igv1.tangent_y*r1
+            self.corner3 = igv3.position - igv3.tangent_y*r3
             self.snap_corners()
             return
         
