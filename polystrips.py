@@ -80,6 +80,14 @@ class GVert:
     def _set_gedges(self, ge0, ge1, ge2, ge3):
         self.gedge0,self.gedge1,self.gedge2,self.gedge3 = ge0,ge1,ge2,ge3
     
+    def disconnect_gedge(self, gedge):
+        gedges = [ge for ge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3] if ge]
+        assert gedge in gedges
+        gedges = [ge for ge in gedges if ge != gedge]
+        self._set_gedges(None,None,None,None)
+        for ge in gedges:
+            self.connect_gedge(ge)
+    
     def connect_gedge(self, gedge):
         gedge0,gedge1,gedge2,gedge3 = self.gedge0,self.gedge1,self.gedge2,self.gedge3
         connect_count = sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])+1
@@ -237,6 +245,13 @@ class GEdge:
                                             # even-indexed igverts are poly "centers"
                                             #  odd-indexed igverts are poly "edges"
     
+    def disconnect(self):
+        self.gvert0.disconnect_gedge(self)
+        self.gvert3.disconnect_gedge(self)
+    
+    def gverts(self):
+        return [self.gvert0,self.gvert1,self.gvert2,self.gvert3]
+    
     def get_derivative_at(self, gv):
         p0,p1,p2,p3 = self.gvert0.position,self.gvert1.position,self.gvert2.position,self.gvert3.position
         if self.gvert0 == gv:
@@ -255,11 +270,11 @@ class GEdge:
         if self.gvert0 == gv:
             if len(self.cache_igverts):
                 return self.cache_igverts[1]
-            return self.gvert0
+            return None #self.gvert0
         if self.gvert3 == gv:
             if len(self.cache_igverts):
                 return self.cache_igverts[-2]
-            return self.gvert3
+            return None #self.gvert3
         assert False, "gv is not an endpoint"
     
     def get_positions(self):
@@ -367,3 +382,9 @@ class PolyStrips(object):
         
         self.obj = obj
     
+    def disconnect_gedge(self, gedge):
+        assert gedge in self.gedges
+        gedge.disconnect()
+        self.gedges = [ge for ge in self.gedges if ge != gedge]
+        gvs = [gv for gv in gedge.gverts() if gv.is_unconnected()]
+        self.gverts = [gv for gv in self.gverts if gv not in gvs]

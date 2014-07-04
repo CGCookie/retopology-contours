@@ -95,8 +95,12 @@ def polystrips_draw_callback(self, context):
         l = len(gedge.cache_igverts)
         if l == 0:
             # draw bezier for uncut segments!
-            p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 5, "GL_LINE_SMOOTH")
+            #p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
+            #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 5, "GL_LINE_SMOOTH")
+            cur0,cur1 = gedge.gvert0.get_corners_of(gedge)
+            cur2,cur3 = gedge.gvert3.get_corners_of(gedge)
+            p3d = [cur0,cur1,cur2,cur3,cur0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 3, "GL_LINE_SMOOTH")
         else:
             p3d = []
             prev0,prev1 = None,None
@@ -231,6 +235,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if event_press == 'N':
             self.mod_ind = min(len(self.polystrips.gedges)-1,self.mod_ind+1)
         elif event_press == 'P':
+            self.mod_ind = max(0, self.mod_ind-1)
+        
+        if event_press == 'X':
+            self.polystrips.disconnect_gedge(self.polystrips.gedges[self.mod_ind])
             self.mod_ind = max(0, self.mod_ind-1)
         
         return{'RUNNING_MODAL'}
