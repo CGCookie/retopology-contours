@@ -61,6 +61,8 @@ class GVert:
         self.gedge2 = None
         self.gedge3 = None
         
+        self.doing_update = False
+        
         self.update()
     
     def has_0(self): return not (self.gedge0 is None)
@@ -142,8 +144,10 @@ class GVert:
         self.corner1 = mx * self.obj.closest_point_on_mesh(imx*self.corner1)[0]
         self.corner2 = mx * self.obj.closest_point_on_mesh(imx*self.corner2)[0]
         self.corner3 = mx * self.obj.closest_point_on_mesh(imx*self.corner3)[0]
-    
-    def update(self):
+        
+    def update(self, do_edges=True):
+        if self.doing_update: return
+        
         mx = self.obj.matrix_world
         mx3x3 = mx.to_3x3()
         imx = mx.inverted()
@@ -154,10 +158,11 @@ class GVert:
         self.snap_tanx = self.tangent_x.normalized()
         self.snap_tany = self.snap_norm.cross(self.tangent_x).normalized()
         
-        for gedge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3]:
-            if not gedge: continue
-            gedge.recalc_igverts_approx()
-            gedge.snap_igverts_to_object()
+        if do_edges:
+            self.doing_update = True
+            for gedge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3]:
+                if gedge: gedge.update()
+            self.doing_update = False
         
         if self.is_unconnected():
             self.corner0 = self.snap_pos + self.snap_tanx*self.radius + self.snap_tany*self.radius
@@ -323,7 +328,7 @@ class GEdge:
         p0,p1,p2,p3 = self.get_positions()
         return cubic_bezier_length(p0,p1,p2,p3)
     
-    def recalc_igverts_approx(self, debug=False):
+    def update(self, debug=False):
         '''
         recomputes interval gverts along gedge
         note: considering only the radii of end points
@@ -393,8 +398,7 @@ class GEdge:
         
         # create igverts!
         self.cache_igverts = [GVert(self.obj,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
-    
-    def snap_igverts_to_object(self):
+        
         '''
         snaps already computed igverts to surface of object ob
         '''
@@ -407,6 +411,9 @@ class GEdge:
             igv.position = mx * l
             igv.normal = (mx3x3 * n).normalized()
             igv.tangent_y = igv.normal.cross(igv.tangent_x).normalized()
+        
+        self.gvert0.update(do_edges=False)
+        self.gvert3.update(do_edges=False)
 
 
 class PolyStrips(object):

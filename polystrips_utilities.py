@@ -145,8 +145,9 @@ def cubic_bezier_fit_value(l_v, l_t):
 
 def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
     l_d  = [0] + [(v0-v1).length for v0,v1 in zip(l_co[:-1],l_co[1:])]
+    l_ad = [s for d,s in general_utilities.iter_running_sum(l_d)]
     dist = sum(l_d)
-    l_t  = [s/dist for d,s in general_utilities.iter_running_sum(l_d)]
+    l_t  = [ad/dist for ad in l_ad]
     
     ex,x0,x1,x2,x3 = cubic_bezier_fit_value([co[0] for co in l_co], l_t)
     ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co], l_t)
@@ -162,8 +163,10 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
     ind_split = -1
     mindot = 1.0
     for ind in range(5,len(l_co)-5):
-        if l_t[ind] < 0.2: continue
-        if l_t[ind] > 0.8: break
+        if l_t[ind] < 0.3: continue
+        if l_t[ind] > 0.7: break
+        #if l_ad[ind] < 0.1: continue
+        #if l_ad[ind] > dist-0.1: break
         
         v0 = l_co[ind-4]
         v1 = l_co[ind+0]

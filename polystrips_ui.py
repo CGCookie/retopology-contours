@@ -65,33 +65,35 @@ def polystrips_draw_callback(self, context):
             col = (.5,1,.5,.8)
         else:
             col = (1,.5,.5,.8)
-        p3d = []
-        prev0,prev1 = None,None
         l = len(gedge.cache_igverts)
-        for i,gvert in enumerate(gedge.cache_igverts):
-            if i%2 == 0: continue
-            
-            if i == 1:
-                gv0 = gedge.gvert0
-                cur0,cur1 = gv0.get_corners_of(gedge)
-            elif i == l-2:
-                gv3 = gedge.gvert3
-                cur1,cur0 = gv3.get_corners_of(gedge)
-            else:
-                cur0 = gvert.position+gvert.tangent_y*gvert.radius
-                cur1 = gvert.position-gvert.tangent_y*gvert.radius
-            
-            if prev0 and prev1:
-                p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
-            else:
-                p3d = [cur1,cur0]
-            prev0,prev1 = cur0,cur1
-        contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+        if l == 0:
+            # draw bezier
+            p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
+            p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 3, "GL_LINE_SMOOTH")
+        else:
+            p3d = []
+            prev0,prev1 = None,None
+            for i,gvert in enumerate(gedge.cache_igverts):
+                if i%2 == 0: continue
+                
+                if i == 1:
+                    gv0 = gedge.gvert0
+                    cur0,cur1 = gv0.get_corners_of(gedge)
+                elif i == l-2:
+                    gv3 = gedge.gvert3
+                    cur1,cur0 = gv3.get_corners_of(gedge)
+                else:
+                    cur0 = gvert.position+gvert.tangent_y*gvert.radius
+                    cur1 = gvert.position-gvert.tangent_y*gvert.radius
+                
+                if prev0 and prev1:
+                    p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
+                else:
+                    p3d = [cur1,cur0]
+                prev0,prev1 = cur0,cur1
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
         
-        # draw bezier
-        #p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
-        #p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
-        #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.1,.1,.1,.8), 1, "GL_LINE_SMOOTH")
     
     for gv in self.polystrips.gverts:
         p0,p1,p2,p3 = gv.get_corners()
@@ -241,6 +243,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         gp = self.obj.grease_pencil
         gp_layers = gp.layers
         #gp_layers = [gp.layers[0]]
+        for gpl in gp_layers: gpl.hide = True
         strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for stroke in layer.frames[0].strokes]
         
         # kill short strokes
@@ -318,8 +321,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv3 = ends[(i0,1)] if i == len(l_p)-1 else self.create_gvert(mx, p3, 0.001)
                 
                 ge0 = GEdge(self.obj, gv0, gv1, gv2, gv3)
-                ge0.recalc_igverts_approx()
-                ge0.snap_igverts_to_object()
+                ge0.update()
                 
                 self.polystrips.gverts += [gv0,gv1,gv2,gv3]
                 self.polystrips.gedges += [ge0]
