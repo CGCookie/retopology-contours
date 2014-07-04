@@ -21,6 +21,8 @@ Donated to CGCookie and the world
 
 #This class makes it easier to be install location independent
 import sys, os
+import bpy
+
 class AddonLocator(object):
     def __init__(self):
         self.fullInitPath = __file__
@@ -39,3 +41,8 @@ def iter_running_sum(lw):
     for w in lw:
         s += w
         yield (w,s)
+
+def dprint(s, l=2):
+    AL = AddonLocator()
+    settings = bpy.context.user_preferences.addons[AL.FolderName].preferences
+    if settings.debug >= l: print('DEBUG(%i): %s' % (l, s))

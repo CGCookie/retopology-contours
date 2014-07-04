@@ -163,8 +163,8 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
     ind_split = -1
     mindot = 1.0
     for ind in range(5,len(l_co)-5):
-        if l_t[ind] < 0.3: continue
-        if l_t[ind] > 0.7: break
+        if l_t[ind] < 0.4: continue
+        if l_t[ind] > 0.6: break
         #if l_ad[ind] < 0.1: continue
         #if l_ad[ind] > dist-0.1: break
         
@@ -182,6 +182,7 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1):
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
         return [(t0,t3,p0,p1,p2,p3)]
     
+    print('splitting %f--%f at %f' % (t0,t3,l_t[ind_split]))
     l_co_left  = l_co[:ind_split]
     l_co_right = l_co[ind_split:]
     tsplit = ind_split / (len(l_co)-1)

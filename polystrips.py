@@ -33,7 +33,7 @@ import bmesh
 import blf
 import itertools
 from polystrips_utilities import *
-from general_utilities import iter_running_sum
+from general_utilities import iter_running_sum, dprint
 
 #Make the addon name and location accessible
 AL = general_utilities.AddonLocator()
@@ -77,63 +77,66 @@ class GVert:
     def is_tjunction(self):   return self.has_0() and self.has_1() and self.has_3() and not self.has_2()
     def is_cross(self):       return self.has_0() and self.has_1() and self.has_2() and self.has_3()
     
+    def _set_gedges(self, ge0, ge1, ge2, ge3):
+        self.gedge0,self.gedge1,self.gedge2,self.gedge3 = ge0,ge1,ge2,ge3
+    
     def connect_gedge(self, gedge):
-        if self.is_unconnected():
+        gedge0,gedge1,gedge2,gedge3 = self.gedge0,self.gedge1,self.gedge2,self.gedge3
+        connect_count = sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])+1
+        vec  = gedge.get_derivative_at(self).normalized()
+        vec0 = None if not gedge0 else gedge0.get_derivative_at(self).normalized()
+        vec1 = None if not gedge1 else gedge1.get_derivative_at(self).normalized()
+        vec2 = None if not gedge2 else gedge2.get_derivative_at(self).normalized()
+        vec3 = None if not gedge3 else gedge3.get_derivative_at(self).normalized()
+        norm = self.snap_norm
+        
+        threshold_endtoend = -0.8
+        
+        if connect_count == 1:
             # first to be connected
-            self.gedge0 = gedge
-            self.update()
-            return
-        
-        if self.is_endpoint():
-            vec0 = self.gedge0.get_derivative_at(self).normalized()
-            vec1 = gedge.get_derivative_at(self).normalized()
-            dot01 = vec0.dot(vec1)
-            if dot01 < -0.3:
-                print('end-to-end')
-                self.gedge2 = gedge
+            dprint('unconnected => endpoint')
+            self._set_gedges(gedge,None,None,None)
+            assert self.is_endpoint()
+        elif connect_count == 2:
+            if vec0.dot(vec) < threshold_endtoend:
+                dprint('endpoint => end-to-end')
+                self._set_gedges(gedge0,None,gedge,None)
+                assert self.is_endtoend()
             else:
-                dot01n = vec0.cross(vec1).dot(self.snap_norm)
-                #self.gedge1 = gedge
-                if dot01n > 0:
-                    print('l-junction with swap')
-                    self.gedge1 = self.gedge0
-                    self.gedge0 = gedge
+                dprint('endpoint => l-junction')
+                if vec0.cross(vec).dot(norm) < 0:
+                    self._set_gedges(gedge0,gedge,None,None)
                 else:
-                    print('l-junction')
-                    self.gedge1 = gedge
-            self.update()
-            return
-        
-        if self.is_endtoend():
-            vec0 = self.gedge0.get_derivative_at(self).normalized()
-            vec  = gedge.get_derivative_at(self).normalized()
-            vec2 = self.gedge2.get_derivative_at(self).normalized()
-            
-            dot01n = vec0.cross(vec).dot(self.snap_norm)
-            if dot01n > 0:
-                print('t-junction from end-to-end with swap')
-                self.gedge0,self.gedge1,self.gedge2 = self.gedge2,gedge,self.gedge0
+                    self._set_gedges(gedge,gedge0,None,None)
+                assert self.is_ljunction()
+        elif connect_count == 3:
+            if self.is_endtoend():
+                dprint('end-to-end => t-junction')
+                if vec0.cross(vec).dot(norm)<0 and vec.cross(vec2).dot(norm)<0:
+                    self._set_gedges(gedge,gedge2,None,gedge0)
+                else:
+                    self._set_gedges(gedge,gedge0,None,gedge2)
             else:
-                print('t-junction from end-to-end')
-                self.gedge1 = gedge
-            self.update()
-            return
-        
-        if self.is_ljunction():
-            vec0 = self.gedge0.get_derivative_at(self).normalized()
-            vec1 = self.gedge1.get_derivative_at(self).normalized()
-            vec  = gedge.get_derivative_at(self).normalized()
-            if vec0.dot(vec) < -0.3:
-                print('t-junction from l-junction with swap')
-                self.gedge0,self.gedge1,self.gedge3 = self.gedge1,gedge,self.gedge0
+                dprint('l-junction => t-junction')
+                if vec0.dot(vec) < threshold_endtoend:
+                    self._set_gedges(gedge1,gedge,None,gedge0)
+                else:
+                    self._set_gedges(gedge0,gedge1,None,gedge)
+            assert self.is_tjunction()
+        elif connect_count == 4:
+            dprint('t-junction => cross-junction')
+            if vec0.dot(vec) < threshold_endtoend:
+                self._set_gedges(gedge0,gedge1,gedge,gedge3)
+            elif vec1.dot(vec) < threshold_endtoend:
+                self._set_gedges(gedge1,gedge3,gedge,gedge0)
             else:
-                print('t-junction from l-junction')
-                self.gedge3 = gedge
-            self.update()
-            return
+                self._set_gedges(gedge3,gedge0,gedge,gedge1)
+            assert self.is_cross()
+        else:
+            assert False
         
-        # TODO: handle other cases
-        assert False
+        assert self.gedge0 == gedge or self.gedge1 == gedge or self.gedge2 == gedge or self.gedge3 == gedge
+        self.update()
     
     def snap_corners(self):
         mx = self.obj.matrix_world
@@ -156,7 +159,7 @@ class GVert:
         self.snap_pos  = mx * l
         self.snap_norm = (mx3x3 * n).normalized()
         self.snap_tanx = self.tangent_x.normalized()
-        self.snap_tany = self.snap_norm.cross(self.tangent_x).normalized()
+        self.snap_tany = self.snap_norm.cross(self.snap_tanx).normalized()
         
         if do_edges:
             self.doing_update = True
@@ -164,87 +167,44 @@ class GVert:
                 if gedge: gedge.update()
             self.doing_update = False
         
-        if self.is_unconnected():
-            self.corner0 = self.snap_pos + self.snap_tanx*self.radius + self.snap_tany*self.radius
-            self.corner1 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
-            self.corner2 = self.snap_pos - self.snap_tanx*self.radius - self.snap_tany*self.radius
-            self.corner3 = self.snap_pos + self.snap_tanx*self.radius - self.snap_tany*self.radius
-            self.snap_corners()
-            return
-        
-        self.tangent_x = self.gedge0.get_derivative_at(self).normalized()
-        self.tangent_y = self.normal.cross(self.tangent_x).normalized()
-        self.snap_tanx = self.tangent_x.normalized()
+        self.snap_tanx = (Vector((0.2,0.1,0.5)) if not self.gedge0 else self.gedge0.get_derivative_at(self)).normalized()
         self.snap_tany = self.snap_norm.cross(self.snap_tanx).normalized()
         
-        if self.is_endpoint():
-            print('update endpoint')
-            igv0 = self.gedge0.get_igvert_at(self)
-            flip0 = 1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1
-            r0 = igv0.radius*flip0
-            self.corner1 = igv0.position - igv0.tangent_y*r0
-            self.corner0 = igv0.position + igv0.tangent_y*r0
-            self.corner3 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
-            self.corner2 = self.snap_pos - self.snap_tanx*self.radius - self.snap_tany*self.radius
-            self.snap_corners()
-            return
+        #         ge2         #
+        #          |          #
+        #      2 --+-- 3      #
+        #      |       |      #
+        # ge1--+   +Y  +--ge3 #
+        #      |   X   |      #
+        #      1---+---0      #
+        #          |          #
+        #         ge0         #
         
-        if self.is_endtoend():
-            print('update end-to-end')
-            igv0 = self.gedge0.get_igvert_at(self)
-            igv2 = self.gedge2.get_igvert_at(self)
-            flip0 = 1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1
-            flip2 = 1 if igv2.tangent_x.dot(self.snap_tanx)>0 else -1
-            r0 = igv0.radius*flip0
-            r2 = igv2.radius*flip2
-            self.corner1 = igv0.position - igv0.tangent_y*r0
-            self.corner0 = igv0.position + igv0.tangent_y*r0
-            self.corner3 = igv2.position + igv2.tangent_y*r2
-            self.corner2 = igv2.position - igv2.tangent_y*r2
-            self.snap_corners()
-            return
+        def get_corner(self,dmx,dmy, igv0,r0, igv1,r1):
+            if not igv0 and not igv1:
+                return self.snap_pos + self.snap_tanx*self.radius*dmx + self.snap_tany*self.radius*dmy
+            if igv0 and not igv1:
+                return igv0.position + igv0.tangent_y*r0
+            if igv1 and not igv0:
+                return igv1.position - igv1.tangent_y*r1
+            return (igv0.position+igv0.tangent_y*r0 + igv1.position-igv1.tangent_y*r1)/2
         
-        if self.is_ljunction():
-            print('update l-junction')
-            igv0 = self.gedge0.get_igvert_at(self)
-            igv1 = self.gedge1.get_igvert_at(self)
-            der0 = self.gedge0.get_derivative_at(self).normalized()
-            der1 = self.gedge1.get_derivative_at(self).normalized()
-            flip0 = 1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1
-            flip1 = 1 if igv1.tangent_x.dot(self.snap_tany)>0 else -1
-            print('flip = %i %i' % (flip0,flip1))
-            r0 = igv0.radius*flip0
-            r1 = igv1.radius*flip1
-            self.corner0 = igv0.position + igv0.tangent_y*r0
-            self.corner1 = ((igv0.position - igv0.tangent_y*r0) + (igv1.position - igv1.tangent_y*r1)) / 2
-            self.corner2 = igv1.position + igv1.tangent_y*r1
-            self.corner3 = self.snap_pos - self.snap_tanx*self.radius + self.snap_tany*self.radius
-            self.snap_corners()
-            return
+        igv0 = None if not self.gedge0 else self.gedge0.get_igvert_at(self)
+        igv1 = None if not self.gedge1 else self.gedge1.get_igvert_at(self)
+        igv2 = None if not self.gedge2 else self.gedge2.get_igvert_at(self)
+        igv3 = None if not self.gedge3 else self.gedge3.get_igvert_at(self)
         
-        if self.is_tjunction():
-            print('update t-junction')
-            igv0 = self.gedge0.get_igvert_at(self)
-            igv1 = self.gedge1.get_igvert_at(self)
-            igv3 = self.gedge3.get_igvert_at(self)
-            der0 = self.gedge0.get_derivative_at(self).normalized()
-            der1 = self.gedge1.get_derivative_at(self).normalized()
-            der3 = self.gedge3.get_derivative_at(self).normalized()
-            flip0 = 1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1
-            flip1 = 1 if igv1.tangent_x.dot(self.snap_tany)>0 else -1
-            flip3 = 1 if igv3.tangent_x.dot(self.snap_tany)<0 else -1
-            print('flip = %i %i %i' % (flip0,flip1,flip3))
-            r0 = igv0.radius*flip0
-            r1 = igv1.radius*flip1
-            r3 = igv3.radius*flip3
-            self.corner0 = ((igv0.position + igv0.tangent_y*r0) + (igv3.position + igv3.tangent_y*r3)) / 2
-            self.corner1 = ((igv0.position - igv0.tangent_y*r0) + (igv1.position - igv1.tangent_y*r1)) / 2
-            self.corner2 = igv1.position + igv1.tangent_y*r1
-            self.corner3 = igv3.position - igv3.tangent_y*r3
-            self.snap_corners()
-            return
+        r0 = 0 if not igv0 else (igv0.radius*(1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1))
+        r1 = 0 if not igv1 else (igv1.radius*(1 if igv1.tangent_x.dot(self.snap_tany)<0 else -1))
+        r2 = 0 if not igv2 else (igv2.radius*(1 if igv2.tangent_x.dot(self.snap_tanx)<0 else -1))
+        r3 = 0 if not igv3 else (igv3.radius*(1 if igv3.tangent_x.dot(self.snap_tany)>0 else -1))
         
-        assert False, "other junctions not handled, yet"
+        self.corner0 = get_corner(self, 1, 1, igv0,r0, igv3,r3)
+        self.corner1 = get_corner(self, 1,-1, igv1,r1, igv0,r0)
+        self.corner2 = get_corner(self,-1,-1, igv2,r2, igv1,r1)
+        self.corner3 = get_corner(self,-1, 1, igv3,r3, igv2,r2)
+        
+        self.snap_corners()
     
     def get_corners(self):
         return (self.corner0, self.corner1, self.corner2, self.corner3)
@@ -282,7 +242,7 @@ class GEdge:
         if self.gvert0 == gv:
             return cubic_bezier_derivative(p0,p1,p2,p3,0)
         if self.gvert3 == gv:
-            return -cubic_bezier_derivative(p0,p1,p2,p3,1)
+            return cubic_bezier_derivative(p3,p2,p1,p0,0)
         assert False, "gv is not an endpoint"
     
     def get_vector_from(self, gv):
@@ -338,20 +298,12 @@ class GEdge:
         p0,p1,p2,p3 = self.get_positions()
         r0,r1,r2,r3 = self.get_radii()
         n0,n1,n2,n3 = self.get_normals()
-        if debug:
-            print('r0 = %f' % r0)
-            print('r3 = %f' % r3)
         
         # get bezier length
         l = self.get_length()
-        if debug:
-            print('l = %f' % l)
         
         # find "optimal" count for subdividing spline
         cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
-        if debug:
-            print('cmin = %i' % cmin)
-            print('cmax = %i' % cmax)
         c = 0
         for ctest in range(max(4,cmin-2),cmax+2):
             s = (r3-r0) / (ctest-1)
@@ -360,34 +312,23 @@ class GEdge:
                 break
             if ctest % 2 == 1:
                 c = ctest
-        if debug:
-            print('c = ' + str(c))
         if c <= 1:
-            print('TOO BIG!')
+            print('GEdge too small for GVert radii!')
             self.cache_igverts = []
             return
         
         # compute difference for smoothly interpolating radii
         s = (r3-r0) / (c-1)
-        if debug:
-            print('s = %f' % s)
         
         # compute how much space is left over (to be added to each interval)
         tot = r0*(c+1) + s*(c+1)*c/2
         o = l - tot
         oc = o / (c+1)
-        if debug:
-            print('tot = %f' % tot)
-            print('o = %f' % o)
-            print('oc = %f' % oc)
         
         # compute interval lengths, ts, blend weights
         l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
         l_ts = [p/l for w,p in iter_running_sum(l_widths)]
         l_weights = [cubic_bezier_weights(t) for t in l_ts]
-        if debug:
-            print(l_ts)
-            print(len(l_ts))
         
         # compute interval pos, rad, norm, tangent x, tangent y
         l_pos   = [cubic_bezier_blend_weights(p0,p1,p2,p3,weights) for weights in l_weights]

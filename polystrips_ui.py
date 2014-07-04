@@ -35,6 +35,7 @@ from polystrips import PolyStrips, GVert, GEdge
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
+import random
 
 from polystrips import *
 
@@ -60,17 +61,42 @@ def polystrips_draw_callback(self, context):
     settings = context.user_preferences.addons[AL.FolderName].preferences
     cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
     
+    draw_original_strokes = False
+    draw_bezier_directions = False
+    draw_gvert_orientations = False
+    
+    if draw_original_strokes:
+        for stroke in self.strokes_original:
+            #p3d = [pt for pt,pr in stroke]
+            #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.7,.7,.8), 3, "GL_LINE_SMOOTH")
+            draw_circle(context, stroke[0][0], Vector((0,0,1)),0.003,(.2,.2,.2,.8))
+            draw_circle(context, stroke[-1][0], Vector((0,1,0)),0.003,(.5,.5,.5,.8))
+    
+    
     for ind,gedge in enumerate(self.polystrips.gedges):
         if ind == self.mod_ind:
             col = (.5,1,.5,.8)
         else:
             col = (1,.5,.5,.8)
+        
+        p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
+        
+        if draw_bezier_directions:
+            n0,n1,n2,n3 = gedge.gvert0.snap_norm, gedge.gvert1.snap_norm, gedge.gvert2.snap_norm, gedge.gvert3.snap_norm
+            pm = cubic_bezier_blend_t(p0,p1,p2,p3,0.5)
+            px = cubic_bezier_derivative(p0,p1,p2,p3,0.5).normalized()
+            pn = (n0+n3).normalized()
+            py = pn.cross(px).normalized()
+            rs = 0.0015
+            rl = 0.0007
+            p3d = [pm,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.8,0.8,0.8,0.8),1, "GL_LINE_SMOOTH")
+        
         l = len(gedge.cache_igverts)
         if l == 0:
-            # draw bezier
-            p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
+            # draw bezier for uncut segments!
             p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 3, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 5, "GL_LINE_SMOOTH")
         else:
             p3d = []
             prev0,prev1 = None,None
@@ -110,6 +136,11 @@ def polystrips_draw_callback(self, context):
         
         p3d = [p0,p1,p2,p3,p0]
         contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+        
+        if draw_gvert_orientations:
+            p,x,y = gv.snap_pos,gv.snap_tanx,gv.snap_tany
+            contour_utilities.draw_polyline_from_3dpoints(context, [p,p+x*0.005], (1,0,0,1), 1, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_3dpoints(context, [p,p+y*0.005], (0,1,0,1), 1, "GL_LINE_SMOOTH")
 
 
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
@@ -245,6 +276,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #gp_layers = [gp.layers[0]]
         for gpl in gp_layers: gpl.hide = True
         strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for stroke in layer.frames[0].strokes]
+        self.strokes_original = strokes
         
         # kill short strokes
         strokes = [stroke for stroke in strokes if sum((p0[0]-p1[0]).length for p0,p1 in zip(stroke[:-1],stroke[1:])) > 0.01]
@@ -258,16 +290,23 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 for i1,stroke1 in enumerate(strokes):
                     p10,p11 = stroke1[0][0],stroke1[-1][0]
                     if i0 == i1: continue
+                    min_ind,min_dist = -1,1000
                     for ind,data in enumerate(stroke1):
                         pt1,pr1 = data
+                        # too close to an end??
                         if (p10-pt1).length < 0.007 or (p11-pt1).length < 0.007: continue
-                        if (p00-pt1).length < 0.005 or (p01-pt1).length < 0.005:
-                            print('splitting stroke[%i] at %i' % (i1,ind))
-                            strokes[i1] = stroke1[:ind]
-                            strokes += [stroke1[ind:]]
+                        
+                        d = min((p00-pt1).length, (p01-pt1).length)
+                        if d > 0.005: continue
+                        if min_ind == -1 or d < min_dist:
+                            min_ind = ind
+                            min_dist = d
                             split_stroke = True
-                        if split_stroke: break
-                    if split_stroke: break
+                    if split_stroke:
+                        print('splitting stroke[%i] at %i' % (i1,min_ind))
+                        strokes[i1] = stroke1[:min_ind]
+                        strokes += [stroke1[min_ind:]]
+                        break
                 if split_stroke: break
             if split_stroke: continue
         
@@ -283,7 +322,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     if t1 not in connect: connect[t1] = t0
                 elif t1[1] < t0[1]:
                     if t0 not in connect: connect[t0] = t1
-        
         for i0,stroke0 in enumerate(strokes):
             p00,p01 = stroke0[0][0],stroke0[-1][0]
             for i1,stroke1 in enumerate(strokes):
@@ -301,7 +339,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         ends = {}
         for i0,stroke in enumerate(strokes):
+            print('fitting stroke %i' % i0)
             l_p = cubic_bezier_fit_points([pt for pt,pr in stroke])
+            print('%i pieces' % len(l_p))
             if (i0,0) not in connect:
                 ends[(i0,0)] = self.create_gvert(mx,l_p[0][2],0.001)
             else:
@@ -328,6 +368,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 
                 pregv = gv3
         self.polystrips.gverts = list(set(self.polystrips.gverts))
+        print('Done converting GP to strokes')
     
     def invoke(self, context, event):
         #settings = context.user_preferences.addons[AL.FolderName].preferences
