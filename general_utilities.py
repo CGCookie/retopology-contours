@@ -64,3 +64,14 @@ def ray_cast_path(context, ob, screen_coords):
     world_coords = [mx*hit[0] for hit in hits if hit[2] != -1]
     
     return world_coords
+
+def frange(start, end, step):
+    v = start
+    if step > 0:
+        while v < end:
+            yield v
+            v += step
+    else:
+        while v > end:
+            yield v
+            v += step

@@ -410,6 +410,13 @@ class PolyStrips(object):
         gedge.disconnect()
         self.gedges = [ge for ge in self.gedges if ge != gedge]
     
+    def disconnect_gvert(self, gvert):
+        assert gvert in self.gverts
+        if gvert.gedge0: self.disconnect_gedge(gvert.gedge0)
+        if gvert.gedge0: self.disconnect_gedge(gvert.gedge0)
+        if gvert.gedge0: self.disconnect_gedge(gvert.gedge0)
+        if gvert.gedge0: self.disconnect_gedge(gvert.gedge0)
+    
     def remove_unconnected_gverts(self):
         egvs = set(gv for gedge in self.gedges for gv in gedge.gverts())
         gvs = set(gv for gv in self.gverts if gv.is_unconnected() and gv not in egvs)
@@ -432,6 +439,15 @@ class PolyStrips(object):
         ge.update()
         self.gedges += [ge]
         return ge
+    
+    def closest_gedge_to_point(self, p):
+        min_i,min_ge,min_t,min_d = -1,None,-1,0
+        for i,gedge in enumerate(self.gedges):
+            p0,p1,p2,p3 = gedge.get_positions()
+            t,d = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,p)
+            if min_i==-1 or d < min_d:
+                min_i,min_ge,min_t,min_d = i,gedge,t,d
+        return (min_i,min_ge, min_t, min_d)
     
     def insert_gedge_from_stroke(self, stroke):
         '''
