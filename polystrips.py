@@ -226,7 +226,14 @@ class GVert:
         if gedge == self.gedge1: return (self.corner1, self.corner2)
         if gedge == self.gedge2: return (self.corner2, self.corner3)
         if gedge == self.gedge3: return (self.corner3, self.corner0)
-        assert False, "gedge is not connected"
+        assert False, "GEdge is not connected"
+    
+    def get_cornerinds_of(self, gedge):
+        if gedge == self.gedge0: return (0,1)
+        if gedge == self.gedge1: return (1,2)
+        if gedge == self.gedge2: return (2,3)
+        if gedge == self.gedge3: return (3,0)
+        assert False, "GEdge is not connected"
     
     def count_connections(self):
         return sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])
@@ -655,6 +662,77 @@ class PolyStrips(object):
         self.disconnect_gedge(gedge0)
         self.disconnect_gedge(gedge1)
         self.create_gedge(gv0,gv1,gv2,gv3)
+    
+    def create_mesh(self):
+        
+        mx = self.obj.matrix_world
+        imx = mx.inverted()
+        
+        verts = []
+        quads = []
+        dgvcorners = {}
+        dgvindex = {}
+        
+        def create_vert(verts, imx, v):
+            i = len(verts)
+            verts += [imx*v]
+            return i
+        
+        def create_quad(quads, iv0,iv1,iv2,iv3):
+            quads += [(iv0,iv1,iv2,iv3)]
+        
+        for i,gv in enumerate(self.gverts):
+            if gv.is_unconnected(): continue
+            dgvindex[gv] = i
+            p0,p1,p2,p3 = gv.get_corners()
+            dgvcorners[(i,0)] = create_vert(verts,imx,p0)
+            dgvcorners[(i,1)] = create_vert(verts,imx,p1)
+            dgvcorners[(i,2)] = create_vert(verts,imx,p2)
+            dgvcorners[(i,3)] = create_vert(verts,imx,p3)
+            create_quad(quads, dgvcorners[(i,3)], dgvcorners[(i,2)], dgvcorners[(i,1)], dgvcorners[(i,0)])
+        
+        for ge in self.gedges:
+            p0,p1,p2,p3 = ge.gvert0.snap_pos, ge.gvert1.snap_pos, ge.gvert2.snap_pos, ge.gvert3.snap_pos
+            l = len(ge.cache_igverts)
+            
+            i0 = dgvindex[ge.gvert0]
+            i3 = dgvindex[ge.gvert3]
+            i00,i01 = ge.gvert0.get_cornerinds_of(ge)
+            i32,i33 = ge.gvert3.get_cornerinds_of(ge)
+            
+            c0 = dgvcorners[(i0,i00)]
+            c1 = dgvcorners[(i0,i01)]
+            c2 = dgvcorners[(i3,i32)]
+            c3 = dgvcorners[(i3,i33)]
+            
+            if l == 0:
+                create_quad(quads, c0, c1, c2, c3)
+                continue
+            
+            cc0 = c0
+            cc1 = c1
+            
+            for i,gvert in enumerate(ge.cache_igverts):
+                if i%2 == 0: continue
+                if i == 1: continue
+                
+                if i == l-2:
+                    cc2 = c2
+                    cc3 = c3
+                else:
+                    p2 = gvert.position-gvert.tangent_y*gvert.radius
+                    p3 = gvert.position+gvert.tangent_y*gvert.radius
+                    p2 = mx * self.obj.closest_point_on_mesh(imx*p2)[0]
+                    p3 = mx * self.obj.closest_point_on_mesh(imx*p3)[0]
+                    cc2 = create_vert(verts,imx, p2)
+                    cc3 = create_vert(verts,imx, p3)
+                
+                create_quad(quads, cc0, cc1, cc2, cc3)
+                
+                cc0 = cc3
+                cc1 = cc2
+        
+        return (verts,quads)
 
 
 

@@ -143,7 +143,7 @@ def polystrips_draw_callback(self, context):
     for gv in self.polystrips.gverts:
         p0,p1,p2,p3 = gv.get_corners()
         
-        if not draw_unconnected_gverts and gv.is_unconnected(): continue
+        if not draw_unconnected_gverts and gv.is_unconnected() and gv != self.sel_gvert: continue
         
         col = color_gvert_unconnected
         if gv.is_endpoint(): col = color_gvert_endpoint
@@ -179,7 +179,8 @@ def polystrips_draw_callback(self, context):
             contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
     
     if self.is_sketching:
-        contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 1, "GL_LINE_SMOOTH")
+        contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
+        contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
         
 
 
@@ -247,7 +248,30 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         ####################################
         # accept / cancel
         
-        if event_press in {'RET', 'NUMPAD_ENTER', 'ESC'}:
+        if event_press in {'RET', 'NUMPAD_ENTER'}:
+            verts,quads = self.polystrips.create_mesh()
+            bm = bmesh.new()
+            for v in verts: bm.verts.new(v)
+            for q in quads: bm.faces.new([bm.verts[i] for i in q])
+            
+            dest_me = bpy.data.meshes.new(self.obj.name + "_polystrips")
+            dest_obj = bpy.data.objects.new(self.obj.name + "_polystrips", dest_me)
+            dest_obj.matrix_world = self.obj.matrix_world
+            dest_obj.update_tag()
+            dest_obj.show_all_edges = True
+            dest_obj.show_wire = True
+            dest_obj.show_x_ray = True
+            
+            bm.to_mesh(dest_me)
+            
+            context.scene.objects.link(dest_obj)
+            dest_obj.select = True
+            context.scene.objects.active = dest_obj
+            
+            contour_utilities.callback_cleanup(self, context)
+            return {'CANCELLED'}
+        
+        if event_press in {'ESC'}:
             contour_utilities.callback_cleanup(self, context)
             return {'CANCELLED'}
         
@@ -256,19 +280,17 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if event_press == 'LEFTMOUSE':
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)
+            self.sketch_curpos = (x,y)
             self.sketch = [(x,y)]
-            self.sketch_pos = (x,y)
             self.is_sketching = True
             self.sel_gvert = None
             self.sel_gedge = None
         
         if event.type == 'MOUSEMOVE' and self.is_sketching:
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)
-            sx,sy = self.sketch_pos
-            nx = sx*0.4 + x*0.6
-            ny = sy*0.4 + y*0.6
-            self.sketch_pos = (nx,ny)
-            self.sketch += [self.sketch_pos]
+            lx,ly = self.sketch[-1]
+            self.sketch_curpos = (x,y)
+            self.sketch += [(lx*0.5+x*0.5, ly*0.5+y*0.5)]
         
         if event_release == 'LEFTMOUSE':
             self.is_sketching = False
@@ -285,6 +307,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if event_press == 'RIGHTMOUSE':
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)
             pt = general_utilities.ray_cast_path(context, self.obj, [(x,y)])[0]
+            
             i,ge,t,d = self.polystrips.closest_gedge_to_point(pt)
             self.sel_gedge,self.sel_gvert = None,None
             if d < 0.002:
@@ -296,7 +319,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     self.sel_gedge = ge
         
         ###################################
-        #
+        # gedge commands
         
         
         if self.sel_gedge:
@@ -305,6 +328,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gedge = None
                 self.polystrips.remove_unconnected_gverts()
         
+        
+        ###################################
+        # gvert commands
         
         if self.sel_gvert:
             if event_press == 'CTRL+NUMPAD_PLUS':
@@ -331,6 +357,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             if event_press == 'S':
                 self.sel_gvert.smooth()
         
+        
+        ###################################
+        # grease pencil => strokes
         
         if event_press == 'P':
             for gpl in self.obj.grease_pencil.layers: gpl.hide = True
@@ -390,7 +419,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         self.is_navigating = False
         self.is_sketching = False
-        self.sketch_pos = (0,0)
+        self.sketch_curpos = (0,0)
         self.sketch = []
         
         self.obj = context.object
@@ -404,7 +433,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         self.polystrips = PolyStrips(context, self.obj)
         
-        if self.obj.grease_pencil.layers:
+        if self.obj.grease_pencil:
             self.create_polystrips_from_greasepencil()
         elif 'BezierCurve' in bpy.data.objects:
             self.create_polystrips_from_bezier(bpy.data.objects['BezierCurve'])
