@@ -33,7 +33,7 @@ import bmesh
 import blf
 import itertools
 from polystrips_utilities import *
-from general_utilities import iter_running_sum, dprint
+from general_utilities import iter_running_sum, dprint, axisangle_to_quat
 
 #Make the addon name and location accessible
 AL = general_utilities.AddonLocator()
@@ -246,6 +246,24 @@ class GVert:
             self.update()
         else:
             print('Cannot toggle corner on GVert with %i connections' % self.count_connections())
+    
+    def smooth(self, v=0.1):
+        der0 = self.gedge0.get_derivative_at(self).normalized() if self.gedge0 else Vector()
+        der1 = self.gedge1.get_derivative_at(self).normalized() if self.gedge1 else Vector()
+        der2 = self.gedge2.get_derivative_at(self).normalized() if self.gedge2 else Vector()
+        der3 = self.gedge3.get_derivative_at(self).normalized() if self.gedge3 else Vector()
+        
+        if self.is_endtoend():
+            angle = (math.pi - der0.angle(der2))*v
+            cross = der0.cross(der2).normalized()
+            
+            quat0 = Quaternion(cross, -angle)
+            quat1 = Quaternion(cross, angle)
+            
+            self.gedge0.rotate_gverts_at(self, quat0)
+            self.gedge2.rotate_gverts_at(self, quat1)
+            self.update()
+            
 
 
 class GEdge:
@@ -267,6 +285,18 @@ class GEdge:
         self.cache_igverts = []             # cached interval gverts
                                             # even-indexed igverts are poly "centers"
                                             #  odd-indexed igverts are poly "edges"
+    
+    def rotate_gverts_at(self, gv, quat):
+        if gv == self.gvert0:
+            v = self.gvert1.position - self.gvert0.position
+            v = quat * v
+            self.gvert1.position = self.gvert0.position + v
+        elif gv == self.gvert3:
+            v = self.gvert2.position - self.gvert3.position
+            v = quat * v
+            self.gvert2.position = self.gvert3.position + v
+        else:
+            assert False
     
     def disconnect(self):
         self.gvert0.disconnect_gedge(self)

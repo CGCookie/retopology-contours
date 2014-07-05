@@ -238,11 +238,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if event_press == 'LEFTMOUSE':
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)
             self.sketch = [(x,y)]
+            self.sketch_pos = (x,y)
             self.is_sketching = True
         
         if event.type == 'MOUSEMOVE' and self.is_sketching:
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)
-            self.sketch += [(x,y)]
+            sx,sy = self.sketch_pos
+            nx = sx*0.4 + x*0.6
+            ny = sy*0.4 + y*0.6
+            self.sketch_pos = (nx,ny)
+            self.sketch += [self.sketch_pos]
         
         if event_release == 'LEFTMOUSE':
             self.is_sketching = False
@@ -301,13 +306,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.polystrips.disconnect_gvert(self.sel_gvert)
                 self.sel_gvert = None
                 self.polystrips.remove_unconnected_gverts()
+            
+            if event_press == 'S':
+                self.sel_gvert.smooth()
         
         
         if event_press == 'P':
-            if self.strokes_original:
-                stroke = self.strokes_original.pop()
+            for gpl in self.obj.grease_pencil.layers: gpl.hide = True
+            for stroke in self.strokes_original:
                 self.polystrips.insert_gedge_from_stroke(stroke)
-                self.polystrips.remove_unconnected_gverts()
+            self.polystrips.remove_unconnected_gverts()
         
         
         return{'RUNNING_MODAL'}
@@ -350,7 +358,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #for gpl in gp_layers: gpl.hide = True
         strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for frame in layer.frames for stroke in frame.strokes]
         self.strokes_original = strokes
-        self.strokes_original.reverse()
         
         #for stroke in strokes:
         #    self.polystrips.insert_gedge_from_stroke(stroke)
@@ -362,6 +369,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         self.is_navigating = False
         self.is_sketching = False
+        self.sketch_pos = (0,0)
         self.sketch = []
         
         self.obj = context.object

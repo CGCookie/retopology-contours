@@ -23,7 +23,7 @@ Donated to CGCookie and the world
 import sys, os
 import bpy
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Quaternion
 
 class AddonLocator(object):
     def __init__(self):
@@ -75,3 +75,10 @@ def frange(start, end, step):
         while v > end:
             yield v
             v += step
+
+def axisangle_to_quat(axis, angle):
+    qx = cross.x * sin(angle/2)
+    qy = cross.y * sin(angle/2)
+    qz = cross.z * sin(angle/2)
+    qw = cos(angle/2)
+    return Quaternion((qx,qy,qz,qw))
