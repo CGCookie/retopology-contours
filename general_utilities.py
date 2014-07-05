@@ -22,6 +22,8 @@ Donated to CGCookie and the world
 #This class makes it easier to be install location independent
 import sys, os
 import bpy
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
+from mathutils import Vector, Matrix
 
 class AddonLocator(object):
     def __init__(self):
@@ -46,3 +48,19 @@ def dprint(s, l=2):
     AL = AddonLocator()
     settings = bpy.context.user_preferences.addons[AL.FolderName].preferences
     if settings.debug >= l: print('DEBUG(%i): %s' % (l, s))
+
+def ray_cast_path(context, ob, screen_coords):
+    rgn  = context.region
+    rv3d = context.space_data.region_3d
+    mx   = ob.matrix_world
+    imx  = mx.inverted()
+    
+    r2d_origin = region_2d_to_origin_3d
+    r2d_vector = region_2d_to_vector_3d
+    
+    rays = [(r2d_origin(rgn, rv3d, co),r2d_vector(rgn, rv3d, co).normalized()) for co in screen_coords]
+    
+    hits = [ob.ray_cast(imx*o, imx*(o+d*10000)) for o,d in rays]
+    world_coords = [mx*hit[0] for hit in hits if hit[2] != -1]
+    
+    return world_coords

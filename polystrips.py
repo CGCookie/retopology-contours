@@ -443,11 +443,11 @@ class PolyStrips(object):
         
         # too short?
         if len(stroke) < 4:
-            print('Too few samples in stroke')
+            print('Too few samples in stroke (subsample??)')
             return
         tot_length = sum((s0[0]-s1[0]).length for s0,s1 in zip(stroke[:-1],stroke[1:]))
         if tot_length < threshold_tooshort:
-            print('Stroke too short')
+            print('Stroke too short (%f)' % tot_length)
             return
         
         sgv0,sgv3 = None,None

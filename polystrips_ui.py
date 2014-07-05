@@ -146,6 +146,10 @@ def polystrips_draw_callback(self, context):
             p,x,y = gv.snap_pos,gv.snap_tanx,gv.snap_tany
             contour_utilities.draw_polyline_from_3dpoints(context, [p,p+x*0.005], (1,0,0,1), 1, "GL_LINE_SMOOTH")
             contour_utilities.draw_polyline_from_3dpoints(context, [p,p+y*0.005], (0,1,0,1), 1, "GL_LINE_SMOOTH")
+    
+    if self.is_sketching:
+        contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 1, "GL_LINE_SMOOTH")
+        
 
 
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
@@ -209,9 +213,35 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return {'PASS_THROUGH'}
         self.is_navigating = False
         
+        ####################################
+        # accept / cancel
+        
         if event_press in {'RET', 'NUMPAD_ENTER', 'ESC'}:
             contour_utilities.callback_cleanup(self, context)
             return {'CANCELLED'}
+        
+        ####################################
+        # sketching
+        
+        if event_press == 'LEFTMOUSE':
+            x = float(event.mouse_region_x)
+            y = float(event.mouse_region_y)
+            self.sketch = [(x,y)]
+            self.is_sketching = True
+        
+        if event.type == 'MOUSEMOVE' and self.is_sketching:
+            x = float(event.mouse_region_x)
+            y = float(event.mouse_region_y)
+            self.sketch += [(x,y)]
+        
+        if event_release == 'LEFTMOUSE':
+            self.is_sketching = False
+            p3d = general_utilities.ray_cast_path(context, self.obj, self.sketch)
+            stroke = [(p,1) for p in p3d]
+            self.sketch = []
+            self.polystrips.insert_gedge_from_stroke(stroke)
+            self.polystrips.remove_unconnected_gverts()
+        
         
         if self.mod_ind < len(self.polystrips.gedges):
             gv0 = self.polystrips.gedges[self.mod_ind].gvert0
@@ -240,7 +270,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if event_press == 'X':
             self.polystrips.disconnect_gedge(self.polystrips.gedges[self.mod_ind])
-            self.mod_ind = max(0, self.mod_ind-1)
+            self.mod_ind = max(0, self.mod_ind)
             self.polystrips.remove_unconnected_gverts()
         
         if event_press == 'I':
@@ -253,7 +283,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             ge = self.polystrips.gedges[self.mod_ind]
             gv = ge.gvert0 if event_press == 'CTRL+D' else ge.gvert3
             self.polystrips.dissolve_gvert(gv)
-            self.mod_ind = max(0, self.mod_ind-1)
+            self.mod_ind = max(0, self.mod_ind)
             self.polystrips.remove_unconnected_gverts()
         
         if event_press == 'CTRL+C' or event_press == 'CTRL+SHIFT+C':
@@ -272,11 +302,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         ty0 = Vector((0,1,0))
         return GVert(self.obj,p0,r0,n0,tx0,ty0)
     
-    def create_polystrips_from_bezier(self, context, ob_bezier):
+    def create_polystrips_from_bezier(self, ob_bezier):
         data  = ob_bezier.data
         mx    = ob_bezier.matrix_world
-        
-        self.polystrips = PolyStrips(context, self.obj)
         
         for spline in data.splines:
             pregv = None
@@ -297,7 +325,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.polystrips.gedges += [ge0]
                 pregv = gv3
     
-    def create_polystrips_from_greasepencil(self, context):
+    def create_polystrips_from_greasepencil(self):
         Mx = self.obj.matrix_world
         gp = self.obj.grease_pencil
         gp_layers = gp.layers
@@ -306,7 +334,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.strokes_original = strokes
         self.strokes_original.reverse()
         
-        self.polystrips = PolyStrips(context, self.obj)
         #for stroke in strokes:
         #    self.polystrips.insert_gedge_from_stroke(stroke)
     
@@ -316,6 +343,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #return {'RUNNING_MODAL'}
         
         self.is_navigating = False
+        self.is_sketching = False
+        self.sketch = []
         
         self.obj = context.object
         me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
@@ -324,8 +353,13 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.bme.from_mesh(me)
         
         self.mod_ind = 0
-        #self.create_polystrips_from_bezier(context, bpy.data.objects['BezierCurve'])
-        self.create_polystrips_from_greasepencil(context)
+        self.polystrips = PolyStrips(context, self.obj)
+        
+        if self.obj.grease_pencil.layers:
+            self.create_polystrips_from_greasepencil()
+        elif 'BezierCurve' in bpy.data.objects:
+            self.create_polystrips_from_bezier(bpy.data.objects['BezierCurve'])
+        
         
         # switch to modal
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
