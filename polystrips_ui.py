@@ -68,14 +68,17 @@ def polystrips_draw_callback(self, context):
     draw_unconnected_gverts = False
     
     color_selected          = (.5,1,.5,.8)
+    
     color_gedge             = (1,.5,.5,.8)
     color_gedge_nocuts      = (.5,.2,.2,.8)
+    
     color_gvert_unconnected = (.2,.2,.2,.8)
     color_gvert_endpoint    = (.2,.2,.5,.8)
     color_gvert_endtoend    = (.5,.5,1,.8)
     color_gvert_ljunction   = (1,.5,1,.8)
     color_gvert_tjunction   = (1,1,.5,.8)
     color_gvert_cross       = (1,1,1,.8)
+    color_gvert_midpoints   = (.7,1,.7,.8)
     
     sel_on = True #(int(time.time()*2)%2 == 1)
     
@@ -159,6 +162,22 @@ def polystrips_draw_callback(self, context):
             contour_utilities.draw_polyline_from_3dpoints(context, [p,p+x*0.005], (1,0,0,1), 1, "GL_LINE_SMOOTH")
             contour_utilities.draw_polyline_from_3dpoints(context, [p,p+y*0.005], (0,1,0,1), 1, "GL_LINE_SMOOTH")
     
+    if self.sel_gedge:
+        col = color_gvert_midpoints
+        for gv in [self.sel_gedge.gvert1,self.sel_gedge.gvert2]:
+            p0,p1,p2,p3 = gv.get_corners()
+            p3d = [p0,p1,p2,p3,p0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+    
+    if self.sel_gvert:
+        col = color_gvert_midpoints
+        for ge in [self.sel_gvert.gedge0,self.sel_gvert.gedge1,self.sel_gvert.gedge2,self.sel_gvert.gedge3]:
+            if not ge: continue
+            gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+            p0,p1,p2,p3 = gv.get_corners()
+            p3d = [p0,p1,p2,p3,p0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+    
     if self.is_sketching:
         contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 1, "GL_LINE_SMOOTH")
         
@@ -240,6 +259,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sketch = [(x,y)]
             self.sketch_pos = (x,y)
             self.is_sketching = True
+            self.sel_gvert = None
+            self.sel_gedge = None
         
         if event.type == 'MOUSEMOVE' and self.is_sketching:
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)

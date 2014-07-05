@@ -291,10 +291,12 @@ class GEdge:
             v = self.gvert1.position - self.gvert0.position
             v = quat * v
             self.gvert1.position = self.gvert0.position + v
+            self.gvert1.update()
         elif gv == self.gvert3:
             v = self.gvert2.position - self.gvert3.position
             v = quat * v
             self.gvert2.position = self.gvert3.position + v
+            self.gvert2.update()
         else:
             assert False
     
