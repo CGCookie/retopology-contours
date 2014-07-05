@@ -64,6 +64,7 @@ def polystrips_draw_callback(self, context):
     draw_original_strokes = False
     draw_bezier_directions = False
     draw_gvert_orientations = False
+    draw_unconnected_gverts = False
     
     if draw_original_strokes:
         for stroke in self.strokes_original:
@@ -128,7 +129,7 @@ def polystrips_draw_callback(self, context):
     for gv in self.polystrips.gverts:
         p0,p1,p2,p3 = gv.get_corners()
         
-        if gv.is_unconnected(): continue
+        if not draw_unconnected_gverts and gv.is_unconnected(): continue
         
         if gv.is_unconnected(): col = (.2,.2,.2,.8)
         elif gv.is_endpoint():  col = (.2,.2,.5,.8)
@@ -240,6 +241,26 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if event_press == 'X':
             self.polystrips.disconnect_gedge(self.polystrips.gedges[self.mod_ind])
             self.mod_ind = max(0, self.mod_ind-1)
+            self.polystrips.remove_unconnected_gverts()
+        
+        if event_press == 'I':
+            if self.strokes_original:
+                stroke = self.strokes_original.pop()
+                self.polystrips.insert_gedge_from_stroke(stroke)
+                self.polystrips.remove_unconnected_gverts()
+        
+        if event_press == 'CTRL+D' or event_press == 'CTRL+SHIFT+D':
+            ge = self.polystrips.gedges[self.mod_ind]
+            gv = ge.gvert0 if event_press == 'CTRL+D' else ge.gvert3
+            self.polystrips.dissolve_gvert(gv)
+            self.mod_ind = max(0, self.mod_ind-1)
+            self.polystrips.remove_unconnected_gverts()
+        
+        if event_press == 'CTRL+C' or event_press == 'CTRL+SHIFT+C':
+            ge = self.polystrips.gedges[self.mod_ind]
+            gv = ge.gvert0 if event_press == 'CTRL+C' else ge.gvert3
+            gv.toggle_corner()
+            
         
         return{'RUNNING_MODAL'}
     
@@ -277,106 +298,17 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 pregv = gv3
     
     def create_polystrips_from_greasepencil(self, context):
-        mx = Matrix()
-        
+        Mx = self.obj.matrix_world
         gp = self.obj.grease_pencil
         gp_layers = gp.layers
-        #gp_layers = [gp.layers[0]]
-        for gpl in gp_layers: gpl.hide = True
-        strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for stroke in layer.frames[0].strokes]
+        #for gpl in gp_layers: gpl.hide = True
+        strokes = [[(p.co,p.pressure) for p in stroke.points] for layer in gp_layers for frame in layer.frames for stroke in frame.strokes]
         self.strokes_original = strokes
-        
-        # kill short strokes
-        strokes = [stroke for stroke in strokes if sum((p0[0]-p1[0]).length for p0,p1 in zip(stroke[:-1],stroke[1:])) > 0.01]
-        
-        # check for t-junctions
-        split_stroke = True
-        while split_stroke:
-            split_stroke = False
-            for i0,stroke0 in enumerate(strokes):
-                p00,p01 = stroke0[0][0],stroke0[-1][0]
-                for i1,stroke1 in enumerate(strokes):
-                    p10,p11 = stroke1[0][0],stroke1[-1][0]
-                    if i0 == i1: continue
-                    min_ind,min_dist = -1,1000
-                    for ind,data in enumerate(stroke1):
-                        pt1,pr1 = data
-                        # too close to an end??
-                        if (p10-pt1).length < 0.007 or (p11-pt1).length < 0.007: continue
-                        
-                        d = min((p00-pt1).length, (p01-pt1).length)
-                        if d > 0.005: continue
-                        if min_ind == -1 or d < min_dist:
-                            min_ind = ind
-                            min_dist = d
-                            split_stroke = True
-                    if split_stroke:
-                        print('splitting stroke[%i] at %i' % (i1,min_ind))
-                        strokes[i1] = stroke1[:min_ind]
-                        strokes += [stroke1[min_ind:]]
-                        break
-                if split_stroke: break
-            if split_stroke: continue
-        
-        # check if indiv strokes create junctions
-        connect = {}
-        def do_connect(connect, t0, t1):
-            if t0[0] < t1[0]:
-                if t1 not in connect: connect[t1] = t0
-            elif t1[0] < t0[0]:
-                if t0 not in connect: connect[t0] = t1
-            else:
-                if t0[1] < t1[1]:
-                    if t1 not in connect: connect[t1] = t0
-                elif t1[1] < t0[1]:
-                    if t0 not in connect: connect[t0] = t1
-        for i0,stroke0 in enumerate(strokes):
-            p00,p01 = stroke0[0][0],stroke0[-1][0]
-            for i1,stroke1 in enumerate(strokes):
-                p10,p11 = stroke1[0][0],stroke1[-1][0]
-                if (p00-p10).length < 0.005:
-                    do_connect(connect, (i0,0), (i1,0))
-                if (p00-p11).length < 0.005:
-                    do_connect(connect, (i0,0), (i1,1))
-                if (p01-p10).length < 0.005:
-                    do_connect(connect, (i0,1), (i1,0))
-                if (p01-p11).length < 0.005:
-                    do_connect(connect, (i0,1), (i1,1))
+        self.strokes_original.reverse()
         
         self.polystrips = PolyStrips(context, self.obj)
-        
-        ends = {}
-        for i0,stroke in enumerate(strokes):
-            print('fitting stroke %i' % i0)
-            l_p = cubic_bezier_fit_points([pt for pt,pr in stroke])
-            print('%i pieces' % len(l_p))
-            if (i0,0) not in connect:
-                ends[(i0,0)] = self.create_gvert(mx,l_p[0][2],0.001)
-            else:
-                ends[(i0,0)] = ends[connect[(i0,0)]]
-            if (i0,1) not in connect:
-                ends[(i0,1)] = self.create_gvert(mx,l_p[-1][5],0.001)
-            else:
-                ends[(i0,1)] = ends[connect[(i0,1)]]
-            
-            pregv = None
-            for i,data in enumerate(l_p):
-                t0,t3,p0,p1,p2,p3 = data
-                
-                gv0 = ends[(i0,0)] if i == 0 else (pregv if pregv else self.create_gvert(mx, p0, 0.001))
-                gv1 = self.create_gvert(mx, p1, 0.01)
-                gv2 = self.create_gvert(mx, p2, 0.01)
-                gv3 = ends[(i0,1)] if i == len(l_p)-1 else self.create_gvert(mx, p3, 0.001)
-                
-                ge0 = GEdge(self.obj, gv0, gv1, gv2, gv3)
-                ge0.update()
-                
-                self.polystrips.gverts += [gv0,gv1,gv2,gv3]
-                self.polystrips.gedges += [ge0]
-                
-                pregv = gv3
-        self.polystrips.gverts = list(set(self.polystrips.gverts))
-        print('Done converting GP to strokes')
+        #for stroke in strokes:
+        #    self.polystrips.insert_gedge_from_stroke(stroke)
     
     def invoke(self, context, event):
         #settings = context.user_preferences.addons[AL.FolderName].preferences

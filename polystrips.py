@@ -105,6 +105,7 @@ class GVert:
             dprint('unconnected => endpoint')
             self._set_gedges(gedge,None,None,None)
             assert self.is_endpoint()
+        
         elif connect_count == 2:
             if vec0.dot(vec) < threshold_endtoend:
                 dprint('endpoint => end-to-end')
@@ -117,6 +118,7 @@ class GVert:
                 else:
                     self._set_gedges(gedge,gedge0,None,None)
                 assert self.is_ljunction()
+        
         elif connect_count == 3:
             if self.is_endtoend():
                 dprint('end-to-end => t-junction')
@@ -131,6 +133,7 @@ class GVert:
                 else:
                     self._set_gedges(gedge0,gedge1,None,gedge)
             assert self.is_tjunction()
+        
         elif connect_count == 4:
             dprint('t-junction => cross-junction')
             if vec0.dot(vec) < threshold_endtoend:
@@ -140,8 +143,9 @@ class GVert:
             else:
                 self._set_gedges(gedge3,gedge0,gedge,gedge1)
             assert self.is_cross()
+        
         else:
-            assert False
+            assert False, "CANNOT CONNECT %i GEDGES" % connect_count
         
         assert self.gedge0 == gedge or self.gedge1 == gedge or self.gedge2 == gedge or self.gedge3 == gedge
         self.update()
@@ -155,7 +159,7 @@ class GVert:
         self.corner1 = mx * self.obj.closest_point_on_mesh(imx*self.corner1)[0]
         self.corner2 = mx * self.obj.closest_point_on_mesh(imx*self.corner2)[0]
         self.corner3 = mx * self.obj.closest_point_on_mesh(imx*self.corner3)[0]
-        
+    
     def update(self, do_edges=True):
         if self.doing_update: return
         
@@ -223,6 +227,25 @@ class GVert:
         if gedge == self.gedge2: return (self.corner2, self.corner3)
         if gedge == self.gedge3: return (self.corner3, self.corner0)
         assert False, "gedge is not connected"
+    
+    def count_connections(self):
+        return sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])
+    
+    def toggle_corner(self):
+        if (self.is_endtoend() or self.is_ljunction()):
+            if self.is_ljunction():
+                self._set_gedges(self.gedge0,None,self.gedge1,None)
+                assert self.is_endtoend()
+            else:
+                self._set_gedges(self.gedge2,self.gedge0,None,None)
+                assert self.is_ljunction()
+            self.update()
+        elif self.is_tjunction():
+            self._set_gedges(self.gedge3,self.gedge0,None,self.gedge1)
+            assert self.is_tjunction()
+            self.update()
+        else:
+            print('Cannot toggle corner on GVert with %i connections' % self.count_connections())
 
 
 class GEdge:
@@ -386,5 +409,158 @@ class PolyStrips(object):
         assert gedge in self.gedges
         gedge.disconnect()
         self.gedges = [ge for ge in self.gedges if ge != gedge]
-        gvs = [gv for gv in gedge.gverts() if gv.is_unconnected()]
+    
+    def remove_unconnected_gverts(self):
+        egvs = set(gv for gedge in self.gedges for gv in gedge.gverts())
+        gvs = set(gv for gv in self.gverts if gv.is_unconnected() and gv not in egvs)
         self.gverts = [gv for gv in self.gverts if gv not in gvs]
+    
+    def create_gvert(self, co, radius=0.001):
+        #if type(co) is not Vector: co = Vector(co)
+        p0  = co
+        r0  = radius
+        n0  = Vector((0,0,1))
+        tx0 = Vector((1,0,0))
+        ty0 = Vector((0,1,0))
+        gv = GVert(self.obj,p0,r0,n0,tx0,ty0)
+        self.gverts += [gv]
+        print('gv: ' + str(p0))
+        return gv
+    
+    def create_gedge(self, gv0, gv1, gv2, gv3):
+        ge = GEdge(self.obj, gv0, gv1, gv2, gv3)
+        ge.update()
+        self.gedges += [ge]
+        return ge
+    
+    def insert_gedge_from_stroke(self, stroke):
+        '''
+        stroke: list of tuples (3d location, pressure)
+        '''
+        
+        threshold_tooshort     = 0.003
+        threshold_junctiondist = 0.003
+        
+        # too short?
+        if len(stroke) < 4:
+            print('Too few samples in stroke')
+            return
+        tot_length = sum((s0[0]-s1[0]).length for s0,s1 in zip(stroke[:-1],stroke[1:]))
+        if tot_length < threshold_tooshort:
+            print('Stroke too short')
+            return
+        
+        sgv0,sgv3 = None,None
+        
+        # check for junctions
+        for i_gedge,gedge in enumerate(self.gedges):
+            p0,p1,p2,p3 = gedge.get_positions()
+            
+            min_i0,min_t,min_d = -1,-1,threshold_junctiondist
+            
+            # find closest distance between stroke and gedge
+            for i0,info0 in enumerate(stroke):
+                pt0,pr0 = info0
+                (split_t,split_d) = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt0,threshold=min_d)
+                if split_d <= min_d: min_i0,min_t,min_d = i0,split_t,split_d
+            if min_i0 == -1: continue
+            
+            split_bpt = cubic_bezier_blend_t(p0,p1,p2,p3,min_t)
+            
+            closeto_i0 = (min_i0 < 3)
+            closeto_i1 = (min_i0 > len(stroke)-4)
+            closeto_p0 = ((split_bpt-p0).length <= threshold_junctiondist)
+            closeto_p3 = ((split_bpt-p3).length <= threshold_junctiondist)
+            
+            if not closeto_p0 and not closeto_p3:
+                # not close to endpoint of bezier, so split bezier and recurse
+                
+                dprint('Splitting gedge %i at %f; Splitting stroke at %i' % (i_gedge,min_t,min_i0))
+                
+                pt0,pr0 = stroke[min_i0]
+                cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t)
+                
+                gv_split = self.create_gvert(cb0[3])
+                
+                gv0_0 = gedge.gvert0
+                gv0_1 = self.create_gvert(cb0[1])
+                gv0_2 = self.create_gvert(cb0[2])
+                gv0_3 = gv_split
+                
+                gv1_0 = gv_split
+                gv1_1 = self.create_gvert(cb1[1])
+                gv1_2 = self.create_gvert(cb1[2])
+                gv1_3 = gedge.gvert3
+                
+                self.disconnect_gedge(gedge)
+                ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
+                ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
+                
+                if closeto_i0:   sgv0 = gv_split
+                elif closeto_i1: sgv3 = gv_split
+            else:
+                if closeto_i0:
+                    sgv0 = gedge.gvert0 if closeto_p0 else gedge.gvert3
+                if closeto_i1:
+                    sgv3 = gedge.gvert0 if closeto_p0 else gedge.gvert3
+            
+            if not closeto_i0 and not closeto_i1:
+                self.insert_gedge_from_stroke(stroke[:min_i0])
+                self.insert_gedge_from_stroke(stroke[min_i0:])
+                return
+            
+        
+        l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke])
+        pregv,fgv = None,None
+        for i,bpts in enumerate(l_bpts):
+            t0,t3,bpt0,bpt1,bpt2,bpt3 = bpts
+            if i == 0:
+                gv0 = self.create_gvert(bpt0) if not sgv0 else sgv0
+                fgv = gv0
+            else:
+                gv0 = pregv
+                
+            gv1 = self.create_gvert(bpt1)
+            gv2 = self.create_gvert(bpt2)
+            
+            if i == len(l_bpts)-1:
+                if (bpt3-l_bpts[0][2]).length < threshold_junctiondist:
+                    gv3 = fgv
+                else:
+                    gv3 = self.create_gvert(bpt3) if not sgv3 else sgv3
+            else:
+                gv3 = self.create_gvert(bpt3)
+            
+            self.create_gedge(gv0,gv1,gv2,gv3)
+            pregv = gv3
+        
+    def dissolve_gvert(self, gvert, tessellation=20):
+        if not (gvert.is_endtoend() or gvert.is_ljunction()):
+            print('Cannot dissolve GVert with %i connections' % gvert.count_connections())
+            return
+        
+        gedge0 = gvert.gedge0
+        gedge1 = gvert.gedge1 if gvert.gedge1 else gvert.gedge2
+        
+        p00,p01,p02,p03 = gedge0.get_positions()
+        p10,p11,p12,p13 = gedge1.get_positions()
+        
+        pts0 = [cubic_bezier_blend_t(p00,p01,p02,p03,i/tessellation) for i in range(tessellation+1)]
+        pts1 = [cubic_bezier_blend_t(p10,p11,p12,p13,i/tessellation) for i in range(tessellation+1)]
+        if gedge0.gvert0 == gvert: pts0.reverse()
+        if gedge1.gvert3 == gvert: pts1.reverse()
+        pts = pts0 + pts1
+        
+        t0,t3,p0,p1,p2,p3 = cubic_bezier_fit_points(pts, allow_split=False)[0]
+        
+        gv0 = gedge0.gvert3 if gedge0.gvert0 == gvert else gedge0.gvert0
+        gv1 = self.create_gvert(p1)
+        gv2 = self.create_gvert(p2)
+        gv3 = gedge1.gvert3 if gedge1.gvert0 == gvert else gedge1.gvert0
+        
+        self.disconnect_gedge(gedge0)
+        self.disconnect_gedge(gedge1)
+        self.create_gedge(gv0,gv1,gv2,gv3)
+
+
+
