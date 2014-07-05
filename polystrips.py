@@ -263,7 +263,53 @@ class GVert:
             self.gedge0.rotate_gverts_at(self, quat0)
             self.gedge2.rotate_gverts_at(self, quat1)
             self.update()
+        
+        if self.is_ljunction():
+            angle = (math.pi/2 - der0.angle(der1))*v
+            cross = der0.cross(der1).normalized()
             
+            quat0 = Quaternion(cross, -angle)
+            quat1 = Quaternion(cross, angle)
+            
+            self.gedge0.rotate_gverts_at(self, quat0)
+            self.gedge1.rotate_gverts_at(self, quat1)
+            self.update()
+        
+        if self.is_tjunction():
+            angle = (math.pi/2 - der3.angle(der0))*v
+            cross = der3.cross(der0).normalized()
+            self.gedge3.rotate_gverts_at(self, Quaternion(cross, -angle))
+            self.gedge0.rotate_gverts_at(self, Quaternion(cross,  angle))
+            
+            angle = (math.pi/2 - der0.angle(der1))*v
+            cross = der0.cross(der1).normalized()
+            self.gedge0.rotate_gverts_at(self, Quaternion(cross, -angle))
+            self.gedge1.rotate_gverts_at(self, Quaternion(cross,  angle))
+            
+            self.update()
+        
+        if self.is_cross():
+            angle = (math.pi/2 - der3.angle(der0))*v
+            cross = der3.cross(der0).normalized()
+            self.gedge3.rotate_gverts_at(self, Quaternion(cross, -angle))
+            self.gedge0.rotate_gverts_at(self, Quaternion(cross,  angle))
+            
+            angle = (math.pi/2 - der0.angle(der1))*v
+            cross = der0.cross(der1).normalized()
+            self.gedge0.rotate_gverts_at(self, Quaternion(cross, -angle))
+            self.gedge1.rotate_gverts_at(self, Quaternion(cross,  angle))
+            
+            angle = (math.pi/2 - der1.angle(der2))*v
+            cross = der1.cross(der2).normalized()
+            self.gedge1.rotate_gverts_at(self, Quaternion(cross, -angle))
+            self.gedge2.rotate_gverts_at(self, Quaternion(cross,  angle))
+            
+            angle = (math.pi/2 - der2.angle(der3))*v
+            cross = der2.cross(der3).normalized()
+            self.gedge2.rotate_gverts_at(self, Quaternion(cross, -angle))
+            self.gedge3.rotate_gverts_at(self, Quaternion(cross,  angle))
+            
+            self.update()
 
 
 class GEdge:
