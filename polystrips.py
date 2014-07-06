@@ -77,6 +77,8 @@ class GVert:
     def is_tjunction(self):   return self.has_0() and self.has_1() and self.has_3() and not self.has_2()
     def is_cross(self):       return self.has_0() and self.has_1() and self.has_2() and self.has_3()
     
+    def get_gedges(self): return [self.gedge0,self.gedge1,self.gedge2,self.gedge3]
+    
     def _set_gedges(self, ge0, ge1, ge2, ge3):
         self.gedge0,self.gedge1,self.gedge2,self.gedge3 = ge0,ge1,ge2,ge3
     

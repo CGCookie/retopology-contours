@@ -208,6 +208,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
+        stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
+        
         # event details
         event_ctrl    = 'CTRL+'  if event.ctrl  else ''
         event_shift   = 'SHIFT+' if event.shift else ''
@@ -276,6 +278,33 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return {'CANCELLED'}
         
         ####################################
+        # mode handling
+        
+        if self.mode:
+            if event_press == 'LEFTMOUSE' and self.mode:
+                self.mode = ''
+                return {'RUNNING_MODAL'}
+            
+            if event.type == 'MOUSEMOVE' and self.mode == 'scale':
+                x,y = event.mouse_region_x,event.mouse_region_y
+                mx,my = self.mode_pos
+                dx,dy = x-mx,y-my
+                p = self.sel_gvert.position
+                
+                for ge in self.sel_gvert.get_gedges():
+                    if not ge: continue
+                    gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+                    d = (gv.position-p).length
+                    m = 1 + dy / 100
+                    gv.position = p + (gv.position-p) * m
+                    gv.update()
+                
+                self.sel_gvert.update()
+                
+                self.mode_pos = (x,y)
+                return {'RUNNING_MODAL'}
+        
+        ####################################
         # sketching
         
         if event_press == 'LEFTMOUSE':
@@ -290,16 +319,19 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             x,y = float(event.mouse_region_x),float(event.mouse_region_y)
             lx,ly = self.sketch[-1]
             self.sketch_curpos = (x,y)
-            self.sketch += [(lx*0.5+x*0.5, ly*0.5+y*0.5)]
+            ss0,ss1 = stroke_smoothing,1-stroke_smoothing
+            self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1)]
         
         if event_release == 'LEFTMOUSE':
             self.is_sketching = False
-            p3d = general_utilities.ray_cast_path(context, self.obj, self.sketch)
-            p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,0.001)] + [p3d[-1]]
-            stroke = [(p,1) for p in p3d]
-            self.sketch = []
-            self.polystrips.insert_gedge_from_stroke(stroke)
-            self.polystrips.remove_unconnected_gverts()
+            if len(self.sketch)>1:
+                p3d = general_utilities.ray_cast_path(context, self.obj, self.sketch)
+                if len(p3d) > 1:
+                    p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,0.001)] + [p3d[-1]]
+                    stroke = [(p,1) for p in p3d]
+                    self.sketch = []
+                    self.polystrips.insert_gedge_from_stroke(stroke)
+                    self.polystrips.remove_unconnected_gverts()
         
         ###################################
         # picking
@@ -354,8 +386,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gvert = None
                 self.polystrips.remove_unconnected_gverts()
             
-            if event_press == 'S':
+            if event_press == 'C':
                 self.sel_gvert.smooth()
+            
+            if event_press == 'S':
+                self.mode_pos = (event.mouse_region_x,event.mouse_region_y)
+                self.mode = 'scale'
         
         
         ###################################
@@ -417,6 +453,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #return {'CANCELLED'}
         #return {'RUNNING_MODAL'}
         
+        self.mode = ''
+        self.mode_pos = (0,0)
         self.is_navigating = False
         self.is_sketching = False
         self.sketch_curpos = (0,0)
