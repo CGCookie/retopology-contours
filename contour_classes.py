@@ -1768,8 +1768,87 @@ class ExistingVertList(object):
                         loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, point)
                         blf.position(0, loc[0], loc[1], 0)
                         blf.draw(0, str(i))    
-                      
-class PolySkecthLine(object):
+
+
+class PolyStripVert(object):
+    def __init__(self, co, width):
+        
+        self.co = co
+        self.width = width
+        self.no = None
+        self.closest_index = -1
+
+    def snap_to_object(self,ob):
+        
+        mx = ob.matrix_world
+        imx = mx.inverted()
+        
+        local_coord = imx * self.co
+        
+        v, no, ind = ob.closest_point_on_mesh(local_coord)
+        
+        if ind != -1:
+            self.co = v
+            self.no = no
+            self.closest_index = -1
+            
+            
+class PolyPatchNode(object):
+    
+    def __init__(self,context,loc):
+        
+        self.location = loc
+        self.lines = []
+        
+class PolyPatchPole(object):
+    
+    def __init__(self,context,loc, valence):
+        
+        self.location = loc
+        self.valence = valence
+      
+class PolyPatch(object):
+    
+    def __init__(self, context, poles, nodes, lines):
+        
+        self.poles = poles
+        self.lines = lines
+        self.nodes = nodes
+        
+    def calc_perimeter_valid(self):
+        print('testing')
+        #iterate around the lines and poles and sum
+        
+        #if any single line has more polys than the
+        #sum of the rest...there is no way for flow to be conserved?
+        #or is there....if a loop flows in and out the same boundary
+        
+        #if N1 > N2 + N3 + N4
+        #if N2 > N1
+    def calc_flow_redirects(self):
+        print('calc flow directions')
+        #compare boundary line sums
+        #figure out how much flow needs to go where
+        #http://stackoverflow.com/questions/16628088/euclidean-algorithm-gcd-with-multiple-numbers
+        #will need to simplify the edges....greatest common denominator will be needed
+
+
+class NewPolySketchLine(object):
+    '''
+    This class is meant to be built poly by poly
+    Later it can be smoothed and adjusted
+    
+    '''
+    
+    def __init__(self, context):
+        
+        self.high_res_path = []
+        self.quad_centers = []
+        self.widths = []
+
+        
+                                    
+class PolySketchLine(object):
     
     def __init__(self, context, raw_points,
                  cull_factor = 3,
