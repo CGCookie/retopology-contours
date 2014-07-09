@@ -4514,6 +4514,7 @@ class SketchBrush(object):
         if self.new_rad:
             self.pxl_rad = self.new_rad
             self.new_rad = None
+            self.screen_hand_reverse = False
             self.preview_circle = []
             
             self.make_circles()
@@ -4525,6 +4526,7 @@ class SketchBrush(object):
     def brush_pix_size_cancel(self, context):
         self.preview_circle = []
         self.new_rad = None
+        self.screen_hand_reverse = False
         context.window.cursor_warp(context.region.x + self.init_x, context.region.y + self.init_y)
     
     def brush_pix_size_pressure(self, mouse_x, mouse_y, pressure):
