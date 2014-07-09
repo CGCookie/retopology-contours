@@ -79,9 +79,10 @@ class GVert:
     def is_cross(self):       return self.has_0() and self.has_1() and self.has_2() and self.has_3()
     
     def get_gedges(self): return [self.gedge0,self.gedge1,self.gedge2,self.gedge3]
-    
     def _set_gedges(self, ge0, ge1, ge2, ge3):
         self.gedge0,self.gedge1,self.gedge2,self.gedge3 = ge0,ge1,ge2,ge3
+    def count_gedges(self):
+        return sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])
     
     def disconnect_gedge(self, gedge):
         gedges = [ge for ge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3] if ge]
@@ -94,14 +95,24 @@ class GVert:
     def connect_gedge(self, gedge):
         pr = profiler.start()
         
-        gedge0,gedge1,gedge2,gedge3 = self.gedge0,self.gedge1,self.gedge2,self.gedge3
-        connect_count = sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])+1
+        norm = self.snap_norm
+        
+        gedge0,gedge1,gedge2,gedge3 = self.get_gedges()
         vec  = gedge.get_derivative_at(self).normalized()
         vec0 = None if not gedge0 else gedge0.get_derivative_at(self).normalized()
         vec1 = None if not gedge1 else gedge1.get_derivative_at(self).normalized()
         vec2 = None if not gedge2 else gedge2.get_derivative_at(self).normalized()
         vec3 = None if not gedge3 else gedge3.get_derivative_at(self).normalized()
-        norm = self.snap_norm
+        
+        l_gedges = [ge for ge in self.get_gedges()+[gedge] if ge]
+        l_vecs = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
+        l_gedges = sort_objects_by_angles(norm, l_gedges, l_vecs)
+        l_gedges.reverse()
+        l_vecs = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
+        l_angles = [math.fmod(v0.angle(v1),math.pi*2) for v0,v1 in zip(l_vecs,l_vecs[1:]+[l_vecs[0]])]
+        
+        connect_count = len(l_gedges)
+        
         
         #Larger abs value restricts more parallel
         #end to end connections.
@@ -129,26 +140,20 @@ class GVert:
         elif connect_count == 3:
             if self.is_endtoend():
                 dprint('end-to-end => t-junction')
-                if vec0.cross(vec).dot(norm)<0 and vec.cross(vec2).dot(norm)<0:
-                    self._set_gedges(gedge,gedge2,None,gedge0)
-                else:
-                    self._set_gedges(gedge,gedge0,None,gedge2)
             else:
                 dprint('l-junction => t-junction')
-                if vec0.dot(vec) < threshold_angle_endtoend:
-                    self._set_gedges(gedge1,gedge,None,gedge0)
-                else:
-                    self._set_gedges(gedge0,gedge1,None,gedge)
+            max_i,max_a = 0,0
+            for i,a in enumerate(l_angles):
+                if a>max_a: max_i,max_a = i,a
+            i0 = (max_i+2) % 3
+            i1 = max_i
+            i3 = (max_i+1) % 3
+            self._set_gedges(l_gedges[i0],l_gedges[i1],None,l_gedges[i3])
             assert self.is_tjunction()
         
         elif connect_count == 4:
             dprint('t-junction => cross-junction')
-            if vec0.dot(vec) < threshold_angle_endtoend:
-                self._set_gedges(gedge0,gedge1,gedge,gedge3)
-            elif vec1.dot(vec) < threshold_angle_endtoend:
-                self._set_gedges(gedge1,gedge3,gedge,gedge0)
-            else:
-                self._set_gedges(gedge3,gedge0,gedge,gedge1)
+            self._set_gedges(l_gedges[0],l_gedges[1],l_gedges[2],l_gedges[3])
             assert self.is_cross()
         
         else:
@@ -252,9 +257,6 @@ class GVert:
         if gedge == self.gedge3: return (3,0)
         assert False, "GEdge is not connected"
     
-    def count_connections(self):
-        return sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])
-    
     def toggle_corner(self):
         if (self.is_endtoend() or self.is_ljunction()):
             if self.is_ljunction():
@@ -269,7 +271,7 @@ class GVert:
             assert self.is_tjunction()
             self.update()
         else:
-            print('Cannot toggle corner on GVert with %i connections' % self.count_connections())
+            print('Cannot toggle corner on GVert with %i connections' % self.count_gedges())
     
     def smooth(self, v=0.1):
         pr = profiler.start()
@@ -661,7 +663,7 @@ class PolyStrips(object):
         
     def dissolve_gvert(self, gvert, tessellation=20):
         if not (gvert.is_endtoend() or gvert.is_ljunction()):
-            print('Cannot dissolve GVert with %i connections' % gvert.count_connections())
+            print('Cannot dissolve GVert with %i connections' % gvert.count_gedges())
             return
         
         gedge0 = gvert.gedge0
