@@ -4404,7 +4404,153 @@ class CutLineManipulatorWidget(object):
                     
                     contour_utilities.draw_points(context, [p1_2d, p4_2d, p6_2d], self.color3, 5)
                     contour_utilities.draw_polyline_from_points(context, [p6_2d, p4_2d], self.color ,2 , "GL_STIPPLE")
+
+
+class SketchBrush(object):
+    def __init__(self,context,settings, x,y,pixel_radius, ob, n_samples = 4):
+        
+        self.settings = settings  #should be input from user prefs
+        
+        self.ob = ob
+        self.pxl_rad = pixel_radius
+        self.wrld_width = None
+        self.n_sampl = n_samples
+        
+        self.x = x
+        self.y = y
+        
+        self.init_x = x
+        self.init_y = y
+        
+        self.mouse_circle  = []
+        self.preview_circle = []
+        self.sample_points = []
+        self.world_sample_points = []
+        
+        self.right_handed = True
+        self.screen_hand_reverse = False
+        
+
+    def update_mouse_move_hover(self,context, mouse_x, mouse_y):
+        #update the location
+        self.x = mouse_x
+        self.y = mouse_y
+        
+        #don't think i need this
+        self.init_x = self.x
+        self.init_y = self.y
+        
+    def make_circles(self):
+        self.mouse_circle = contour_utilities.simple_circle(self.x, self.y, self.pxl_rad, 20)
+        self.mouse_circle.append(self.mouse_circle[0])
+        self.sample_points = contour_utilities.simple_circle(self.x, self.y, self.pxl_rad, self.n_sampl)
+        
+    def get_brush_world_size(self,context):
+        region = context.region  
+        rv3d = context.space_data.region_3d
+        center = (self.x,self.y)
+        vec, center_ray = contour_utilities.ray_cast_region2d(region, rv3d, center, self.ob, self.settings)
+        vec.normalize()
+        widths = []
+        self.world_sample_points = []
             
+        if center_ray[2] != -1:
+            for pt in self.sample_points:
+                V, ray = contour_utilities.ray_cast_region2d(region, rv3d, pt, self.ob, self.settings)
+                if ray[2] != -1:
+                    widths.append((ray[0] - center_ray[0]).length)
+                    self.world_sample_points.append(ray[0])
+            
+            if len(widths):
+                #average and correct for the view being parallel to the surfaec normal
+                self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))
+            else:
+                #defalt quad size in case we don't get to raycast succesfully
+                self.world_width = self.ob.dimensions.length * 1/self.settings.density_factor
+                
+        
+        
+    def brush_pix_size_init(self,context,x,y):
+        
+        if self.right_handed:
+            new_x = self.x + self.pxl_rad
+            if new_x > context.region.width:
+                new_x = self.x - self.pxl_rad
+                self.screen_hand_reverse = True
+        else:
+            new_x = self.x - self.pxl_rad
+            if new_x < 0:
+                new_x = self.x + self.pxl_rad
+                self.screen_hand_reverse = True
+            
+        
+        #NOTE.  Widget coordinates are in area space.
+        #cursor warp takes coordinates in window space!
+        #need to check that this works with t panel, n panel etc.
+        context.window.cursor_warp(context.region.x + new_x, context.region.y + self.y)
+        
+        
+    def brush_pix_size_interact(self,mouse_x,mouse_y, precise = False):
+        
+        #this handles right handedness and reflecting for screen
+        side_factor = (-1 + 2 * self.right_handed) * (1 - 2 * self.screen_hand_reverse)
+        
+        #this will always be the corect sign wrt to change in radius
+        rad_diff = side_factor * (mouse_x - (self.init_x + side_factor * self.pxl_rad))
+        if precise:
+            rad_diff *= .1
+            
+        if rad_diff < 0:
+            rad_diff =  self.pxl_rad*(math.exp(rad_diff/self.pxl_rad) - 1)
+        
+        
+               
+        self.new_rad = self.pxl_rad + rad_diff    
+        self.preview_circle = contour_utilities.simple_circle(self.x, self.y, self.new_rad, 20)
+        self.preview_circle.append(self.preview_circle[0])
+        
+        
+    def brush_pix_size_confirm(self, context):
+        if self.new_rad:
+            self.pxl_rad = self.new_rad
+            self.new_rad = None
+            self.preview_circle = []
+            
+            self.make_circles()
+            self.get_brush_world_size(context)
+            
+            #put the mouse back
+            context.window.cursor_warp(context.region.x + self.x, context.region.y + self.y)
+            
+    def brush_pix_size_cancel(self, context):
+        self.preview_circle = []
+        self.new_rad = None
+        context.window.cursor_warp(context.region.x + self.init_x, context.region.y + self.init_y)
+    
+    def brush_pix_size_pressure(self, mouse_x, mouse_y, pressure):
+        'assume pressure from -1 to 1 with 0 being the midpoint'
+        
+        print('not implemented')
+    
+    def draw(self, context):
+        #TODO color and size
+        
+        #draw the circle
+        if self.mouse_circle != []:
+            contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
+        
+        #draw the sample points which are raycast
+        if self.world_sample_points != []:
+            #TODO color and size
+            contour_utilities.draw_3d_points(context, self.world_sample_points, (1,1,1,1), 3)
+    
+        #draw the preview circle if changing brush size
+        if self.preview_circle != []:
+            contour_utilities.draw_polyline_from_points(context, self.preview_circle, (.8,.8,.8,.8), 2, "GL_LINE_SMOOTH")
+        
+        
+        
+                    
 class ContourStatePreserver(object):
     def __init__(self, operator):
         self.mode = operator.mode

@@ -60,7 +60,7 @@ import time
 from mathutils import Vector
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities, general_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySketchLine, ContourCutSeries, ContourStatePreserver
+from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySketchLine, ContourCutSeries, ContourStatePreserver, SketchBrush
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
@@ -2186,12 +2186,17 @@ def poly_sketch_draw_callback(self,context):
         for line in self.sketch_lines:
             line.draw(context)
             
-    if len(self.mouse_circle):
-        contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
-        contour_utilities.draw_3d_points(context, self.sample_points, (1,.5, .5,1), 5)
-        blf.position(0, 20, 20, 0)
-        blf.size(0,20, 72)
-        blf.draw(0, str(round(self.world_width,3)))
+    #if len(self.mouse_circle):
+        #contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
+        #contour_utilities.draw_3d_points(context, self.sample_points, (1,.5, .5,1), 5)
+        
+        
+        
+    self.sketch_brush.draw(context)
+    if self.sketch_brush.world_width:
+            blf.position(0, 20, 20, 0)
+            blf.size(0,20, 72)
+            blf.draw(0, str(round(self.sketch_brush.world_width,3)))
     
 #Poly Sketch Branch
 class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
@@ -2220,6 +2225,25 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
+        
+        if self.brush_interact:
+            if event.type == 'MOUSEMOVE':
+                self.sketch_brush.brush_pix_size_interact(event.mouse_region_x, event.mouse_region_y, precise = event.shift)
+        
+            elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+                self.sketch_brush.brush_pix_size_confirm(context)
+                self.brush_interact = False
+                
+            elif event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
+                self.sketch_brush.brush_pix_size_cancel(context)
+                self.brush_interact = False
+                
+            return {'RUNNING_MODAL'}
+        
+        if event.type == 'F' and event.value == 'PRESS' and not self.brush_interact:
+            self.brush_interact = True
+            self.sketch_brush.brush_pix_size_init(context,event.mouse_region_x, event.mouse_region_y)
+            return {'RUNNING_MODAL'}
         
         if event.type == 'K' and self.selected and self.selected.desc == 'SKETCH_LINE':
             if event.value == 'PRESS':
@@ -2355,52 +2379,12 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
                     
         elif event.type == 'MOUSEMOVE':
             #preview circle
+            self.sketch_brush.update_mouse_move_hover(context, event.mouse_region_x, event.mouse_region_y)
+            self.sketch_brush.make_circles()
             
-            region = context.region  
-            rv3d = context.space_data.region_3d
+            if not self.drag and not self.draw:
+                self.sketch_brush.get_brush_world_size(context)
             
-            #the mouse points and 4 sample points around the mouse
-            center = (event.mouse_region_x,event.mouse_region_y)
-            top =  (event.mouse_region_x,event.mouse_region_y + settings.quad_prev_radius)
-            left =  (event.mouse_region_x - settings.quad_prev_radius, event.mouse_region_y)
-            bottom =  (event.mouse_region_x,event.mouse_region_y - settings.quad_prev_radius)
-            right =  (event.mouse_region_x + settings.quad_prev_radius, event.mouse_region_y)
-            
-            vec, center_ray = contour_utilities.ray_cast_region2d(region, rv3d, center, self.original_form, settings)
-            vec.normalize()
-            widths = []
-            
-            if center_ray[2] != -1:
-                self.sample_points = []
-                self.mouse_circle = contour_utilities.simple_circle(event.mouse_region_x, event.mouse_region_y, settings.quad_prev_radius, 20)
-                vec1, top_ray = contour_utilities.ray_cast_region2d(region, rv3d, top, self.original_form, settings)
-                vec2, left_ray = contour_utilities.ray_cast_region2d(region, rv3d, left, self.original_form, settings)
-                vec3, bottom_ray = contour_utilities.ray_cast_region2d(region, rv3d, bottom, self.original_form, settings)
-                vec4, right_ray = contour_utilities.ray_cast_region2d(region, rv3d, right, self.original_form, settings)
-                
-                if top_ray[2] != -1:
-                    widths.append((top_ray[0] - center_ray[0]).length)
-                    self.sample_points.append(top_ray[0])
-                if left_ray[2] != -1:
-                    widths.append((left_ray[0] - center_ray[0]).length)
-                    self.sample_points.append(left_ray[0])
-                if bottom_ray[2] != -1:
-                    widths.append((bottom_ray[0] - center_ray[0]).length)
-                    self.sample_points.append(bottom_ray[0])
-                if right_ray[2] != -1:
-                    widths.append((right_ray[0] - center_ray[0]).length)
-                    self.sample_points.append(right_ray[0])
-                
-                if len(widths):
-                    #average and correct for the view being parallel to the surfaec normal
-                    self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))
-                else:
-                    #defalt quad size in case we don't get to raycast succesfully
-                    self.world_width = self.original_form.dimensions.length * 1/settings.density_factor
-                    
-            else:
-                self.mouse_circle = []
-                self.sample_points = []
                 
             if self.drag and self.draw:
                 
@@ -2828,6 +2812,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         #TODO Settings harmony CODE REVIEW
         self.settings = settings
         
+        
         #if edit mode
         if context.mode == 'EDIT_MESH':
             
@@ -3024,7 +3009,11 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
         self.sample_points = []
         self.world_width = self.original_form.dimensions.length * 1/settings.density_factor
         
-        
+        self.sketch_brush = SketchBrush(context, 
+                                        settings, 
+                                        event.mouse_region_x, event.mouse_region_y, 
+                                        settings.quad_prev_radius, 
+                                        self.original_form)
         self.sketch_intersections = []
             
        
@@ -3034,6 +3023,7 @@ class CGCOOKIE_OT_retopo_poly_sketch(bpy.types.Operator):
             self.destination_ob.show_x_ray = True
             
         #is the mouse clicked and held down
+        self.brush_interact = False
         self.drag = False
         self.navigating = False
         self.draw = False
