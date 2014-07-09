@@ -33,7 +33,7 @@ import bmesh
 import blf
 import itertools
 from polystrips_utilities import *
-from general_utilities import iter_running_sum, dprint, axisangle_to_quat
+from general_utilities import iter_running_sum, dprint, get_object_length_scale, profiler
 
 #Make the addon name and location accessible
 AL = general_utilities.AddonLocator()
@@ -41,9 +41,10 @@ AL = general_utilities.AddonLocator()
 
 
 class GVert:
-    def __init__(self, obj, position, radius, normal, tangent_x, tangent_y):
+    def __init__(self, obj, length_scale, position, radius, normal, tangent_x, tangent_y):
         # store info
         self.obj       = obj
+        self.length_scale = length_scale
         
         self.position  = position
         self.radius    = radius
@@ -91,6 +92,8 @@ class GVert:
             self.connect_gedge(ge)
     
     def connect_gedge(self, gedge):
+        pr = profiler.start('GVert.connect_gedge')
+        
         gedge0,gedge1,gedge2,gedge3 = self.gedge0,self.gedge1,self.gedge2,self.gedge3
         connect_count = sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])+1
         vec  = gedge.get_derivative_at(self).normalized()
@@ -102,7 +105,7 @@ class GVert:
         
         #Larger abs value restricts more parallel
         #end to end connections.
-        threshold_endtoend = -0.8
+        threshold_angle_endtoend = -0.8
         
         if connect_count == 1:
             # first to be connected
@@ -111,7 +114,7 @@ class GVert:
             assert self.is_endpoint()
         
         elif connect_count == 2:
-            if vec0.dot(vec) < threshold_endtoend:
+            if vec0.dot(vec) < threshold_angle_endtoend:
                 dprint('endpoint => end-to-end')
                 self._set_gedges(gedge0,None,gedge,None)
                 assert self.is_endtoend()
@@ -132,7 +135,7 @@ class GVert:
                     self._set_gedges(gedge,gedge0,None,gedge2)
             else:
                 dprint('l-junction => t-junction')
-                if vec0.dot(vec) < threshold_endtoend:
+                if vec0.dot(vec) < threshold_angle_endtoend:
                     self._set_gedges(gedge1,gedge,None,gedge0)
                 else:
                     self._set_gedges(gedge0,gedge1,None,gedge)
@@ -140,9 +143,9 @@ class GVert:
         
         elif connect_count == 4:
             dprint('t-junction => cross-junction')
-            if vec0.dot(vec) < threshold_endtoend:
+            if vec0.dot(vec) < threshold_angle_endtoend:
                 self._set_gedges(gedge0,gedge1,gedge,gedge3)
-            elif vec1.dot(vec) < threshold_endtoend:
+            elif vec1.dot(vec) < threshold_angle_endtoend:
                 self._set_gedges(gedge1,gedge3,gedge,gedge0)
             else:
                 self._set_gedges(gedge3,gedge0,gedge,gedge1)
@@ -153,8 +156,12 @@ class GVert:
         
         assert self.gedge0 == gedge or self.gedge1 == gedge or self.gedge2 == gedge or self.gedge3 == gedge
         self.update()
+        
+        pr.done()
     
     def snap_corners(self):
+        pr = profiler.start('GVert.snap_corners')
+        
         mx = self.obj.matrix_world
         mx3x3 = mx.to_3x3()
         imx = mx.inverted()
@@ -163,9 +170,13 @@ class GVert:
         self.corner1 = mx * self.obj.closest_point_on_mesh(imx*self.corner1)[0]
         self.corner2 = mx * self.obj.closest_point_on_mesh(imx*self.corner2)[0]
         self.corner3 = mx * self.obj.closest_point_on_mesh(imx*self.corner3)[0]
+        
+        pr.done()
     
     def update(self, do_edges=True):
         if self.doing_update: return
+        
+        pr = profiler.start('GVert.update')
         
         mx = self.obj.matrix_world
         mx3x3 = mx.to_3x3()
@@ -221,6 +232,8 @@ class GVert:
         self.corner3 = get_corner(self,-1, 1, igv3,r3, igv2,r2)
         
         self.snap_corners()
+        
+        pr.done()
     
     def get_corners(self):
         return (self.corner0, self.corner1, self.corner2, self.corner3)
@@ -259,6 +272,8 @@ class GVert:
             print('Cannot toggle corner on GVert with %i connections' % self.count_connections())
     
     def smooth(self, v=0.1):
+        pr = profiler.start('GVert.smooth')
+        
         der0 = self.gedge0.get_derivative_at(self).normalized() if self.gedge0 else Vector()
         der1 = self.gedge1.get_derivative_at(self).normalized() if self.gedge1 else Vector()
         der2 = self.gedge2.get_derivative_at(self).normalized() if self.gedge2 else Vector()
@@ -321,15 +336,18 @@ class GVert:
             self.gedge3.rotate_gverts_at(self, Quaternion(cross,  angle))
             
             self.update()
+        
+        pr.done()
 
 
 class GEdge:
     '''
     Graph Edge (GEdge) stores end points and "way points" (cubic bezier)
     '''
-    def __init__(self, obj, gvert0, gvert1, gvert2, gvert3):
+    def __init__(self, obj, length_scale, gvert0, gvert1, gvert2, gvert3):
         # store end gvertices
         self.obj = obj
+        self.length_scale = length_scale
         self.gvert0 = gvert0
         self.gvert1 = gvert1
         self.gvert2 = gvert2
@@ -465,7 +483,7 @@ class GEdge:
         l_tany  = [t.cross(n).normalized() for t,n in zip(l_tanx,l_norms)]
         
         # create igverts!
-        self.cache_igverts = [GVert(self.obj,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
+        self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
         
         '''
         snaps already computed igverts to surface of object ob
@@ -488,11 +506,13 @@ class PolyStrips(object):
     def __init__(self, context, obj):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
+        self.obj = obj
+        self.length_scale = get_object_length_scale(self.obj)
+        
         # graph vertices and edges
         self.gverts = []
         self.gedges = []
         
-        self.obj = obj
     
     def disconnect_gedge(self, gedge):
         assert gedge in self.gedges
@@ -511,20 +531,19 @@ class PolyStrips(object):
         gvs = set(gv for gv in self.gverts if gv.is_unconnected() and gv not in egvs)
         self.gverts = [gv for gv in self.gverts if gv not in gvs]
     
-    def create_gvert(self, co, radius=0.001):
+    def create_gvert(self, co, radius=0.005):
         #if type(co) is not Vector: co = Vector(co)
         p0  = co
-        r0  = radius
+        r0  = self.length_scale * radius
         n0  = Vector((0,0,1))
         tx0 = Vector((1,0,0))
         ty0 = Vector((0,1,0))
-        gv = GVert(self.obj,p0,r0,n0,tx0,ty0)
+        gv = GVert(self.obj,self.length_scale,p0,r0,n0,tx0,ty0)
         self.gverts += [gv]
-        print('gv: ' + str(p0))
         return gv
     
     def create_gedge(self, gv0, gv1, gv2, gv3):
-        ge = GEdge(self.obj, gv0, gv1, gv2, gv3)
+        ge = GEdge(self.obj, self.length_scale, gv0, gv1, gv2, gv3)
         ge.update()
         self.gedges += [ge]
         return ge
@@ -543,8 +562,8 @@ class PolyStrips(object):
         stroke: list of tuples (3d location, pressure)
         '''
         
-        threshold_tooshort     = 0.003
-        threshold_junctiondist = 0.003
+        threshold_tooshort     = self.length_scale / 200 # 0.003
+        threshold_junctiondist = self.length_scale / 200 # 0.003
         
         # too short?
         if len(stroke) < 4:
@@ -584,7 +603,7 @@ class PolyStrips(object):
                 dprint('Splitting gedge %i at %f; Splitting stroke at %i' % (i_gedge,min_t,min_i0))
                 
                 pt0,pr0 = stroke[min_i0]
-                cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t)
+                cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t, self.length_scale)
                 
                 gv_split = self.create_gvert(cb0[3])
                 
@@ -616,7 +635,7 @@ class PolyStrips(object):
                 return
             
         
-        l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke])
+        l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke], self.length_scale)
         pregv,fgv = None,None
         for i,bpts in enumerate(l_bpts):
             t0,t3,bpt0,bpt1,bpt2,bpt3 = bpts
@@ -657,7 +676,7 @@ class PolyStrips(object):
         if gedge1.gvert3 == gvert: pts1.reverse()
         pts = pts0 + pts1
         
-        t0,t3,p0,p1,p2,p3 = cubic_bezier_fit_points(pts, allow_split=False)[0]
+        t0,t3,p0,p1,p2,p3 = cubic_bezier_fit_points(pts, self.length_scale, allow_split=False)[0]
         
         gv0 = gedge0.gvert3 if gedge0.gvert0 == gvert else gedge0.gvert0
         gv1 = self.create_gvert(p1)

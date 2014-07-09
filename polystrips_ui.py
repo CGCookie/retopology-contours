@@ -36,7 +36,7 @@ from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
 import random
-from general_utilities import frange
+from general_utilities import frange, get_object_length_scale, profiler
 
 from polystrips import *
 
@@ -248,6 +248,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.is_navigating = False
         
         ####################################
+        # profiler
+        
+        if event_press == 'Q':
+            profiler.printout()
+        
+        ####################################
         # accept / cancel
         
         if event_press in {'RET', 'NUMPAD_ENTER'}:
@@ -327,7 +333,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             if len(self.sketch)>1:
                 p3d = general_utilities.ray_cast_path(context, self.obj, self.sketch)
                 if len(p3d) > 1:
-                    p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,0.001)] + [p3d[-1]]
+                    # tessellate stroke
+                    length_tess = self.length_scale / 700
+                    p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
                     stroke = [(p,1) for p in p3d]
                     self.sketch = []
                     self.polystrips.insert_gedge_from_stroke(stroke)
@@ -342,10 +350,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             i,ge,t,d = self.polystrips.closest_gedge_to_point(pt)
             self.sel_gedge,self.sel_gvert = None,None
-            if d < 0.002:
-                if (pt-ge.gvert0.position).length < 0.002:
+            if d < self.length_scale * .005:
+                if (pt-ge.gvert0.position).length < self.length_scale * .005:
                     self.sel_gvert = ge.gvert0
-                elif (pt-ge.gvert3.position).length < 0.002:
+                elif (pt-ge.gvert3.position).length < self.length_scale * .005:
                     self.sel_gvert = ge.gvert3
                 else:
                     self.sel_gedge = ge
@@ -461,6 +469,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.sketch = []
         
         self.obj = context.object
+        self.length_scale = get_object_length_scale(self.obj)
         me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
         me.update()
         self.bme = bmesh.new()

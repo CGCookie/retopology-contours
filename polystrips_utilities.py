@@ -175,7 +175,7 @@ def cubic_bezier_fit_value(l_v, l_t):
     
     return (err,v0,v1,v2,v3)
 
-def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1, allow_split=True):
+def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=True):
     l_d  = [0] + [(v0-v1).length for v0,v1 in zip(l_co[:-1],l_co[1:])]
     l_ad = [s for d,s in general_utilities.iter_running_sum(l_d)]
     dist = sum(l_d)
@@ -185,7 +185,7 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1, allow_split=True):
     ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co], l_t)
     ez,z0,z1,z2,z3 = cubic_bezier_fit_value([co[2] for co in l_co], l_t)
     
-    if ex+ey+ez < 0.0001 or depth == 4 or len(l_co)<=15 or not allow_split:
+    if ex+ey+ez < 0.0004*error_scale or depth == 4 or len(l_co)<=15 or not allow_split:
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
         return [(t0,t3,p0,p1,p2,p3)]
     
@@ -220,12 +220,12 @@ def cubic_bezier_fit_points(l_co, depth=0, t0=0, t3=1, allow_split=True):
     tsplit = ind_split / (len(l_co)-1)
     return cubic_bezier_fit_points(l_co_left, depth+1, t0, tsplit) + cubic_bezier_fit_points(l_co_right, depth+1, tsplit, t3)
 
-def cubic_bezier_split(p0, p1, p2, p3, t_split, tessellate=10):
+def cubic_bezier_split(p0, p1, p2, p3, t_split, error_scale, tessellate=10):
     tm0 = t_split / tessellate
     tm1 = (1-t_split) / tessellate
     pts0 = [cubic_bezier_blend_t(p0,p1,p2,p3,tm0*i) for i in range(tessellate+1)]
     pts1 = [cubic_bezier_blend_t(p0,p1,p2,p3,t_split+tm1*i) for i in range(tessellate+1)]
-    cb0 = cubic_bezier_fit_points(pts0, allow_split=False)[0][2:]
-    cb1 = cubic_bezier_fit_points(pts1, allow_split=False)[0][2:]
+    cb0 = cubic_bezier_fit_points(pts0, error_scale, allow_split=False)[0][2:]
+    cb1 = cubic_bezier_fit_points(pts1, error_scale, allow_split=False)[0][2:]
     return [cb0,cb1]
 

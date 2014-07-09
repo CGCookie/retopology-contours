@@ -22,6 +22,7 @@ Donated to CGCookie and the world
 #This class makes it easier to be install location independent
 import sys, os
 import bpy
+import time
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 from mathutils import Vector, Matrix, Quaternion
 
@@ -34,6 +35,53 @@ class AddonLocator(object):
     def AppendPath(self):
         sys.path.append(self.FolderPath)
         print("Addon path has been registered into system path for this session")
+
+class Profiler(object):
+    class ProfilerHelper(object):
+        def __init__(self, pr, text):
+            full_text = (pr.stack[-1].text+':' if pr.stack else '') + text
+            assert full_text not in pr.d_start, '"%s" found in profiler already?'%text
+            self.pr = pr
+            self.text = full_text
+            self._is_done = False
+            self.pr.d_start[self.text] = time.time()
+            self.pr.stack += [self]
+        def __del__(self):
+            if not self._is_done:
+                dprint('WARNING: calling ProfilerHelper.done!')
+                self.done()
+        def done(self):
+            assert self.pr.stack[-1] == self
+            assert not self._is_done
+            self.pr.stack.pop()
+            self._is_done = True
+            st = self.pr.d_start[self.text]
+            en = time.time()
+            self.pr.d_times[self.text] = self.pr.d_times.get(self.text,0) + (en-st)
+            self.pr.d_count[self.text] = self.pr.d_count.get(self.text,0) + 1
+            del self.pr.d_start[self.text]
+    
+    def __init__(self):
+        self.d_start = {}
+        self.d_times = {}
+        self.d_count = {}
+        self.stack = []
+    
+    def start(self, text):
+        return self.ProfilerHelper(self, text)
+    
+    def __del__(self):
+        self.printout()
+    
+    def printout(self):
+        dprint('Profiler:')
+        for text in sorted(self.d_times):
+            tottime = self.d_times[text]
+            totcount = self.d_count[text]
+            dprint('  %6.2f / %3d = %6.2f - %s' % (tottime, totcount, tottime/totcount, text))
+
+profiler = Profiler()
+
 
 def range_mod(m):
     for i in range(m): yield(i,(i+1)%m)
@@ -76,9 +124,11 @@ def frange(start, end, step):
             yield v
             v += step
 
-def axisangle_to_quat(axis, angle):
-    qx = cross.x * sin(angle/2)
-    qy = cross.y * sin(angle/2)
-    qz = cross.z * sin(angle/2)
-    qw = cos(angle/2)
-    return Quaternion((qx,qy,qz,qw))
+def vector_compwise_mult(a,b):
+    return Vector(ax*bx for ax,bx in zip(a,b))
+
+def get_object_length_scale(o):
+    sc = o.scale
+    bbox = [vector_compwise_mult(sc,Vector(bpt)) for bpt in o.bound_box]
+    l = (min(bbox)-max(bbox)).length
+    return l
