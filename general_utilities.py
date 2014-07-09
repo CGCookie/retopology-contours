@@ -23,6 +23,7 @@ Donated to CGCookie and the world
 import sys, os
 import bpy
 import time
+import inspect
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 from mathutils import Vector, Matrix, Quaternion
 
@@ -39,7 +40,7 @@ class AddonLocator(object):
 class Profiler(object):
     class ProfilerHelper(object):
         def __init__(self, pr, text):
-            full_text = (pr.stack[-1].text+':' if pr.stack else '') + text
+            full_text = (pr.stack[-1].text+'^' if pr.stack else '') + text
             assert full_text not in pr.d_start, '"%s" found in profiler already?'%text
             self.pr = pr
             self.text = full_text
@@ -67,7 +68,13 @@ class Profiler(object):
         self.d_count = {}
         self.stack = []
     
-    def start(self, text):
+    def start(self, text=None):
+        if not text:
+            st = inspect.stack()
+            filename = os.path.split(st[1][1])[1]
+            linenum  = st[1][2]
+            fnname   = st[1][3]
+            text = '%s (%s:%d)' % (fnname, filename, linenum)
         return self.ProfilerHelper(self, text)
     
     def __del__(self):
@@ -78,7 +85,13 @@ class Profiler(object):
         for text in sorted(self.d_times):
             tottime = self.d_times[text]
             totcount = self.d_count[text]
-            dprint('  %6.2f / %3d = %6.2f - %s' % (tottime, totcount, tottime/totcount, text))
+            calls = text.split('^')
+            if len(calls) == 1:
+                t = text
+            else:
+                t = '    '*(len(calls)-2) + ' \\- ' + calls[-1]
+            dprint('  %6.2f / %3d = %6.2f - %s' % (tottime, totcount, tottime/totcount, t))
+        dprint('')
 
 profiler = Profiler()
 

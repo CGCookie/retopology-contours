@@ -92,7 +92,7 @@ class GVert:
             self.connect_gedge(ge)
     
     def connect_gedge(self, gedge):
-        pr = profiler.start('GVert.connect_gedge')
+        pr = profiler.start()
         
         gedge0,gedge1,gedge2,gedge3 = self.gedge0,self.gedge1,self.gedge2,self.gedge3
         connect_count = sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])+1
@@ -160,7 +160,7 @@ class GVert:
         pr.done()
     
     def snap_corners(self):
-        pr = profiler.start('GVert.snap_corners')
+        pr = profiler.start()
         
         mx = self.obj.matrix_world
         mx3x3 = mx.to_3x3()
@@ -176,7 +176,7 @@ class GVert:
     def update(self, do_edges=True):
         if self.doing_update: return
         
-        pr = profiler.start('GVert.update')
+        pr = profiler.start()
         
         mx = self.obj.matrix_world
         mx3x3 = mx.to_3x3()
@@ -272,7 +272,7 @@ class GVert:
             print('Cannot toggle corner on GVert with %i connections' % self.count_connections())
     
     def smooth(self, v=0.1):
-        pr = profiler.start('GVert.smooth')
+        pr = profiler.start()
         
         der0 = self.gedge0.get_derivative_at(self).normalized() if self.gedge0 else Vector()
         der1 = self.gedge1.get_derivative_at(self).normalized() if self.gedge1 else Vector()
