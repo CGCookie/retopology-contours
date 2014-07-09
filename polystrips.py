@@ -100,6 +100,8 @@ class GVert:
         vec3 = None if not gedge3 else gedge3.get_derivative_at(self).normalized()
         norm = self.snap_norm
         
+        #Larger abs value restricts more parallel
+        #end to end connections.
         threshold_endtoend = -0.8
         
         if connect_count == 1:
@@ -547,6 +549,7 @@ class PolyStrips(object):
         # too short?
         if len(stroke) < 4:
             print('Too few samples in stroke (subsample??)')
+            #subsampling function in contour_utils.space_evenly_on_path
             return
         tot_length = sum((s0[0]-s1[0]).length for s0,s1 in zip(stroke[:-1],stroke[1:]))
         if tot_length < threshold_tooshort:
