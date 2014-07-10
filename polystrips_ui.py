@@ -220,11 +220,28 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
     
     
-    def modal_main(self, eventd):
+    def create_mesh(self, context):
+        verts,quads = self.polystrips.create_mesh()
+        bm = bmesh.new()
+        for v in verts: bm.verts.new(v)
+        for q in quads: bm.faces.new([bm.verts[i] for i in q])
         
-        #############################################
-        # general navigation
+        dest_me  = bpy.data.meshes.new( self.obj.name + "_polystrips")
+        dest_obj = bpy.data.objects.new(self.obj.name + "_polystrips", dest_me)
+        dest_obj.matrix_world = self.obj.matrix_world
+        dest_obj.update_tag()
+        dest_obj.show_all_edges = True
+        dest_obj.show_wire = True
+        dest_obj.show_x_ray = True
         
+        bm.to_mesh(dest_me)
+        
+        context.scene.objects.link(dest_obj)
+        dest_obj.select = True
+        context.scene.objects.active = dest_obj
+    
+    
+    def modal_nav(self, eventd):
         events_numpad = {
             'NUMPAD_1',       'NUMPAD_2',       'NUMPAD_3',
             'NUMPAD_4',       'NUMPAD_5',       'NUMPAD_6',
@@ -246,35 +263,28 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         handle_nav |= eventd['type'].startswith('TRACKPAD')
         handle_nav |= eventd['ftype'] in events_numpad
         handle_nav |= eventd['ftype'] in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
+        
         if handle_nav:
             self.post_update = True
-            return 'nav' if eventd['value'] == 'PRESS' else ''
+            return 'nav' if eventd['value'] == 'PRESS' else 'nav done'
         
+        return ''
+        
+    
+    def modal_main(self, eventd):
+        
+        #############################################
+        # general navigation
+        
+        nav = self.modal_nav(eventd)
+        if nav:
+            return 'nav' if nav=='nav' else ''
         
         ########################################
         # accept / cancel
         
         if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:
-            # TODO: push this codeblock into separate fn
-            verts,quads = self.polystrips.create_mesh()
-            bm = bmesh.new()
-            for v in verts: bm.verts.new(v)
-            for q in quads: bm.faces.new([bm.verts[i] for i in q])
-            
-            dest_me  = bpy.data.meshes.new( self.obj.name + "_polystrips")
-            dest_obj = bpy.data.objects.new(self.obj.name + "_polystrips", dest_me)
-            dest_obj.matrix_world = self.obj.matrix_world
-            dest_obj.update_tag()
-            dest_obj.show_all_edges = True
-            dest_obj.show_wire = True
-            dest_obj.show_x_ray = True
-            
-            bm.to_mesh(dest_me)
-            
-            eventd['context'].scene.objects.link(dest_obj)
-            dest_obj.select = True
-            eventd['context'].scene.objects.active = dest_obj
-            
+            self.create_mesh(eventd['context'])
             return 'finish'
         
         if eventd['press'] in {'ESC'}:
@@ -306,7 +316,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if eventd['press'] == 'RIGHTMOUSE':                                         # picking
             x,y = eventd['mouse']
-            pt = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])[0]
+            pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+            if not pts: return ''
+            pt = pts[0]
             i,ge,t,d = self.polystrips.closest_gedge_to_point(pt)
             self.sel_gedge,self.sel_gvert = None,None
             if d < self.length_scale * .005:
