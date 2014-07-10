@@ -320,6 +320,20 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sel_gvert.position += (self.tool_x * dx + self.tool_y * dy) * self.length_scale / 1000
             self.sel_gvert.update()
     
+    def grab_tool_gvert_neighbors(self, command):
+        if command == 'init':
+            sgv = self.sel_gvert
+            lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
+            self.tool_data = [(sgv,sgv.position)] + [(gv,Vector(gv.position)) for gv in lgv]
+        elif command == 'undo':
+            for gv,p in self.tool_data:
+                gv.position = p
+                gv.update()
+        else:
+            dx,dy = command
+            for gv,up in self.tool_data:
+                gv.position += (self.tool_x*dx + self.tool_y*dy)*self.length_scale / 1000
+                gv.update()
     
     ##############################
     # modal functions
@@ -478,6 +492,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             if eventd['press'] == 'G':
                 self.ready_tool(eventd, self.grab_tool_gvert)
+                return 'grab tool'
+            
+            if eventd['press'] == 'CTRL+G':
+                self.ready_tool(eventd, self.grab_tool_gvert_neighbors)
                 return 'grab tool'
             
             
