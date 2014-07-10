@@ -220,6 +220,20 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
     
     
+    def ready_action(self, eventd):
+        rgn   = eventd['context'].region
+        r3d   = eventd['context'].space_data.region_3d
+        loc   = self.sel_gvert.position
+        mx,my = eventd['mouse']
+        cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
+        rad   = math.sqrt((mx-cx)**2 + (my-cy)**2)
+        
+        self.action_center = (cx,cy)
+        self.mode_pos      = (mx,my)
+        self.action_radius = rad
+        self.mode_radius   = rad
+        
+    
     def create_mesh(self, context):
         verts,quads = self.polystrips.create_mesh()
         bm = bmesh.new()
@@ -376,20 +390,13 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gvert.smooth()
                 return ''
             
-            if eventd['press'] == 'S':
-                rgn   = eventd['context'].region
-                r3d   = eventd['context'].space_data.region_3d
-                loc   = self.sel_gvert.position
-                mx,my = eventd['mouse']
-                cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
-                rad   = math.sqrt((mx-cx)**2 + (my-cy)**2)
-                
-                self.action_center = (cx,cy)
-                self.action_radius = rad
-                self.mode_radius   = rad
-                self.mode_pos      = (mx,my)
-                
+            if eventd['press'] == 'CTRL+S':
+                self.ready_action(eventd)
                 return 'scale gvert'
+            
+            if eventd['press'] == 'S':
+                self.ready_action(eventd)
+                return 'scale gvert radius'
         
         return ''
     
@@ -450,6 +457,32 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         return ''
     
+    def modal_scale_gvert_radius(self, eventd):
+        cx,cy = self.action_center
+        mx,my = eventd['mouse']
+        ar = self.action_radius
+        pr = self.mode_radius
+        cr = math.sqrt((mx-cx)**2 + (my-cy)**2)
+        
+        def update(sgv, m):
+            sgv.radius *= m
+            sgv.update()
+        
+        if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
+            return 'main'
+        
+        if eventd['press'] == 'ESC':
+            update(self.sel_gvert, ar / cr)
+            return 'main'
+        
+        if eventd['type'] == 'MOUSEMOVE':
+            update(self.sel_gvert, cr / pr)
+            self.mode_pos    = (mx,my)
+            self.mode_radius = cr
+            return ''
+        
+        return ''
+    
     
     def modal(self, context, event):
         context.area.tag_redraw()
@@ -458,9 +491,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         eventd = self.get_event_details(context, event)
         
         FSM = {}
-        FSM['main']        = self.modal_main
-        FSM['sketch']      = self.modal_sketching
-        FSM['scale gvert'] = self.modal_scale_gvert
+        FSM['main']                 = self.modal_main
+        FSM['sketch']               = self.modal_sketching
+        FSM['scale gvert']          = self.modal_scale_gvert
+        FSM['scale gvert radius']   = self.modal_scale_gvert_radius
         
         nmode = FSM[self.mode](eventd)
         
