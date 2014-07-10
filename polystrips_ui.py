@@ -425,26 +425,29 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 if self.sel_gedge:
                     lcpts = [self.sel_gedge.gvert1,self.sel_gedge.gvert2]
                 else:
-                    lcpts = [
-                        ge.gvert1 if ge.gvert0==self.sel_gvert else ge.gvert2
-                        for ge in self.sel_gvert.get_gedges() if ge
-                        ]
-                ld = [(cpt.snap_pos-pt).length for cpt in lcpts]
-                lcpts = [cpt for d,cpt in zip(ld,lcpts) if d < threshold_pick]
-                if lcpts:
-                    self.sel_gvert = lcpts[0]
+                    sgv = self.sel_gvert
+                    lge = self.sel_gvert.get_gedges()
+                    lcpts = [ge.get_inner_gvert_at(sgv) for ge in lge if ge] + [sgv]
+                for cpt in lcpts:
+                    if not cpt.is_picked(pt): continue
+                    self.sel_gvert = cpt
                     self.sel_gedge = None
                     return ''
             
-            i,ge,t,d = self.polystrips.closest_gedge_to_point(pt)
+            for gv in self.polystrips.gverts:
+                if gv.is_unconnected(): continue
+                if not gv.is_picked(pt): continue
+                self.sel_gvert = gv
+                self.sel_gedge = None
+                return ''
+            
+            for ge in self.polystrips.gedges:
+                if not ge.is_picked(pt): continue
+                self.sel_gvert = None
+                self.sel_gedge = ge
+                return ''
+            
             self.sel_gedge,self.sel_gvert = None,None
-            if d < threshold_pick:
-                if (pt-ge.gvert0.snap_pos).length < threshold_pick:
-                    self.sel_gvert = ge.gvert0
-                elif (pt-ge.gvert3.snap_pos).length < threshold_pick:
-                    self.sel_gvert = ge.gvert3
-                else:
-                    self.sel_gedge = ge
             return ''
         
         

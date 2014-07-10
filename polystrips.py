@@ -256,6 +256,14 @@ class GVert:
     def get_corners(self):
         return (self.corner0, self.corner1, self.corner2, self.corner3)
     
+    def is_picked(self, pt):
+        c0 = self.corner0 - pt
+        c1 = self.corner1 - pt
+        c2 = self.corner2 - pt
+        c3 = self.corner3 - pt
+        n = self.snap_norm
+        return c1.cross(c0).dot(n)>0 and c2.cross(c1).dot(n)>0 and c3.cross(c2).dot(n)>0 and c0.cross(c3).dot(n)>0
+    
     def get_corners_of(self, gedge):
         if gedge == self.gedge0: return (self.corner0, self.corner1)
         if gedge == self.gedge1: return (self.corner1, self.corner2)
@@ -407,6 +415,11 @@ class GEdge:
             return cubic_bezier_derivative(p3,p2,p1,p0,0)
         assert False, "gv is not an endpoint"
     
+    def get_inner_gvert_at(self, gv):
+        if self.gvert0 == gv: return self.gvert1
+        if self.gvert3 == gv: return self.gvert2
+        assert False, "gv is not an endpoint"
+    
     def get_vector_from(self, gv):
         is_0 = (self.gvert0==gv)
         gv0 = self.gvert0 if is_0 else self.gvert3
@@ -518,7 +531,40 @@ class GEdge:
         self.gvert1.update(do_edges=False)
         self.gvert2.update(do_edges=False)
         self.gvert3.update(do_edges=False)
-
+    
+    def is_picked(self, pt):
+        for p0,p1,p2,p3 in self.iter_segments():
+            c0,c1,c2,c3 = p0-pt,p1-pt,p2-pt,p3-pt
+            n = (c0-c1).cross(c2-c1)
+            if c1.cross(c0).dot(n)>0 and c2.cross(c1).dot(n)>0 and c3.cross(c2).dot(n)>0 and c0.cross(c3).dot(n)>0:
+                return True
+        return False
+    
+    def iter_segments(self):
+        l = len(self.cache_igverts)
+        if l == 0:
+            cur0,cur1 = self.gvert0.get_corners_of(self)
+            cur2,cur3 = self.gvert3.get_corners_of(self)
+            yield (cur0,cur1,cur2,cur3)
+        else:
+            prev0,prev1 = None,None
+            for i,gvert in enumerate(self.cache_igverts):
+                if i%2 == 0: continue
+                
+                if i == 1:
+                    gv0 = self.gvert0
+                    cur0,cur1 = gv0.get_corners_of(self)
+                elif i == l-2:
+                    gv3 = self.gvert3
+                    cur1,cur0 = gv3.get_corners_of(self)
+                else:
+                    cur0 = gvert.position+gvert.tangent_y*gvert.radius
+                    cur1 = gvert.position-gvert.tangent_y*gvert.radius
+                
+                if prev0 and prev1:
+                    yield (prev0,cur0,cur1,prev1)
+                prev0,prev1 = cur0,cur1
+        
 
 class PolyStrips(object):
     def __init__(self, context, obj):
