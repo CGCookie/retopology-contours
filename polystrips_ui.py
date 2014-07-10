@@ -103,7 +103,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         draw_bezier_directions  = False
         draw_gvert_orientations = False
         draw_unconnected_gverts = False
-        draw_gvert_unsnapped    = True
+        draw_gvert_unsnapped    = False
         
         color_selected          = (.5,1,.5,.8)
         
@@ -202,7 +202,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if draw_gvert_unsnapped:
             for gv in self.polystrips.gverts:
-                p,x,y,n = gv.position,gv.tangent_x,gv.tangent_y,gv.normal
+                p,x,y,n = gv.position,gv.snap_tanx,gv.snap_tany,gv.snap_norm
                 contour_utilities.draw_polyline_from_3dpoints(context, [p,p+x*0.01], (1,0,0,1), 1, "GL_LINE_SMOOTH")
                 contour_utilities.draw_polyline_from_3dpoints(context, [p,p+y*0.01], (0,1,0,1), 1, "GL_LINE_SMOOTH")
                 contour_utilities.draw_polyline_from_3dpoints(context, [p,p+n*0.01], (0,0,1,1), 1, "GL_LINE_SMOOTH")
