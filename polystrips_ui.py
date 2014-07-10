@@ -366,7 +366,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             if eventd['press'] == 'S':
                 self.mode_pos = eventd['mouse']
-                self.mode = 'scale'
+                self.mode = 'scale gvert'
                 return ''
         
         return ''
