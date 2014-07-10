@@ -392,11 +392,13 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             if eventd['press'] == 'CTRL+S':
                 self.ready_action(eventd)
-                return 'scale gvert'
+                self.scale_tool_fn = self.scale_gvert
+                return 'scale tool'
             
             if eventd['press'] == 'S':
                 self.ready_action(eventd)
-                return 'scale gvert radius'
+                self.scale_tool_fn = self.scale_gvert_radius
+                return 'scale tool'
         
         return ''
     
@@ -426,62 +428,40 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         return ''
     
     
-    def modal_scale_gvert(self, eventd):
-        cx,cy = self.action_center
-        mx,my = eventd['mouse']
-        ar = self.action_radius
-        pr = self.mode_radius
-        cr = math.sqrt((mx-cx)**2 + (my-cy)**2)
-        
-        def update(sgv, m):
-            p = sgv.position
-            for ge in sgv.get_gedges():
-                if not ge: continue
-                gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
-                gv.position = p + (gv.position-p) * m
-                gv.update()
-            sgv.update()
-        
-        if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
-            return 'main'
-        
-        if eventd['press'] == 'ESC':
-            update(self.sel_gvert, ar / cr)
-            return 'main'
-        
-        if eventd['type'] == 'MOUSEMOVE':
-            update(self.sel_gvert, cr / pr)
-            self.mode_pos    = (mx,my)
-            self.mode_radius = cr
-            return ''
-        
-        return ''
+    def scale_gvert(self, m):
+        sgv = self.sel_gvert
+        p = sgv.position
+        for ge in sgv.get_gedges():
+            if not ge: continue
+            gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+            gv.position = p + (gv.position-p) * m
+            gv.update()
+        sgv.update()
     
-    def modal_scale_gvert_radius(self, eventd):
+    def scale_gvert_radius(self, m):
+        sgv = self.sel_gvert
+        sgv.radius *= m
+        sgv.update()
+    
+    def modal_scale_tool(self, eventd):
         cx,cy = self.action_center
         mx,my = eventd['mouse']
         ar = self.action_radius
         pr = self.mode_radius
         cr = math.sqrt((mx-cx)**2 + (my-cy)**2)
         
-        def update(sgv, m):
-            sgv.radius *= m
-            sgv.update()
-        
         if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
             return 'main'
         
         if eventd['press'] == 'ESC':
-            update(self.sel_gvert, ar / cr)
+            self.scale_tool_fn(ar / cr)
             return 'main'
         
         if eventd['type'] == 'MOUSEMOVE':
-            update(self.sel_gvert, cr / pr)
+            self.scale_tool_fn(cr / pr)
             self.mode_pos    = (mx,my)
             self.mode_radius = cr
             return ''
-        
-        return ''
     
     
     def modal(self, context, event):
@@ -491,10 +471,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         eventd = self.get_event_details(context, event)
         
         FSM = {}
-        FSM['main']                 = self.modal_main
-        FSM['sketch']               = self.modal_sketching
-        FSM['scale gvert']          = self.modal_scale_gvert
-        FSM['scale gvert radius']   = self.modal_scale_gvert_radius
+        FSM['main']         = self.modal_main
+        FSM['sketch']       = self.modal_sketching
+        FSM['scale tool']   = self.modal_scale_tool
         
         nmode = FSM[self.mode](eventd)
         
