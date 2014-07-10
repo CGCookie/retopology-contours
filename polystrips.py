@@ -61,6 +61,7 @@ class GVert:
         self.gedge1 = None
         self.gedge2 = None
         self.gedge3 = None
+        self.gedge_inner = None
         
         self.doing_update = False
         
@@ -91,6 +92,11 @@ class GVert:
         self._set_gedges(None,None,None,None)
         for ge in gedges:
             self.connect_gedge(ge)
+    
+    def connect_gedge_inner(self, gedge):
+        assert self.is_unconnected()
+        assert not self.gedge_inner
+        self.gedge_inner = gedge
     
     def connect_gedge(self, gedge):
         pr = profiler.start()
@@ -193,14 +199,21 @@ class GVert:
         self.snap_tanx = self.tangent_x.normalized()
         self.snap_tany = self.snap_norm.cross(self.snap_tanx).normalized()
         
+        self.position = self.snap_pos
+        # NOTE! DO NOT UPDATE NORMAL, TANGENT_X, AND TANGENT_Y
+        
         if do_edges:
             self.doing_update = True
             for gedge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3]:
                 if gedge: gedge.update()
+            if self.gedge_inner: self.gedge_inner.update()
             self.doing_update = False
         
         self.snap_tanx = (Vector((0.2,0.1,0.5)) if not self.gedge0 else self.gedge0.get_derivative_at(self)).normalized()
         self.snap_tany = self.snap_norm.cross(self.snap_tanx).normalized()
+        
+        # NOTE! DO NOT UPDATE NORMAL, TANGENT_X, AND TANGENT_Y
+        
         
         #         ge2         #
         #          |          #
@@ -356,6 +369,8 @@ class GEdge:
         self.gvert3 = gvert3
         
         gvert0.connect_gedge(self)
+        gvert1.connect_gedge_inner(self)
+        gvert2.connect_gedge_inner(self)
         gvert3.connect_gedge(self)
         
         # create caching vars
@@ -500,6 +515,8 @@ class GEdge:
             igv.tangent_y = igv.normal.cross(igv.tangent_x).normalized()
         
         self.gvert0.update(do_edges=False)
+        self.gvert1.update(do_edges=False)
+        self.gvert2.update(do_edges=False)
         self.gvert3.update(do_edges=False)
 
 
