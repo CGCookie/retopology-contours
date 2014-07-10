@@ -365,9 +365,19 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 return ''
             
             if eventd['press'] == 'S':
-                self.mode_pos = eventd['mouse']
-                self.mode = 'scale gvert'
-                return ''
+                rgn   = eventd['context'].region
+                r3d   = eventd['context'].space_data.region_3d
+                loc   = self.sel_gvert.position
+                mx,my = eventd['mouse']
+                cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
+                rad   = math.sqrt((mx-cx)**2 + (my-cy)**2)
+                
+                self.action_center = (cx,cy)
+                self.action_radius = rad
+                self.mode_radius   = rad
+                self.mode_pos      = (mx,my)
+                
+                return 'scale gvert'
         
         return ''
     
@@ -398,30 +408,32 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     
     def modal_scale_gvert(self, eventd):
+        cx,cy = self.action_center
+        mx,my = eventd['mouse']
+        ar = self.action_radius
+        pr = self.mode_radius
+        cr = math.sqrt((mx-cx)**2 + (my-cy)**2)
+        
+        def update(sgv, m):
+            p = sgv.position
+            for ge in sgv.get_gedges():
+                if not ge: continue
+                gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+                gv.position = p + (gv.position-p) * m
+                gv.update()
+            sgv.update()
+        
         if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
             return 'main'
         
-        if eventd['press'] in {'ESC'}:
-            # TODO: handle cancel!
+        if eventd['press'] == 'ESC':
+            update(self.sel_gvert, ar / cr)
             return 'main'
         
         if eventd['type'] == 'MOUSEMOVE':
-            x,y = eventd['mouse']
-            mx,my = self.mode_pos
-            dx,dy = x-mx,y-my
-            p = self.sel_gvert.position
-            
-            for ge in self.sel_gvert.get_gedges():
-                if not ge: continue
-                gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
-                d = (gv.position-p).length
-                m = 1 + dy / 100
-                gv.position = p + (gv.position-p) * m
-                gv.update()
-            
-            self.sel_gvert.update()
-            
-            self.mode_pos = (x,y)
+            update(self.sel_gvert, cr / pr)
+            self.mode_pos    = (mx,my)
+            self.mode_radius = cr
             return ''
         
         return ''
@@ -500,7 +512,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #return {'RUNNING_MODAL'}
         
         self.mode = 'main'
-        self.mode_pos = (0,0)
+        self.mode_pos      = (0,0)
+        self.mode_radius   = 0
+        self.action_center = (0,0)
+        self.action_radius = 0
         self.is_navigating = False
         self.sketch_curpos = (0,0)
         self.sketch = []
