@@ -222,6 +222,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     def modal_main(self, eventd):
         
+        #############################################
+        # general navigation
+        
         events_numpad = {
             'NUMPAD_1',       'NUMPAD_2',       'NUMPAD_3',
             'NUMPAD_4',       'NUMPAD_5',       'NUMPAD_6',
@@ -243,11 +246,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         handle_nav |= eventd['type'].startswith('TRACKPAD')
         handle_nav |= eventd['ftype'] in events_numpad
         handle_nav |= eventd['ftype'] in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
-        if handle_nav:                                                              # general navigation
+        if handle_nav:
             self.post_update = True
             return 'nav' if eventd['value'] == 'PRESS' else ''
         
-        if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:                              # accept
+        
+        ########################################
+        # accept / cancel
+        
+        if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:
             # TODO: push this codeblock into separate fn
             verts,quads = self.polystrips.create_mesh()
             bm = bmesh.new()
@@ -270,12 +277,24 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             return 'finish'
         
-        if eventd['press'] in {'ESC'}:                                              # cancel
+        if eventd['press'] in {'ESC'}:
             return 'cancel'
+        
+        
+        #####################################
+        # general
         
         if eventd['press'] == 'Q':                                                  # profiler printout
             profiler.printout()
             return ''
+        
+        if eventd['press'] == 'P':                                                  # grease pencil => strokes
+            for gpl in self.obj.grease_pencil.layers: gpl.hide = True
+            for stroke in self.strokes_original:
+                self.polystrips.insert_gedge_from_stroke(stroke)
+            self.polystrips.remove_unconnected_gverts()
+            return ''
+        
         
         if eventd['press'] == 'LEFTMOUSE':                                          # start sketching
             x,y = eventd['mouse']
@@ -297,13 +316,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     self.sel_gvert = ge.gvert3
                 else:
                     self.sel_gedge = ge
-            return ''
-        
-        if eventd['press'] == 'P':                                                  # grease pencil => strokes
-            for gpl in self.obj.grease_pencil.layers: gpl.hide = True
-            for stroke in self.strokes_original:
-                self.polystrips.insert_gedge_from_stroke(stroke)
-            self.polystrips.remove_unconnected_gverts()
             return ''
         
         
@@ -353,7 +365,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 return ''
             
             if eventd['press'] == 'S':
-                self.mode_pos = (event.mouse_region_x,event.mouse_region_y)
+                self.mode_pos = eventd['mouse']
                 self.mode = 'scale'
                 return ''
         
