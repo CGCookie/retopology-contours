@@ -99,7 +99,7 @@ def cubic_bezier_points_dist(p0, p1, p2, p3, dist, first=True):
         pts += [p for seg in subd for p in cubic_bezier_points_dist(seg[0],seg[1],seg[2],seg[3], dist, first=False)]
     return pts
 
-def cubic_bezier_find_closest_t_approx(p0, p1, p2, p3, p, max_depth=8, steps=10, threshold=0.001):
+def cubic_bezier_find_closest_t_approx(p0, p1, p2, p3, p, max_depth=8, steps=10):
     '''
     find t that approximately returns p
     returns (t,dist)

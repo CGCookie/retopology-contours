@@ -79,6 +79,13 @@ def draw_points(context, points, color, size):
     bgl.glEnd()   
     return
 
+def draw_circle(context, c,n,r,col,step=10):
+    x = Vector((0.42,-0.42,0.42)).cross(n).normalized() * r
+    y = n.cross(x).normalized() * r
+    d2r = math.pi/180
+    p3d = [c+x*math.cos(i*d2r)+y*math.sin(i*d2r) for i in range(0,360+step,step)]
+    contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
+
 def edge_loops_from_bmedges(bmesh, bm_edges):
     """
     Edge loops defined by edges

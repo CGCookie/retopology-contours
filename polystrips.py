@@ -460,7 +460,6 @@ class GEdge:
             if ctest % 2 == 1:
                 c = ctest
         if c <= 1:
-            print('GEdge too small for GVert radii!')
             self.cache_igverts = []
             return
         
@@ -565,7 +564,8 @@ class PolyStrips(object):
         '''
         
         threshold_tooshort     = self.length_scale / 200 # 0.003
-        threshold_junctiondist = self.length_scale / 200 # 0.003
+        threshold_junctiondist = self.length_scale / 150 # 0.003
+        threshold_splitdist    = self.length_scale / 200
         
         # too short?
         if len(stroke) < 4:
@@ -577,20 +577,29 @@ class PolyStrips(object):
             print('Stroke too short (%f)' % tot_length)
             return
         
+        
+        # TODO: self intersection tests!
+        # check for self-intersections
+        #for i0,info0 in enumerate(stroke):
+        #    pt0,pr0 = info0
+        #    for i1,info1 in enumerate(stroke):
+        #        if i1 <= i0: continue
+        #        pt1,pr1 = info1
+        
+        
         sgv0,sgv3 = None,None
         
         # check for junctions
         for i_gedge,gedge in enumerate(self.gedges):
             p0,p1,p2,p3 = gedge.get_positions()
             
-            min_i0,min_t,min_d = -1,-1,threshold_junctiondist
-            
+            min_i0,min_t,min_d = -1,-1,0
             # find closest distance between stroke and gedge
             for i0,info0 in enumerate(stroke):
                 pt0,pr0 = info0
-                (split_t,split_d) = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt0,threshold=min_d)
-                if split_d <= min_d: min_i0,min_t,min_d = i0,split_t,split_d
-            if min_i0 == -1: continue
+                (split_t,split_d) = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt0)
+                if min_i0 == -1 or split_d <= min_d: min_i0,min_t,min_d = i0,split_t,split_d
+            if min_i0 == -1 or min_d > max([threshold_junctiondist,threshold_splitdist]): continue
             
             split_bpt = cubic_bezier_blend_t(p0,p1,p2,p3,min_t)
             
@@ -599,7 +608,7 @@ class PolyStrips(object):
             closeto_p0 = ((split_bpt-p0).length <= threshold_junctiondist)
             closeto_p3 = ((split_bpt-p3).length <= threshold_junctiondist)
             
-            if not closeto_p0 and not closeto_p3:
+            if not closeto_p0 and not closeto_p3 and min_d <= threshold_splitdist:
                 # not close to endpoint of bezier, so split bezier and recurse
                 
                 dprint('Splitting gedge %i at %f; Splitting stroke at %i' % (i_gedge,min_t,min_i0))
@@ -625,13 +634,15 @@ class PolyStrips(object):
                 
                 if closeto_i0:   sgv0 = gv_split
                 elif closeto_i1: sgv3 = gv_split
-            else:
+            
+            if closeto_p0 or closeto_p3:
                 if closeto_i0:
                     sgv0 = gedge.gvert0 if closeto_p0 else gedge.gvert3
                 if closeto_i1:
                     sgv3 = gedge.gvert0 if closeto_p0 else gedge.gvert3
             
             if not closeto_i0 and not closeto_i1:
+                # break stroke
                 self.insert_gedge_from_stroke(stroke[:min_i0])
                 self.insert_gedge_from_stroke(stroke[min_i0:])
                 return

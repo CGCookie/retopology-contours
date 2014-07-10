@@ -37,6 +37,7 @@ from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, Fl
 from bpy.types import Operator, AddonPreferences
 import random
 from general_utilities import frange, get_object_length_scale, profiler
+from contour_utilities import draw_circle
 
 from polystrips import *
 
@@ -44,144 +45,12 @@ from polystrips import *
 AL = general_utilities.AddonLocator()
 
 #a place to store stokes for later
-global contour_cache 
+global contour_cache
 
 #store any temporary triangulated objects
 #store the bmesh to prevent recalcing bmesh
 #each time :-)
 global contour_mesh_cache
-
-def draw_circle(context, c,n,r,col,step=10):
-    x = Vector((0.42,-0.42,0.42)).cross(n).normalized() * r
-    y = n.cross(x).normalized() * r
-    d2r = math.pi/180
-    p3d = [c+x*math.cos(i*d2r)+y*math.sin(i*d2r) for i in range(0,360+step,step)]
-    contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
-
-def polystrips_draw_callback(self, context):
-    settings = context.user_preferences.addons[AL.FolderName].preferences
-    cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
-    
-    draw_original_strokes   = False
-    draw_bezier_directions  = False
-    draw_gvert_orientations = False
-    draw_unconnected_gverts = False
-    
-    color_selected          = (.5,1,.5,.8)
-    
-    color_gedge             = (1,.5,.5,.8)
-    color_gedge_nocuts      = (.5,.2,.2,.8)
-    
-    color_gvert_unconnected = (.2,.2,.2,.8)
-    color_gvert_endpoint    = (.2,.2,.5,.8)
-    color_gvert_endtoend    = (.5,.5,1,.8)
-    color_gvert_ljunction   = (1,.5,1,.8)
-    color_gvert_tjunction   = (1,1,.5,.8)
-    color_gvert_cross       = (1,1,1,.8)
-    color_gvert_midpoints   = (.7,1,.7,.8)
-    
-    sel_on = True #(int(time.time()*2)%2 == 1)
-    
-    if draw_original_strokes:
-        for stroke in self.strokes_original:
-            #p3d = [pt for pt,pr in stroke]
-            #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.7,.7,.8), 3, "GL_LINE_SMOOTH")
-            draw_circle(context, stroke[0][0], Vector((0,0,1)),0.003,(.2,.2,.2,.8))
-            draw_circle(context, stroke[-1][0], Vector((0,1,0)),0.003,(.5,.5,.5,.8))
-    
-    
-    for ind,gedge in enumerate(self.polystrips.gedges):
-        col = color_gedge if len(gedge.cache_igverts) else color_gedge_nocuts
-        if gedge == self.sel_gedge and sel_on: col = color_selected
-        
-        p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
-        
-        if draw_bezier_directions:
-            n0,n1,n2,n3 = gedge.gvert0.snap_norm, gedge.gvert1.snap_norm, gedge.gvert2.snap_norm, gedge.gvert3.snap_norm
-            pm = cubic_bezier_blend_t(p0,p1,p2,p3,0.5)
-            px = cubic_bezier_derivative(p0,p1,p2,p3,0.5).normalized()
-            pn = (n0+n3).normalized()
-            py = pn.cross(px).normalized()
-            rs = 0.0015
-            rl = 0.0007
-            p3d = [pm,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.8,0.8,0.8,0.8),1, "GL_LINE_SMOOTH")
-        
-        l = len(gedge.cache_igverts)
-        if l == 0:
-            # draw bezier for uncut segments!
-            #p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
-            #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 5, "GL_LINE_SMOOTH")
-            cur0,cur1 = gedge.gvert0.get_corners_of(gedge)
-            cur2,cur3 = gedge.gvert3.get_corners_of(gedge)
-            p3d = [cur0,cur1,cur2,cur3,cur0]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 3, "GL_LINE_SMOOTH")
-        else:
-            p3d = []
-            prev0,prev1 = None,None
-            for i,gvert in enumerate(gedge.cache_igverts):
-                if i%2 == 0: continue
-                
-                if i == 1:
-                    gv0 = gedge.gvert0
-                    cur0,cur1 = gv0.get_corners_of(gedge)
-                elif i == l-2:
-                    gv3 = gedge.gvert3
-                    cur1,cur0 = gv3.get_corners_of(gedge)
-                else:
-                    cur0 = gvert.position+gvert.tangent_y*gvert.radius
-                    cur1 = gvert.position-gvert.tangent_y*gvert.radius
-                
-                if prev0 and prev1:
-                    p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
-                else:
-                    p3d = [cur1,cur0]
-                prev0,prev1 = cur0,cur1
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
-        
-    
-    for gv in self.polystrips.gverts:
-        p0,p1,p2,p3 = gv.get_corners()
-        
-        if not draw_unconnected_gverts and gv.is_unconnected() and gv != self.sel_gvert: continue
-        
-        col = color_gvert_unconnected
-        if gv.is_endpoint(): col = color_gvert_endpoint
-        elif gv.is_endtoend(): col = color_gvert_endtoend
-        elif gv.is_ljunction(): col = color_gvert_ljunction
-        elif gv.is_tjunction(): col = color_gvert_tjunction
-        elif gv.is_cross(): col = color_gvert_cross
-        
-        if gv == self.sel_gvert and sel_on: col = color_selected
-        
-        p3d = [p0,p1,p2,p3,p0]
-        contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
-        
-        if draw_gvert_orientations:
-            p,x,y = gv.snap_pos,gv.snap_tanx,gv.snap_tany
-            contour_utilities.draw_polyline_from_3dpoints(context, [p,p+x*0.005], (1,0,0,1), 1, "GL_LINE_SMOOTH")
-            contour_utilities.draw_polyline_from_3dpoints(context, [p,p+y*0.005], (0,1,0,1), 1, "GL_LINE_SMOOTH")
-    
-    if self.sel_gedge:
-        col = color_gvert_midpoints
-        for gv in [self.sel_gedge.gvert1,self.sel_gedge.gvert2]:
-            p0,p1,p2,p3 = gv.get_corners()
-            p3d = [p0,p1,p2,p3,p0]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
-    
-    if self.sel_gvert:
-        col = color_gvert_midpoints
-        for ge in [self.sel_gvert.gedge0,self.sel_gvert.gedge1,self.sel_gvert.gedge2,self.sel_gvert.gedge3]:
-            if not ge: continue
-            gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
-            p0,p1,p2,p3 = gv.get_corners()
-            p3d = [p0,p1,p2,p3,p0]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
-    
-    if self.is_sketching:
-        contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
-        contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
-        
 
 
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
@@ -204,22 +73,154 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         else:
             return False
     
-    def modal(self, context, event):
-        context.area.tag_redraw()
-        settings = context.user_preferences.addons[AL.FolderName].preferences
-        
-        stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
-        
-        # event details
+    def get_event_details(self, context, event):
         event_ctrl    = 'CTRL+'  if event.ctrl  else ''
         event_shift   = 'SHIFT+' if event.shift else ''
         event_alt     = 'ALT+'   if event.alt   else ''
-        event_value   = event_ctrl + event_shift + event_alt + event.type
-        event_press   = event_value if event.value == 'PRESS'   else None
-        event_release = event_value if event.value == 'RELEASE' else None
+        event_ftype   = event_ctrl + event_shift + event_alt + event.type
         
-        ####################################
-        # general navigation event handling
+        return {
+            'context':  context,
+            
+            'ctrl':     event.ctrl,
+            'shift':    event.shift,
+            'alt':      event.alt,
+            'value':    event.value,
+            'type':     event.type,
+            'ftype':    event_ftype,
+            'press':    event_ftype if event.value=='PRESS'   else None,
+            'release':  event_ftype if event.value=='RELEASE' else None,
+            
+            'mouse':    (float(event.mouse_region_x), float(event.mouse_region_y)),
+            }
+    
+    
+    def draw_callback(self, context):
+        settings = context.user_preferences.addons[AL.FolderName].preferences
+        cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
+        
+        draw_original_strokes   = False
+        draw_bezier_directions  = False
+        draw_gvert_orientations = False
+        draw_unconnected_gverts = False
+        
+        color_selected          = (.5,1,.5,.8)
+        
+        color_gedge             = (1,.5,.5,.8)
+        color_gedge_nocuts      = (.5,.2,.2,.8)
+        
+        color_gvert_unconnected = (.2,.2,.2,.8)
+        color_gvert_endpoint    = (.2,.2,.5,.8)
+        color_gvert_endtoend    = (.5,.5,1,.8)
+        color_gvert_ljunction   = (1,.5,1,.8)
+        color_gvert_tjunction   = (1,1,.5,.8)
+        color_gvert_cross       = (1,1,1,.8)
+        color_gvert_midpoints   = (.7,1,.7,.8)
+        
+        sel_on = True #(int(time.time()*2)%2 == 1)
+        
+        if draw_original_strokes:
+            for stroke in self.strokes_original:
+                #p3d = [pt for pt,pr in stroke]
+                #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.7,.7,.8), 3, "GL_LINE_SMOOTH")
+                draw_circle(context, stroke[0][0], Vector((0,0,1)),0.003,(.2,.2,.2,.8))
+                draw_circle(context, stroke[-1][0], Vector((0,1,0)),0.003,(.5,.5,.5,.8))
+        
+        
+        for ind,gedge in enumerate(self.polystrips.gedges):
+            col = color_gedge if len(gedge.cache_igverts) else color_gedge_nocuts
+            if gedge == self.sel_gedge and sel_on: col = color_selected
+            
+            p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
+            
+            if draw_bezier_directions:
+                n0,n1,n2,n3 = gedge.gvert0.snap_norm, gedge.gvert1.snap_norm, gedge.gvert2.snap_norm, gedge.gvert3.snap_norm
+                pm = cubic_bezier_blend_t(p0,p1,p2,p3,0.5)
+                px = cubic_bezier_derivative(p0,p1,p2,p3,0.5).normalized()
+                pn = (n0+n3).normalized()
+                py = pn.cross(px).normalized()
+                rs = 0.0015
+                rl = 0.0007
+                p3d = [pm,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
+                contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.8,0.8,0.8,0.8),1, "GL_LINE_SMOOTH")
+            
+            l = len(gedge.cache_igverts)
+            if l == 0:
+                # draw bezier for uncut segments!
+                #p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
+                #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 5, "GL_LINE_SMOOTH")
+                cur0,cur1 = gedge.gvert0.get_corners_of(gedge)
+                cur2,cur3 = gedge.gvert3.get_corners_of(gedge)
+                p3d = [cur0,cur1,cur2,cur3,cur0]
+                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 3, "GL_LINE_SMOOTH")
+            else:
+                p3d = []
+                prev0,prev1 = None,None
+                for i,gvert in enumerate(gedge.cache_igverts):
+                    if i%2 == 0: continue
+                    
+                    if i == 1:
+                        gv0 = gedge.gvert0
+                        cur0,cur1 = gv0.get_corners_of(gedge)
+                    elif i == l-2:
+                        gv3 = gedge.gvert3
+                        cur1,cur0 = gv3.get_corners_of(gedge)
+                    else:
+                        cur0 = gvert.position+gvert.tangent_y*gvert.radius
+                        cur1 = gvert.position-gvert.tangent_y*gvert.radius
+                    
+                    if prev0 and prev1:
+                        p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
+                    else:
+                        p3d = [cur1,cur0]
+                    prev0,prev1 = cur0,cur1
+                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+            
+        
+        for gv in self.polystrips.gverts:
+            p0,p1,p2,p3 = gv.get_corners()
+            
+            if not draw_unconnected_gverts and gv.is_unconnected() and gv != self.sel_gvert: continue
+            
+            col = color_gvert_unconnected
+            if gv.is_endpoint(): col = color_gvert_endpoint
+            elif gv.is_endtoend(): col = color_gvert_endtoend
+            elif gv.is_ljunction(): col = color_gvert_ljunction
+            elif gv.is_tjunction(): col = color_gvert_tjunction
+            elif gv.is_cross(): col = color_gvert_cross
+            
+            if gv == self.sel_gvert and sel_on: col = color_selected
+            
+            p3d = [p0,p1,p2,p3,p0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+            
+            if draw_gvert_orientations:
+                p,x,y = gv.snap_pos,gv.snap_tanx,gv.snap_tany
+                contour_utilities.draw_polyline_from_3dpoints(context, [p,p+x*0.005], (1,0,0,1), 1, "GL_LINE_SMOOTH")
+                contour_utilities.draw_polyline_from_3dpoints(context, [p,p+y*0.005], (0,1,0,1), 1, "GL_LINE_SMOOTH")
+        
+        if self.sel_gedge:
+            col = color_gvert_midpoints
+            for gv in [self.sel_gedge.gvert1,self.sel_gedge.gvert2]:
+                p0,p1,p2,p3 = gv.get_corners()
+                p3d = [p0,p1,p2,p3,p0]
+                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+        
+        if self.sel_gvert:
+            col = color_gvert_midpoints
+            for ge in [self.sel_gvert.gedge0,self.sel_gvert.gedge1,self.sel_gvert.gedge2,self.sel_gvert.gedge3]:
+                if not ge: continue
+                gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+                p0,p1,p2,p3 = gv.get_corners()
+                p3d = [p0,p1,p2,p3,p0]
+                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+        
+        if self.mode == 'sketch':
+            contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
+    
+    
+    def modal_main(self, eventd):
         
         events_numpad = {
             'NUMPAD_1',       'NUMPAD_2',       'NUMPAD_3',
@@ -231,38 +232,29 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             'SHIFT+NUMPAD_1', 'SHIFT+NUMPAD_2', 'SHIFT+NUMPAD_3',
             'SHIFT+NUMPAD_4', 'SHIFT+NUMPAD_5', 'SHIFT+NUMPAD_6',
             'SHIFT+NUMPAD_7', 'SHIFT+NUMPAD_8', 'SHIFT+NUMPAD_9',
-            'NUMPAD_PLUS', 'NUMPAD_MINUS', # CTRL+NUMPAD_PLUS and CTRL+NUMPAD_MINUS are used later
+            'NUMPAD_PLUS', 'NUMPAD_MINUS', # CTRL+NUMPAD_PLUS and CTRL+NUMPAD_MINUS are used elsewhere
             'NUMPAD_PERIOD',
         }
+        
         handle_nav = False
-        handle_nav |= event.type == 'MIDDLEMOUSE'
-        handle_nav |= event.type == 'MOUSEMOVE' and self.is_navigating
-        handle_nav |= event_value in events_numpad      # note: event_value handles ctrl,shift,alt
-        handle_nav |= event.type.startswith('NDOF_')
-        handle_nav |= event.type.startswith('TRACKPAD')
-        handle_nav |= event_value in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} # note: event_value handles ctrl,shift,alt
-        if handle_nav:
-            self.is_navigating = (event.value == 'PRESS')
+        handle_nav |= eventd['type'] == 'MIDDLEMOUSE'
+        handle_nav |= eventd['type'] == 'MOUSEMOVE' and self.is_navigating
+        handle_nav |= eventd['type'].startswith('NDOF_')
+        handle_nav |= eventd['type'].startswith('TRACKPAD')
+        handle_nav |= eventd['ftype'] in events_numpad
+        handle_nav |= eventd['ftype'] in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
+        if handle_nav:                                                              # general navigation
             self.post_update = True
-            return {'PASS_THROUGH'}
-        self.is_navigating = False
+            return 'nav' if eventd['value'] == 'PRESS' else ''
         
-        ####################################
-        # profiler
-        
-        if event_press == 'Q':
-            profiler.printout()
-        
-        ####################################
-        # accept / cancel
-        
-        if event_press in {'RET', 'NUMPAD_ENTER'}:
+        if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:                              # accept
+            # TODO: push this codeblock into separate fn
             verts,quads = self.polystrips.create_mesh()
             bm = bmesh.new()
             for v in verts: bm.verts.new(v)
             for q in quads: bm.faces.new([bm.verts[i] for i in q])
             
-            dest_me = bpy.data.meshes.new(self.obj.name + "_polystrips")
+            dest_me  = bpy.data.meshes.new( self.obj.name + "_polystrips")
             dest_obj = bpy.data.objects.new(self.obj.name + "_polystrips", dest_me)
             dest_obj.matrix_world = self.obj.matrix_world
             dest_obj.update_tag()
@@ -272,82 +264,30 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             bm.to_mesh(dest_me)
             
-            context.scene.objects.link(dest_obj)
+            eventd['context'].scene.objects.link(dest_obj)
             dest_obj.select = True
-            context.scene.objects.active = dest_obj
+            eventd['context'].scene.objects.active = dest_obj
             
-            contour_utilities.callback_cleanup(self, context)
-            return {'CANCELLED'}
+            return 'finish'
         
-        if event_press in {'ESC'}:
-            contour_utilities.callback_cleanup(self, context)
-            return {'CANCELLED'}
+        if eventd['press'] in {'ESC'}:                                              # cancel
+            return 'cancel'
         
-        ####################################
-        # mode handling
+        if eventd['press'] == 'Q':                                                  # profiler printout
+            profiler.printout()
+            return ''
         
-        if self.mode:
-            if event_press == 'LEFTMOUSE' and self.mode:
-                self.mode = ''
-                return {'RUNNING_MODAL'}
-            
-            if event.type == 'MOUSEMOVE' and self.mode == 'scale':
-                x,y = event.mouse_region_x,event.mouse_region_y
-                mx,my = self.mode_pos
-                dx,dy = x-mx,y-my
-                p = self.sel_gvert.position
-                
-                for ge in self.sel_gvert.get_gedges():
-                    if not ge: continue
-                    gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
-                    d = (gv.position-p).length
-                    m = 1 + dy / 100
-                    gv.position = p + (gv.position-p) * m
-                    gv.update()
-                
-                self.sel_gvert.update()
-                
-                self.mode_pos = (x,y)
-                return {'RUNNING_MODAL'}
-        
-        ####################################
-        # sketching
-        
-        if event_press == 'LEFTMOUSE':
-            x,y = float(event.mouse_region_x),float(event.mouse_region_y)
+        if eventd['press'] == 'LEFTMOUSE':                                          # start sketching
+            x,y = eventd['mouse']
             self.sketch_curpos = (x,y)
             self.sketch = [(x,y)]
-            self.is_sketching = True
             self.sel_gvert = None
             self.sel_gedge = None
+            return 'sketch'
         
-        if event.type == 'MOUSEMOVE' and self.is_sketching:
-            x,y = float(event.mouse_region_x),float(event.mouse_region_y)
-            lx,ly = self.sketch[-1]
-            self.sketch_curpos = (x,y)
-            ss0,ss1 = stroke_smoothing,1-stroke_smoothing
-            self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1)]
-        
-        if event_release == 'LEFTMOUSE':
-            self.is_sketching = False
-            if len(self.sketch)>1:
-                p3d = general_utilities.ray_cast_path(context, self.obj, self.sketch)
-                if len(p3d) > 1:
-                    # tessellate stroke
-                    length_tess = self.length_scale / 700
-                    p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
-                    stroke = [(p,1) for p in p3d]
-                    self.sketch = []
-                    self.polystrips.insert_gedge_from_stroke(stroke)
-                    self.polystrips.remove_unconnected_gverts()
-        
-        ###################################
-        # picking
-        
-        if event_press == 'RIGHTMOUSE':
-            x,y = float(event.mouse_region_x),float(event.mouse_region_y)
-            pt = general_utilities.ray_cast_path(context, self.obj, [(x,y)])[0]
-            
+        if eventd['press'] == 'RIGHTMOUSE':                                         # picking
+            x,y = eventd['mouse']
+            pt = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])[0]
             i,ge,t,d = self.polystrips.closest_gedge_to_point(pt)
             self.sel_gedge,self.sel_gvert = None,None
             if d < self.length_scale * .005:
@@ -357,74 +297,160 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     self.sel_gvert = ge.gvert3
                 else:
                     self.sel_gedge = ge
+            return ''
         
-        ###################################
-        # gedge commands
-        
-        
-        if self.sel_gedge:
-            if event_press == 'X':
-                self.polystrips.disconnect_gedge(self.sel_gedge)
-                self.sel_gedge = None
-                self.polystrips.remove_unconnected_gverts()
-        
-        
-        ###################################
-        # gvert commands
-        
-        if self.sel_gvert:
-            if event_press == 'CTRL+NUMPAD_PLUS':
-                self.sel_gvert.radius *= 1.1
-                self.sel_gvert.update()
-            
-            if event_press == 'CTRL+NUMPAD_MINUS':
-                self.sel_gvert.radius /= 1.1
-                self.sel_gvert.update()
-                
-            if event_press == 'CTRL+D':
-                self.polystrips.dissolve_gvert(self.sel_gvert)
-                self.sel_gvert = None
-                self.polystrips.remove_unconnected_gverts()
-            
-            if event_press == 'CTRL+C':
-                self.sel_gvert.toggle_corner()
-            
-            if event_press == 'X':
-                self.polystrips.disconnect_gvert(self.sel_gvert)
-                self.sel_gvert = None
-                self.polystrips.remove_unconnected_gverts()
-            
-            if event_press == 'C':
-                self.sel_gvert.smooth()
-            
-            if event_press == 'S':
-                self.mode_pos = (event.mouse_region_x,event.mouse_region_y)
-                self.mode = 'scale'
-        
-        
-        ###################################
-        # grease pencil => strokes
-        
-        if event_press == 'P':
+        if eventd['press'] == 'P':                                                  # grease pencil => strokes
             for gpl in self.obj.grease_pencil.layers: gpl.hide = True
             for stroke in self.strokes_original:
                 self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
+            return ''
         
         
-        return{'RUNNING_MODAL'}
+        ###################################
+        # selected gedge commands
+        
+        if self.sel_gedge:
+            if eventd['press'] == 'X':
+                self.polystrips.disconnect_gedge(self.sel_gedge)
+                self.sel_gedge = None
+                self.polystrips.remove_unconnected_gverts()
+                return ''
+        
+        
+        ###################################
+        # selected gvert commands
+        
+        if self.sel_gvert:
+            if eventd['press'] == 'CTRL+NUMPAD_PLUS':
+                self.sel_gvert.radius *= 1.1
+                self.sel_gvert.update()
+                return ''
+            
+            if eventd['press'] == 'CTRL+NUMPAD_MINUS':
+                self.sel_gvert.radius /= 1.1
+                self.sel_gvert.update()
+                return ''
+                
+            if eventd['press'] == 'CTRL+D':
+                self.polystrips.dissolve_gvert(self.sel_gvert)
+                self.sel_gvert = None
+                self.polystrips.remove_unconnected_gverts()
+                return ''
+            
+            if eventd['press'] == 'CTRL+C':
+                self.sel_gvert.toggle_corner()
+                return ''
+            
+            if eventd['press'] == 'X':
+                self.polystrips.disconnect_gvert(self.sel_gvert)
+                self.sel_gvert = None
+                self.polystrips.remove_unconnected_gverts()
+                return ''
+            
+            if eventd['press'] == 'C':
+                self.sel_gvert.smooth()
+                return ''
+            
+            if eventd['press'] == 'S':
+                self.mode_pos = (event.mouse_region_x,event.mouse_region_y)
+                self.mode = 'scale'
+                return ''
+        
+        return ''
     
-    def create_gvert(self, mx, co, radius):
-        p0  = mx * co
-        r0  = radius
-        n0  = Vector((0,0,1))
-        tx0 = Vector((1,0,0))
-        ty0 = Vector((0,1,0))
-        return GVert(self.obj,p0,r0,n0,tx0,ty0)
+    def modal_sketching(self, eventd):
+        
+        if eventd['type'] == 'MOUSEMOVE':
+            x,y = eventd['mouse']
+            lx,ly = self.sketch[-1]
+            self.sketch_curpos = (x,y)
+            ss0,ss1 = self.stroke_smoothing,1-self.stroke_smoothing
+            self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1)]
+            return ''
+        
+        if eventd['release'] == 'LEFTMOUSE':
+            p3d = general_utilities.ray_cast_path(eventd['context'], self.obj, self.sketch) if len(self.sketch) > 1 else []
+            if len(p3d) <= 1: return 'main'
+            
+            # tessellate stroke (if needed) so we have good stroke sampling
+            length_tess = self.length_scale / 700
+            p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
+            stroke = [(p,1) for p in p3d]
+            self.sketch = []
+            self.polystrips.insert_gedge_from_stroke(stroke)
+            self.polystrips.remove_unconnected_gverts()
+            return 'main'
+        
+        return ''
+    
+    
+    def modal_scale_gvert(self, eventd):
+        if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
+            return 'main'
+        
+        if eventd['press'] in {'ESC'}:
+            # TODO: handle cancel!
+            return 'main'
+        
+        if eventd['type'] == 'MOUSEMOVE':
+            x,y = eventd['mouse']
+            mx,my = self.mode_pos
+            dx,dy = x-mx,y-my
+            p = self.sel_gvert.position
+            
+            for ge in self.sel_gvert.get_gedges():
+                if not ge: continue
+                gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+                d = (gv.position-p).length
+                m = 1 + dy / 100
+                gv.position = p + (gv.position-p) * m
+                gv.update()
+            
+            self.sel_gvert.update()
+            
+            self.mode_pos = (x,y)
+            return ''
+        
+        return ''
+    
+    
+    def modal(self, context, event):
+        context.area.tag_redraw()
+        settings = context.user_preferences.addons[AL.FolderName].preferences
+        
+        eventd = self.get_event_details(context, event)
+        
+        FSM = {}
+        FSM['main']        = self.modal_main
+        FSM['sketch']      = self.modal_sketching
+        FSM['scale gvert'] = self.modal_scale_gvert
+        
+        nmode = FSM[self.mode](eventd)
+        
+        self.is_navigating = (nmode == 'nav')
+        if nmode == 'nav': return {'PASS_THROUGH'}
+        
+        if nmode in {'finish','cancel'}:
+            contour_utilities.callback_cleanup(self, context)
+            return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
+        
+        if nmode: self.mode = nmode
+        
+        return {'RUNNING_MODAL'}
+    
     
     def create_polystrips_from_bezier(self, ob_bezier):
         data  = ob_bezier.data
         mx    = ob_bezier.matrix_world
+        
+        def create_gvert(self, mx, co, radius):
+            p0  = mx * co
+            r0  = radius
+            n0  = Vector((0,0,1))
+            tx0 = Vector((1,0,0))
+            ty0 = Vector((0,1,0))
+            return GVert(self.obj,p0,r0,n0,tx0,ty0)
         
         for spline in data.splines:
             pregv = None
@@ -461,12 +487,13 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #return {'CANCELLED'}
         #return {'RUNNING_MODAL'}
         
-        self.mode = ''
+        self.mode = 'main'
         self.mode_pos = (0,0)
         self.is_navigating = False
-        self.is_sketching = False
         self.sketch_curpos = (0,0)
         self.sketch = []
+        
+        self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
         
         self.obj = context.object
         self.length_scale = get_object_length_scale(self.obj)
@@ -488,8 +515,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         # switch to modal
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
-            polystrips_draw_callback,
-            (self, context),
+            self.draw_callback,
+            (context, ),
             'WINDOW',
             'POST_PIXEL'
             )
