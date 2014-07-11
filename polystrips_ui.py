@@ -98,6 +98,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     def draw_callback(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
+        r3d = context.space_data.region_3d
         
         draw_original_strokes   = False
         draw_bezier_directions  = False
@@ -118,7 +119,20 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         color_gvert_cross       = (1,1,1,.8)
         color_gvert_midpoints   = (.7,1,.7,.8)
         
-        sel_on = True #(int(time.time()*2)%2 == 1)
+        t = time.time()
+        tf = t - int(t)
+        tb = tf*2 if tf < 0.5 else 2-(tf*2)
+        tb1 = 1-tb
+        sel_fn = lambda c: tuple(cv*tb+cs*tb1 for cv,cs in zip(c,color_selected))
+        
+        new_matrix = [v for l in r3d.view_matrix for v in l]
+        if self.post_update or self.last_matrix != new_matrix:
+            for gv in self.polystrips.gverts:
+                gv.update_visibility(r3d)
+            for ge in self.polystrips.gedges:
+                ge.update_visibility(r3d)
+            self.post_update = False
+            self.last_matrix = new_matrix
         
         if draw_original_strokes:
             for stroke in self.strokes_original:
@@ -129,12 +143,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         
         for ind,gedge in enumerate(self.polystrips.gedges):
-            col = color_gedge if len(gedge.cache_igverts) else color_gedge_nocuts
-            if gedge == self.sel_gedge and sel_on: col = color_selected
-            
-            p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
-            
             if draw_bezier_directions:
+                p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
                 n0,n1,n2,n3 = gedge.gvert0.snap_norm, gedge.gvert1.snap_norm, gedge.gvert2.snap_norm, gedge.gvert3.snap_norm
                 pm = cubic_bezier_blend_t(p0,p1,p2,p3,0.5)
                 px = cubic_bezier_derivative(p0,p1,p2,p3,0.5).normalized()
@@ -145,40 +155,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 p3d = [pm,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.8,0.8,0.8,0.8),1, "GL_LINE_SMOOTH")
             
-            l = len(gedge.cache_igverts)
-            if l == 0:
-                # draw bezier for uncut segments!
-                #p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16) for t in range(17)]
-                #contour_utilities.draw_polyline_from_3dpoints(context, p3d, (.7,.1,.1,.8), 5, "GL_LINE_SMOOTH")
-                cur0,cur1 = gedge.gvert0.get_corners_of(gedge)
-                cur2,cur3 = gedge.gvert3.get_corners_of(gedge)
-                p3d = [cur0,cur1,cur2,cur3,cur0]
-                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 3, "GL_LINE_SMOOTH")
-            else:
-                p3d = []
-                prev0,prev1 = None,None
-                for i,gvert in enumerate(gedge.cache_igverts):
-                    if i%2 == 0: continue
-                    
-                    if i == 1:
-                        gv0 = gedge.gvert0
-                        cur0,cur1 = gv0.get_corners_of(gedge)
-                    elif i == l-2:
-                        gv3 = gedge.gvert3
-                        cur1,cur0 = gv3.get_corners_of(gedge)
-                    else:
-                        cur0 = gvert.position+gvert.tangent_y*gvert.radius
-                        cur1 = gvert.position-gvert.tangent_y*gvert.radius
-                    
-                    if prev0 and prev1:
-                        p3d += [prev0,cur0,cur1,prev1,cur1,cur0]
-                    else:
-                        p3d = [cur1,cur0]
-                    prev0,prev1 = cur0,cur1
-                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+            col = color_gedge if len(gedge.cache_igverts) else color_gedge_nocuts
+            if gedge == self.sel_gedge: col = sel_fn(col)
+            w = 2 if len(gedge.cache_igverts) else 5
+            for c0,c1,c2,c3 in gedge.iter_segments(only_visible=True):
+                contour_utilities.draw_polyline_from_3dpoints(context, [c0,c1,c2,c3,c0], col, w, "GL_LINE_SMOOTH")
             
         
         for gv in self.polystrips.gverts:
+            if not gv.is_visible(): continue
             p0,p1,p2,p3 = gv.get_corners()
             
             if not draw_unconnected_gverts and gv.is_unconnected() and gv != self.sel_gvert: continue
@@ -190,7 +175,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             elif gv.is_tjunction(): col = color_gvert_tjunction
             elif gv.is_cross(): col = color_gvert_cross
             
-            if gv == self.sel_gvert and sel_on: col = color_selected
+            if gv == self.sel_gvert: col = sel_fn(col)
             
             p3d = [p0,p1,p2,p3,p0]
             contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
@@ -363,8 +348,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if handle_nav:
             self.post_update = True
-            return 'nav' if eventd['value'] == 'PRESS' else 'nav done'
+            self.is_navigating = True
+            return 'nav' if eventd['value']=='PRESS' else 'main'
         
+        self.is_navigating = False
         return ''
         
     
@@ -373,9 +360,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #############################################
         # general navigation
         
-        nav = self.modal_nav(eventd)
-        if nav:
-            return 'nav' if nav=='nav' else ''
+        nmode = self.modal_nav(eventd)
+        if nmode:
+            return nmode
         
         ########################################
         # accept / cancel
@@ -595,6 +582,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         FSM = {}
         FSM['main']         = self.modal_main
+        FSM['nav']          = self.modal_nav
         FSM['sketch']       = self.modal_sketching
         FSM['scale tool']   = self.modal_scale_tool
         FSM['grab tool']    = self.modal_grab_tool
@@ -606,6 +594,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if nmode in {'finish','cancel'}:
             contour_utilities.callback_cleanup(self, context)
+            self.kill_timer(context)
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
         
         if nmode: self.mode = nmode
@@ -655,6 +644,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #for stroke in strokes:
         #    self.polystrips.insert_gedge_from_stroke(stroke)
     
+    def kill_timer(self, context):
+        if not self._timer: return
+        context.window_manager.event_timer_remove(self._timer)
+        self._timer = None
+    
     def invoke(self, context, event):
         #settings = context.user_preferences.addons[AL.FolderName].preferences
         #return {'CANCELLED'}
@@ -668,6 +662,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.is_navigating = False
         self.sketch_curpos = (0,0)
         self.sketch = []
+        self.post_update = True
+        
+        self.last_matrix = None
+        
+        self._timer = context.window_manager.event_timer_add(0.1, context.window)
         
         self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
         
@@ -690,11 +689,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         
         # switch to modal
-        self._handle = bpy.types.SpaceView3D.draw_handler_add(
-            self.draw_callback,
-            (context, ),
-            'WINDOW',
-            'POST_PIXEL'
-            )
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(self.draw_callback, (context, ), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}

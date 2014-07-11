@@ -65,6 +65,8 @@ class GVert:
         
         self.doing_update = False
         
+        self.visible = True
+        
         self.update()
     
     def has_0(self): return not (self.gedge0 is None)
@@ -253,6 +255,11 @@ class GVert:
         
         pr.done()
     
+    def update_visibility(self, rv3d):
+        self.visible = contour_utilities.ray_cast_visible([self.snap_pos], self.obj, rv3d)[0]
+    
+    def is_visible(self): return self.visible
+    
     def get_corners(self):
         return (self.corner0, self.corner1, self.corner2, self.corner3)
     
@@ -404,6 +411,11 @@ class GEdge:
         self.gvert0.disconnect_gedge(self)
         self.gvert3.disconnect_gedge(self)
     
+    def update_visibility(self, rv3d):
+        lp = [gv.snap_pos for gv in self.cache_igverts]
+        lv = contour_utilities.ray_cast_visible(lp, self.obj, rv3d)
+        for gv,v in zip(self.cache_igverts,lv): gv.visible = v
+    
     def gverts(self):
         return [self.gvert0,self.gvert1,self.gvert2,self.gvert3]
     
@@ -540,12 +552,13 @@ class GEdge:
                 return True
         return False
     
-    def iter_segments(self):
+    def iter_segments(self, only_visible=False):
         l = len(self.cache_igverts)
         if l == 0:
             cur0,cur1 = self.gvert0.get_corners_of(self)
             cur2,cur3 = self.gvert3.get_corners_of(self)
-            yield (cur0,cur1,cur2,cur3)
+            if not only_visible or (self.gvert0.is_visible() and self.gvert3.is_visible()):
+                yield (cur0,cur1,cur2,cur3)
         else:
             prev0,prev1 = None,None
             for i,gvert in enumerate(self.cache_igverts):
@@ -562,9 +575,9 @@ class GEdge:
                     cur1 = gvert.position-gvert.tangent_y*gvert.radius
                 
                 if prev0 and prev1:
-                    yield (prev0,cur0,cur1,prev1)
+                    if not only_visible or gvert.is_visible():
+                        yield (prev0,cur0,cur1,prev1)
                 prev0,prev1 = cur0,cur1
-        
 
 class PolyStrips(object):
     def __init__(self, context, obj):

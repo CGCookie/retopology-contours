@@ -120,10 +120,10 @@ def ray_cast_path(context, ob, screen_coords):
     r2d_vector = region_2d_to_vector_3d
     
     rays = [(r2d_origin(rgn, rv3d, co),r2d_vector(rgn, rv3d, co).normalized()) for co in screen_coords]
-    back = 0 if rv3d.is_perspective else 10000
-    mult = 1 if rv3d.is_perspective else -1
+    back = 0 if rv3d.is_perspective else 1
+    mult = 100 * (1 if rv3d.is_perspective else -1)
     
-    hits = [ob.ray_cast(imx*(o-d*back*mult), imx*(o+d*10000*mult)) for o,d in rays]
+    hits = [ob.ray_cast(imx*(o-d*back*mult), imx*(o+d*mult)) for o,d in rays]
     world_coords = [mx*hit[0] for hit in hits if hit[2] != -1]
     
     return world_coords

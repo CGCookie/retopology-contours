@@ -245,17 +245,18 @@ def ray_cast_visible(verts, ob, rv3d):
     returns list of Boolean values indicating whether the corresponding vert
     is visible (not occluded by object) in region associated with rv3d
     '''
-    view_dir = rv3d.view_rotation * Vector((0,0,1))
+    view_dir = (rv3d.view_rotation * Vector((0,0,1))).normalized()
     imx = ob.matrix_world.inverted()
     
     if rv3d.is_perspective:
-        eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
+        eyeloc = rv3d.view_location + rv3d.view_distance*view_dir
+        #eyeloc = Vector(rv3d.view_matrix.inverted().col[3][:3]) #this is brilliant, thanks Gert
         eyeloc_local = imx*eyeloc
         source = [eyeloc_local for vert in verts]
-        target = [imx*(vert+ 0.01*view_dir) for vert in verts]
+        target = [imx*(vert+0.01*view_dir) for vert in verts]
     else:
-        source = [imx*(vert+10000*view_dir) for vert in verts]
-        target = [imx*(vert+ 0.01*view_dir) for vert in verts]
+        source = [imx*(vert+100*view_dir) for vert in verts]
+        target = [imx*(vert+0.01*view_dir) for vert in verts]
     
     return [ob.ray_cast(s,t)[2]==-1 for s,t in zip(source,target)]
 
@@ -550,7 +551,8 @@ def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE)
         bgl.glEnable(bgl.GL_BLEND)  # back to uninterupted lines  
         bgl.glLineWidth(1)
     return
-    
+
+
 def get_path_length(verts):
     '''
     sum up the length of a string of vertices
