@@ -176,9 +176,16 @@ def cubic_bezier_fit_value(l_v, l_t):
     return (err,v0,v1,v2,v3)
 
 def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=True):
+    assert l_co
+    if len(l_co)<3:
+        p0,p3 = l_co[0],l_co[-1]
+        p12 = (p0+p3)/2
+        return [(t0,t3,p0,p12,p12,p3)]
     l_d  = [0] + [(v0-v1).length for v0,v1 in zip(l_co[:-1],l_co[1:])]
     l_ad = [s for d,s in general_utilities.iter_running_sum(l_d)]
     dist = sum(l_d)
+    if dist <= 0:
+        return [(t0,t3,l_co[0],l_co[0],l_co[0],l_co[0])]
     l_t  = [ad/dist for ad in l_ad]
     
     ex,x0,x1,x2,x3 = cubic_bezier_fit_value([co[0] for co in l_co], l_t)
@@ -211,10 +218,10 @@ def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=
             mindot = dot01
     
     if ind_split == -1:
+        # did not find a good splitting point!
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
         return [(t0,t3,p0,p1,p2,p3)]
     
-    print('splitting %f--%f at %f' % (t0,t3,l_t[ind_split]))
     l_co_left  = l_co[:ind_split]
     l_co_right = l_co[ind_split:]
     tsplit = ind_split / (len(l_co)-1)
@@ -232,7 +239,7 @@ def cubic_bezier_split(p0, p1, p2, p3, t_split, error_scale, tessellate=10):
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
     d = v0.cross(v1).dot(vcross)
-    if d < 0: a = 2*math.pi - a
+    if d > 0: a = math.pi + a
     return a
 
 def sort_objects_by_angles(vec_about, l_objs, l_vecs):
@@ -240,5 +247,4 @@ def sort_objects_by_angles(vec_about, l_objs, l_vecs):
     l_angles = [0] + [vector_angle_between(v0,v1,vec_about) for v1 in l_vecs[1:]]
     l_inds = sorted(range(len(l_objs)), key=lambda i: l_angles[i])
     return [l_objs[i] for i in l_inds]
-
 

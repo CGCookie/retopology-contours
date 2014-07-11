@@ -74,6 +74,8 @@ class GVert:
     def has_2(self): return not (self.gedge2 is None)
     def has_3(self): return not (self.gedge3 is None)
     
+    def count_gedges(self):   return len(self.get_gedges_notnone())
+    
     def is_unconnected(self): return not (self.has_0() or self.has_1() or self.has_2() or self.has_3())
     def is_endpoint(self):    return self.has_0() and not (self.has_1() or self.has_2() or self.has_3())
     def is_endtoend(self):    return self.has_0() and self.has_2() and not (self.has_1() or self.has_3())
@@ -91,88 +93,76 @@ class GVert:
     def get_inner_gverts(self): return [ge.get_inner_gvert_at(self) for ge in self.get_gedges_notnone()]
     
     def disconnect_gedge(self, gedge):
-        gedges = [ge for ge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3] if ge]
-        assert gedge in gedges
-        gedges = [ge for ge in gedges if ge != gedge]
-        self._set_gedges(None,None,None,None)
-        for ge in gedges:
-            self.connect_gedge(ge)
+        pr = profiler.start()
+        l_gedges = self.get_gedges_notnone()
+        assert gedge in l_gedges
+        l_gedges = [ge for ge in l_gedges if ge != gedge]
+        l = len(l_gedges)
+        l_gedges = [l_gedges[i] if i < l else None for i in range(4)]
+        self._set_gedges(*l_gedges)
+        self.update_gedges()
+        pr.done()
     
     def connect_gedge_inner(self, gedge):
         assert self.is_unconnected()
         assert not self.gedge_inner
         self.gedge_inner = gedge
     
-    def connect_gedge(self, gedge):
+    def update_gedges(self):
+        if self.is_unconnected(): return
+        
         pr = profiler.start()
         
         norm = self.snap_norm
         
-        gedge0,gedge1,gedge2,gedge3 = self.get_gedges()
-        vec  = gedge.get_derivative_at(self).normalized()
-        vec0 = None if not gedge0 else gedge0.get_derivative_at(self).normalized()
-        vec1 = None if not gedge1 else gedge1.get_derivative_at(self).normalized()
-        vec2 = None if not gedge2 else gedge2.get_derivative_at(self).normalized()
-        vec3 = None if not gedge3 else gedge3.get_derivative_at(self).normalized()
-        
-        l_gedges = [ge for ge in self.get_gedges()+[gedge] if ge]
+        l_gedges = self.get_gedges_notnone()
         l_vecs = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
         l_gedges = sort_objects_by_angles(norm, l_gedges, l_vecs)
-        l_gedges.reverse()
         l_vecs = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
-        l_angles = [math.fmod(v0.angle(v1),math.pi*2) for v0,v1 in zip(l_vecs,l_vecs[1:]+[l_vecs[0]])]
+        l_angles = [vector_angle_between(v0,v1,norm) for v0,v1 in zip(l_vecs,l_vecs[1:]+[l_vecs[0]])]
         
         connect_count = len(l_gedges)
         
-        
-        #Larger abs value restricts more parallel
-        #end to end connections.
-        threshold_angle_endtoend = -0.8
-        
         if connect_count == 1:
-            # first to be connected
-            dprint('unconnected => endpoint')
-            self._set_gedges(gedge,None,None,None)
+            self._set_gedges(l_gedges[0],None,None,None)
             assert self.is_endpoint()
-        
         elif connect_count == 2:
-            if vec0.dot(vec) < threshold_angle_endtoend:
-                dprint('endpoint => end-to-end')
-                self._set_gedges(gedge0,None,gedge,None)
+            if l_angles[0] > math.pi*0.8 and l_angles[1] > math.pi*0.8:
+                self._set_gedges(l_gedges[0],None,l_gedges[1],None)
                 assert self.is_endtoend()
             else:
-                dprint('endpoint => l-junction')
-                if vec0.cross(vec).dot(norm) < 0:
-                    self._set_gedges(gedge0,gedge,None,None)
+                if l_angles[0] < l_angles[1]:
+                    self._set_gedges(l_gedges[0],l_gedges[1],None,None)
                 else:
-                    self._set_gedges(gedge,gedge0,None,None)
+                    self._set_gedges(l_gedges[1],l_gedges[0],None,None)
                 assert self.is_ljunction()
-        
         elif connect_count == 3:
-            if self.is_endtoend():
-                dprint('end-to-end => t-junction')
+            if l_angles[0] >= l_angles[1] and l_angles[0] >= l_angles[2]:
+                self._set_gedges(l_gedges[2],l_gedges[0],None,l_gedges[1])
+            elif l_angles[1] >= l_angles[0] and l_angles[1] >=  l_angles[2]:
+                self._set_gedges(l_gedges[0],l_gedges[1],None,l_gedges[2])
             else:
-                dprint('l-junction => t-junction')
-            max_i,max_a = 0,0
-            for i,a in enumerate(l_angles):
-                if a>max_a: max_i,max_a = i,a
-            i0 = (max_i+2) % 3
-            i1 = max_i
-            i3 = (max_i+1) % 3
-            self._set_gedges(l_gedges[i0],l_gedges[i1],None,l_gedges[i3])
+                self._set_gedges(l_gedges[1],l_gedges[2],None,l_gedges[0])
             assert self.is_tjunction()
-        
         elif connect_count == 4:
-            dprint('t-junction => cross-junction')
-            self._set_gedges(l_gedges[0],l_gedges[1],l_gedges[2],l_gedges[3])
+            self._set_gedges(*l_gedges)
             assert self.is_cross()
-        
         else:
-            assert False, "CANNOT CONNECT %i GEDGES" % connect_count
+            assert False
         
-        assert self.gedge0 == gedge or self.gedge1 == gedge or self.gedge2 == gedge or self.gedge3 == gedge
         self.update()
         
+        pr.done()
+    
+    
+    def connect_gedge(self, gedge):
+        pr = profiler.start()
+        if not self.gedge0: self.gedge0 = gedge
+        elif not self.gedge1: self.gedge1 = gedge
+        elif not self.gedge2: self.gedge2 = gedge
+        elif not self.gedge3: self.gedge3 = gedge
+        else: assert False
+        self.update_gedges()
         pr.done()
     
     def snap_corners(self):
@@ -484,7 +474,12 @@ class GEdge:
     
     def get_length(self):
         p0,p1,p2,p3 = self.get_positions()
-        return cubic_bezier_length(p0,p1,p2,p3)
+        mx = self.obj.matrix_world
+        imx = mx.inverted()
+        p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/64.0) for t in range(65)]
+        p3d = [mx*self.obj.closest_point_on_mesh(imx * p)[0] for p in p3d]
+        return sum((p1-p0).length for p0,p1 in zip(p3d[:-1],p3d[1:]))
+        #return cubic_bezier_length(p0,p1,p2,p3)
     
     def get_closest_point(self, pt):
         p0,p1,p2,p3 = self.get_positions()
@@ -585,25 +580,27 @@ class GEdge:
             cur2,cur3 = self.gvert3.get_corners_of(self)
             if not only_visible or (self.gvert0.is_visible() and self.gvert3.is_visible()):
                 yield (cur0,cur1,cur2,cur3)
-        else:
-            prev0,prev1 = None,None
-            for i,gvert in enumerate(self.cache_igverts):
-                if i%2 == 0: continue
-                
-                if i == 1:
-                    gv0 = self.gvert0
-                    cur0,cur1 = gv0.get_corners_of(self)
-                elif i == l-2:
-                    gv3 = self.gvert3
-                    cur1,cur0 = gv3.get_corners_of(self)
-                else:
-                    cur0 = gvert.position+gvert.tangent_y*gvert.radius
-                    cur1 = gvert.position-gvert.tangent_y*gvert.radius
-                
-                if prev0 and prev1:
-                    if not only_visible or gvert.is_visible():
-                        yield (prev0,cur0,cur1,prev1)
-                prev0,prev1 = cur0,cur1
+            return
+        
+        prev0,prev1 = None,None
+        for i,gvert in enumerate(self.cache_igverts):
+            if i%2 == 0: continue
+            
+            if i == 1:
+                gv0 = self.gvert0
+                cur0,cur1 = gv0.get_corners_of(self)
+            elif i == l-2:
+                gv3 = self.gvert3
+                cur1,cur0 = gv3.get_corners_of(self)
+            else:
+                cur0 = gvert.position+gvert.tangent_y*gvert.radius
+                cur1 = gvert.position-gvert.tangent_y*gvert.radius
+            
+            if prev0 and prev1:
+                if not only_visible or gvert.is_visible():
+                    yield (prev0,cur0,cur1,prev1)
+            prev0,prev1 = cur0,cur1
+
 
 class PolyStrips(object):
     def __init__(self, context, obj):
@@ -767,6 +764,8 @@ class PolyStrips(object):
                 elif closeto_i1: sgv3 = gv_split
             
             if closeto_p0 or closeto_p3:
+                if closeto_p0 and gedge.gvert0.count_gedges()==4: continue
+                if closeto_p3 and gedge.gvert3.count_gedges()==4: continue
                 if closeto_i0:
                     sgv0 = gedge.gvert0 if closeto_p0 else gedge.gvert3
                 if closeto_i1:
