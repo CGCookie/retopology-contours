@@ -86,6 +86,9 @@ class GVert:
         self.gedge0,self.gedge1,self.gedge2,self.gedge3 = ge0,ge1,ge2,ge3
     def count_gedges(self):
         return sum([self.has_0(),self.has_1(),self.has_2(),self.has_3()])
+    def get_gedges_notnone(self): return [ge for ge in self.get_gedges() if ge]
+    
+    def get_inner_gverts(self): return [ge.get_inner_gvert_at(self) for ge in self.get_gedges_notnone()]
     
     def disconnect_gedge(self, gedge):
         gedges = [ge for ge in [self.gedge0,self.gedge1,self.gedge2,self.gedge3] if ge]
@@ -201,7 +204,8 @@ class GVert:
         self.snap_tanx = self.tangent_x.normalized()
         self.snap_tany = self.snap_norm.cross(self.snap_tanx).normalized()
         
-        self.position = self.snap_pos
+        if not self.is_unconnected() or True:
+            self.position = self.snap_pos
         # NOTE! DO NOT UPDATE NORMAL, TANGENT_X, AND TANGENT_Y
         
         if do_edges:
@@ -255,8 +259,11 @@ class GVert:
         
         pr.done()
     
-    def update_visibility(self, rv3d):
-        self.visible = contour_utilities.ray_cast_visible([self.snap_pos], self.obj, rv3d)[0]
+    def update_visibility(self, r3d, update_gedges=False):
+        self.visible = contour_utilities.ray_cast_visible([self.snap_pos], self.obj, r3d)[0]
+        if not update_gedges: return
+        for ge in self.get_gedges_notnone():
+            ge.update_visibility(r3d)
     
     def is_visible(self): return self.visible
     
@@ -264,6 +271,7 @@ class GVert:
         return (self.corner0, self.corner1, self.corner2, self.corner3)
     
     def is_picked(self, pt):
+        if not self.visible: return False
         c0 = self.corner0 - pt
         c1 = self.corner1 - pt
         c2 = self.corner2 - pt
@@ -432,6 +440,9 @@ class GEdge:
         if self.gvert3 == gv: return self.gvert2
         assert False, "gv is not an endpoint"
     
+    def get_inner_gverts(self):
+        return [self.gvert1, self.gvert2]
+    
     def get_vector_from(self, gv):
         is_0 = (self.gvert0==gv)
         gv0 = self.gvert0 if is_0 else self.gvert3
@@ -474,6 +485,11 @@ class GEdge:
     def get_length(self):
         p0,p1,p2,p3 = self.get_positions()
         return cubic_bezier_length(p0,p1,p2,p3)
+    
+    def get_closest_point(self, pt):
+        p0,p1,p2,p3 = self.get_positions()
+        t,d = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt)
+        return (t,d)
     
     def update(self, debug=False):
         '''
@@ -545,7 +561,8 @@ class GEdge:
         self.gvert3.update(do_edges=False)
     
     def is_picked(self, pt):
-        for p0,p1,p2,p3 in self.iter_segments():
+        for p0,p1,p2,p3 in self.iter_segments(only_visible=True):
+            
             c0,c1,c2,c3 = p0-pt,p1-pt,p2-pt,p3-pt
             n = (c0-c1).cross(c2-c1)
             if c1.cross(c0).dot(n)>0 and c2.cross(c1).dot(n)>0 and c3.cross(c2).dot(n)>0 and c0.cross(c3).dot(n)>0:
@@ -633,6 +650,34 @@ class PolyStrips(object):
             if min_i==-1 or d < min_d:
                 min_i,min_ge,min_t,min_d = i,gedge,t,d
         return (min_i,min_ge, min_t, min_d)
+    
+    def update_visibility(self, r3d):
+        for gv in self.gverts:
+            gv.update_visibility(r3d)
+        for ge in self.gedges:
+            ge.update_visibility(r3d)
+    
+    def split_gedge_at_t(self, gedge, t):
+        p0,p1,p2,p3 = gedge.get_positions()
+        cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
+        
+        gv_split = self.create_gvert(cb0[3])
+        
+        gv0_0 = gedge.gvert0
+        gv0_1 = self.create_gvert(cb0[1])
+        gv0_2 = self.create_gvert(cb0[2])
+        gv0_3 = gv_split
+        
+        gv1_0 = gv_split
+        gv1_1 = self.create_gvert(cb1[1])
+        gv1_2 = self.create_gvert(cb1[2])
+        gv1_3 = gedge.gvert3
+        
+        self.disconnect_gedge(gedge)
+        ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
+        ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
+        
+        return (ge0,ge1)
     
     def insert_gedge_from_stroke(self, stroke):
         '''

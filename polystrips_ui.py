@@ -22,6 +22,7 @@ Created by Patrick Moore
 import bpy
 import bmesh
 import blf
+import bgl
 import math
 import sys
 import copy
@@ -81,6 +82,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         return {
             'context':  context,
+            'region':   context.region,
+            'r3d':      context.space_data.region_3d,
             
             'ctrl':     event.ctrl,
             'shift':    event.shift,
@@ -105,6 +108,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         draw_gvert_orientations = False
         draw_unconnected_gverts = False
         draw_gvert_unsnapped    = False
+        draw_gedge_bezier       = False
         
         color_selected          = (.5,1,.5,.8)
         
@@ -131,6 +135,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv.update_visibility(r3d)
             for ge in self.polystrips.gedges:
                 ge.update_visibility(r3d)
+            if self.sel_gedge:
+                for gv in [self.sel_gedge.gvert1, self.sel_gedge.gvert2]:
+                    gv.update_visibility(r3d)
+            if self.sel_gvert:
+                for gv in self.sel_gvert.get_inner_gverts():
+                    gv.update_visibility(r3d)
             self.post_update = False
             self.last_matrix = new_matrix
         
@@ -154,6 +164,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 rl = 0.0007
                 p3d = [pm,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.8,0.8,0.8,0.8),1, "GL_LINE_SMOOTH")
+            
+            if draw_gedge_bezier:
+                p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
+                p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/16.0) for t in range(17)]
+                contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.5,0.5,0.5,0.8),1, "GL_LINE_SMOOTH")
             
             col = color_gedge if len(gedge.cache_igverts) else color_gedge_nocuts
             if gedge == self.sel_gedge: col = sel_fn(col)
@@ -194,16 +209,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if self.sel_gedge:
             col = color_gvert_midpoints
-            for gv in [self.sel_gedge.gvert1,self.sel_gedge.gvert2]:
+            for gv in self.sel_gedge.get_inner_gverts():
+                if not gv.is_visible(): continue
                 p0,p1,p2,p3 = gv.get_corners()
                 p3d = [p0,p1,p2,p3,p0]
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
         
         if self.sel_gvert:
             col = color_gvert_midpoints
-            for ge in [self.sel_gvert.gedge0,self.sel_gvert.gedge1,self.sel_gvert.gedge2,self.sel_gvert.gedge3]:
-                if not ge: continue
-                gv = ge.gvert1 if ge.gvert0 == self.sel_gvert else ge.gvert2
+            for gv in self.sel_gvert.get_inner_gverts():
+                if not gv.is_visible(): continue
                 p0,p1,p2,p3 = gv.get_corners()
                 p3d = [p0,p1,p2,p3,p0]
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
@@ -211,7 +226,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if self.mode == 'sketch':
             contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
             contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
-    
+        
+        if self.mode in {'scale tool','rotate tool'}:
+            contour_utilities.draw_polyline_from_points(context, [self.action_center, self.mode_pos], (0,0,0,0.5), 1, "GL_LINE_STIPPLE")
+        
+        bgl.glLineWidth(1)
     
     
     def create_mesh(self, context):
@@ -220,13 +239,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         for v in verts: bm.verts.new(v)
         for q in quads: bm.faces.new([bm.verts[i] for i in q])
         
-        dest_me  = bpy.data.meshes.new( self.obj.name + "_polystrips")
-        dest_obj = bpy.data.objects.new(self.obj.name + "_polystrips", dest_me)
+        nm_polystrips = self.obj.name + "_polystrips"
+        
+        dest_me  = bpy.data.meshes.new(nm_polystrips)
+        dest_obj = bpy.data.objects.new(nm_polystrips, dest_me)
+        
         dest_obj.matrix_world = self.obj.matrix_world
         dest_obj.update_tag()
         dest_obj.show_all_edges = True
-        dest_obj.show_wire = True
-        dest_obj.show_x_ray = True
+        dest_obj.show_wire      = True
+        dest_obj.show_x_ray     = True
         
         bm.to_mesh(dest_me)
         
@@ -258,10 +280,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.tool_x = (vrot * Vector((1,0,0))).normalized()
         self.tool_y = (vrot * Vector((0,1,0))).normalized()
         
+        self.tool_rot = 0.0
+        
         self.tool_fn = tool_fn
-        self.tool_fn('init')
+        self.tool_fn('init', eventd)
     
-    def scale_tool_gvert(self, command):
+    def scale_tool_gvert(self, command, eventd):
         if command == 'init':
             sgv = self.sel_gvert
             lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
@@ -271,6 +295,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv.position = p
                 gv.update()
             self.sel_gvert.update()
+            self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
         else:
             m = command
             sgv = self.sel_gvert
@@ -281,31 +306,36 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv.position = p + (gv.position-p) * m
                 gv.update()
             sgv.update()
+            self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
     
-    def scale_tool_gvert_radius(self, command):
+    def scale_tool_gvert_radius(self, command, eventd):
         if command == 'init':
             self.tool_data = self.sel_gvert.radius
         elif command == 'undo':
             self.sel_gvert.radius = self.tool_data
             self.sel_gvert.update()
+            self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
         else:
             m = command
             sgv = self.sel_gvert
             sgv.radius *= m
             sgv.update()
+            self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
     
-    def grab_tool_gvert(self, command):
+    def grab_tool_gvert(self, command, eventd):
         if command == 'init':
             self.tool_data = self.sel_gvert.position
         elif command == 'undo':
             self.sel_gvert.position = self.tool_data
             self.sel_gvert.update()
+            self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
         else:
             dx,dy = command
-            self.sel_gvert.position += (self.tool_x * dx + self.tool_y * dy) * self.length_scale / 1000
+            self.sel_gvert.position += (self.tool_x*dx + self.tool_y*dy) * self.length_scale / 1000
             self.sel_gvert.update()
+            self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
     
-    def grab_tool_gvert_neighbors(self, command):
+    def grab_tool_gvert_neighbors(self, command, eventd):
         if command == 'init':
             sgv = self.sel_gvert
             lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
@@ -319,6 +349,22 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             for gv,up in self.tool_data:
                 gv.position += (self.tool_x*dx + self.tool_y*dy)*self.length_scale / 1000
                 gv.update()
+    
+    def rotate_tool_gvert_neighbors(self, command, eventd):
+        if command == 'init':
+            self.tool_data = [(gv,Vector(gv.position)) for gv in self.sel_gvert.get_inner_gverts()]
+        elif command == 'undo':
+            for gv,p in self.tool_data:
+                gv.position = p
+                gv.update()
+        else:
+            ang = command
+            q = Quaternion(self.sel_gvert.snap_norm, ang)
+            p = self.sel_gvert.position
+            for gv,up in self.tool_data:
+                gv.position = p+q*(up-p)
+                gv.update()
+                
     
     ##############################
     # modal functions
@@ -387,6 +433,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             for stroke in self.strokes_original:
                 self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
+            self.polystrips.update_visibility(eventd['r3d'])
             return ''
         
         
@@ -401,7 +448,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if eventd['press'] == 'RIGHTMOUSE':                                         # picking
             x,y = eventd['mouse']
             pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
-            if not pts: return ''
+            if not pts:
+                self.sel_gvert,self.sel_gedge = None,None
+                return ''
             pt = pts[0]
             
             threshold_pick = self.length_scale * 0.005
@@ -447,6 +496,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gedge = None
                 self.polystrips.remove_unconnected_gverts()
                 return ''
+            
+            if eventd['press'] == 'K':
+                x,y = eventd['mouse']
+                pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+                if not pts:
+                    return ''
+                pt = pts[0]
+                t,d = self.sel_gedge.get_closest_point(pt)
+                self.polystrips.split_gedge_at_t(self.sel_gedge, t)
+                self.sel_gedge = None
         
         
         ###################################
@@ -464,15 +523,18 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.polystrips.dissolve_gvert(self.sel_gvert)
                 self.sel_gvert = None
                 self.polystrips.remove_unconnected_gverts()
+                self.polystrips.update_visibility(eventd['r3d'])
                 return ''
             
             
             if eventd['press'] == 'CTRL+NUMPAD_PLUS':
                 self.scale_gvert_radius(1.100000)
+                self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
             
             if eventd['press'] == 'CTRL+NUMPAD_MINUS':
                 self.scale_gvert_radius(0.909091)
+                self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
                 
             if eventd['press'] == 'S':
@@ -491,6 +553,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             if eventd['press'] == 'CTRL+C':
                 self.sel_gvert.toggle_corner()
+                self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
             
             
@@ -500,7 +563,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             if eventd['press'] == 'C':
                 self.sel_gvert.smooth()
+                self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
+            
+            if eventd['press'] == 'CTRL+R':
+                self.ready_tool(eventd, self.rotate_tool_gvert_neighbors)
+                return 'rotate tool'
             
         return ''
     
@@ -526,6 +594,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sketch = []
             self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
+            self.polystrips.update_visibility(eventd['r3d'])
             return 'main'
         
         return ''
@@ -542,11 +611,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return 'main'
         
         if eventd['press'] == 'ESC':
-            self.tool_fn('undo')
+            self.tool_fn('undo', eventd)
             return 'main'
         
         if eventd['type'] == 'MOUSEMOVE':
-            self.tool_fn(cr / pr)
+            self.tool_fn(cr / pr, eventd)
             self.mode_pos    = (mx,my)
             self.mode_radius = cr
             return ''
@@ -563,12 +632,35 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return 'main'
         
         if eventd['press'] == 'ESC':
-            self.tool_fn('undo')
+            self.tool_fn('undo', eventd)
             return 'main'
         
         if eventd['type'] == 'MOUSEMOVE':
-            self.tool_fn((mx-px,my-py))
+            self.tool_fn((mx-px,my-py), eventd)
             self.mode_pos    = (mx,my)
+            return ''
+        
+        return ''
+    
+    def modal_rotate_tool(self, eventd):
+        cx,cy = self.action_center
+        mx,my = eventd['mouse']
+        px,py = self.mode_pos
+        
+        if eventd['press'] in {'RET', 'NUMPAD_ENTER', 'LEFTMOUSE'}:
+            return 'main'
+        
+        if eventd['press'] == 'ESC':
+            self.tool_fn('undo', eventd)
+            return 'main'
+        
+        if eventd['type'] == 'MOUSEMOVE':
+            vp = Vector((px-cx,py-cy,0))
+            vm = Vector((mx-cx,my-cy,0))
+            ang = vp.angle(vm) * (-1 if vp.cross(vm).z<0 else 1)
+            self.tool_rot += ang
+            self.tool_fn(self.tool_rot, eventd)
+            self.mode_pos = (mx,my)
             return ''
         
         return ''
@@ -586,6 +678,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         FSM['sketch']       = self.modal_sketching
         FSM['scale tool']   = self.modal_scale_tool
         FSM['grab tool']    = self.modal_grab_tool
+        FSM['rotate tool']  = self.modal_rotate_tool
         
         nmode = FSM[self.mode](eventd)
         
@@ -672,10 +765,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         self.obj = context.object
         self.length_scale = get_object_length_scale(self.obj)
-        me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
-        me.update()
+        self.me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
+        self.me.update()
         self.bme = bmesh.new()
-        self.bme.from_mesh(me)
+        self.bme.from_mesh(self.me)
         
         self.sel_gedge = None
         self.sel_gvert = None
@@ -687,6 +780,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         elif 'BezierCurve' in bpy.data.objects:
             self.create_polystrips_from_bezier(bpy.data.objects['BezierCurve'])
         
+        context.area.header_text_set('PolyStrips')
         
         # switch to modal
         self._handle = bpy.types.SpaceView3D.draw_handler_add(self.draw_callback, (context, ), 'WINDOW', 'POST_PIXEL')

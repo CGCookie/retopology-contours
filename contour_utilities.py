@@ -503,7 +503,7 @@ def draw_polyline_from_points(context, points, color, thickness, LINE_TYPE):
     if LINE_TYPE == "GL_LINE_STIPPLE":  
         bgl.glLineStipple(4, 0x5555)  #play with this later
         bgl.glEnable(bgl.GL_LINE_STIPPLE)  
-    
+    bgl.glEnable(bgl.GL_BLEND)
     
     current_width = bgl.GL_LINE_WIDTH
     bgl.glColor4f(*color)
@@ -537,6 +537,7 @@ def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE)
     if LINE_TYPE == "GL_LINE_STIPPLE":  
         bgl.glLineStipple(4, 0x5555)  #play with this later
         bgl.glEnable(bgl.GL_LINE_STIPPLE)  
+    bgl.glEnable(bgl.GL_BLEND)
     
     bgl.glColor4f(*color)
     bgl.glLineWidth(thickness)
