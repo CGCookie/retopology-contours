@@ -488,8 +488,17 @@ class GEdge:
     
     def get_closest_point(self, pt):
         p0,p1,p2,p3 = self.get_positions()
-        t,d = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt)
-        return (t,d)
+        if len(self.cache_igverts) < 3:
+            return cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt)
+        min_t,min_d = -1,-1
+        i,l = 0,len(self.cache_igverts)
+        for gv0,gv1 in zip(self.cache_igverts[:-1],self.cache_igverts[1:]):
+            p0,p1 = gv0.position,gv1.position
+            t,d = contour_utilities.closest_t_and_distance_point_to_line_segment(pt, p0,p1)
+            if min_t < 0 or d < min_d: min_t,min_d = (i+t)/l,d
+            i += 1
+        return min_t,min_d
+        
     
     def update(self, debug=False):
         '''
@@ -718,7 +727,8 @@ class PolyStrips(object):
             # find closest distance between stroke and gedge
             for i0,info0 in enumerate(stroke):
                 pt0,pr0 = info0
-                (split_t,split_d) = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt0)
+                split_t,split_d = gedge.get_closest_point(pt0)
+                #(split_t,split_d) = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt0)
                 if min_i0 == -1 or split_d <= min_d: min_i0,min_t,min_d = i0,split_t,split_d
             if min_i0 == -1 or min_d > max([threshold_junctiondist,threshold_splitdist]): continue
             
