@@ -239,8 +239,7 @@ def cubic_bezier_split(p0, p1, p2, p3, t_split, error_scale, tessellate=10):
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
     d = v0.cross(v1).dot(vcross)
-    if d > 0: a = math.pi + a
-    return a
+    return a if d<0 else 2*math.pi - a
 
 def sort_objects_by_angles(vec_about, l_objs, l_vecs):
     o0,v0 = l_objs[0],l_vecs[0]

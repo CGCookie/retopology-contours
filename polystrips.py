@@ -69,6 +69,14 @@ class GVert:
         
         self.update()
     
+    def clone(self):
+        gv = GVert(self.obj, self.length_scale, Vector(self.position), self.radius, Vector(self.normal), Vector(self.tangent_x), Vector(self.tangent_y))
+        gv.snap_pos = Vector(self.snap_pos)
+        gv.snap_norm = Vector(self.snap_norm)
+        gv.snap_tanx = Vector(self.snap_tanx)
+        gv.snap_tany = Vector(self.snap_tany)
+        return gv
+    
     def has_0(self): return not (self.gedge0 is None)
     def has_1(self): return not (self.gedge1 is None)
     def has_2(self): return not (self.gedge2 is None)
@@ -94,13 +102,16 @@ class GVert:
     
     def disconnect_gedge(self, gedge):
         pr = profiler.start()
-        l_gedges = self.get_gedges_notnone()
-        assert gedge in l_gedges
-        l_gedges = [ge for ge in l_gedges if ge != gedge]
-        l = len(l_gedges)
-        l_gedges = [l_gedges[i] if i < l else None for i in range(4)]
-        self._set_gedges(*l_gedges)
-        self.update_gedges()
+        if self.gedge_inner == gedge:
+            self.gedge_inner = None
+        else:
+            l_gedges = self.get_gedges_notnone()
+            assert gedge in l_gedges
+            l_gedges = [ge for ge in l_gedges if ge != gedge]
+            l = len(l_gedges)
+            l_gedges = [l_gedges[i] if i < l else None for i in range(4)]
+            self._set_gedges(*l_gedges)
+            self.update_gedges()
         pr.done()
     
     def connect_gedge_inner(self, gedge):
@@ -116,9 +127,10 @@ class GVert:
         norm = self.snap_norm
         
         l_gedges = self.get_gedges_notnone()
-        l_vecs = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
+        l_vecs   = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
         l_gedges = sort_objects_by_angles(norm, l_gedges, l_vecs)
-        l_vecs = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
+        l_vecs   = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
+        if any(v.length == 0 for v in l_vecs): print(l_vecs)
         l_angles = [vector_angle_between(v0,v1,norm) for v0,v1 in zip(l_vecs,l_vecs[1:]+[l_vecs[0]])]
         
         connect_count = len(l_gedges)
@@ -127,7 +139,9 @@ class GVert:
             self._set_gedges(l_gedges[0],None,None,None)
             assert self.is_endpoint()
         elif connect_count == 2:
-            if l_angles[0] > math.pi*0.8 and l_angles[1] > math.pi*0.8:
+            d0 = abs(l_angles[0]-math.pi)
+            d1 = abs(l_angles[1]-math.pi)
+            if d0 < math.pi*0.2 and d1 < math.pi*0.2:
                 self._set_gedges(l_gedges[0],None,l_gedges[1],None)
                 assert self.is_endtoend()
             else:
@@ -302,10 +316,10 @@ class GVert:
     def smooth(self, v=0.1):
         pr = profiler.start()
         
-        der0 = self.gedge0.get_derivative_at(self).normalized() if self.gedge0 else Vector()
-        der1 = self.gedge1.get_derivative_at(self).normalized() if self.gedge1 else Vector()
-        der2 = self.gedge2.get_derivative_at(self).normalized() if self.gedge2 else Vector()
-        der3 = self.gedge3.get_derivative_at(self).normalized() if self.gedge3 else Vector()
+        der0 = self.gedge0.get_derivative_at(self, ignore_igverts=True).normalized() if self.gedge0 else Vector()
+        der1 = self.gedge1.get_derivative_at(self, ignore_igverts=True).normalized() if self.gedge1 else Vector()
+        der2 = self.gedge2.get_derivative_at(self, ignore_igverts=True).normalized() if self.gedge2 else Vector()
+        der3 = self.gedge3.get_derivative_at(self, ignore_igverts=True).normalized() if self.gedge3 else Vector()
         
         if self.is_endtoend():
             angle = (math.pi - der0.angle(der2))*v
@@ -343,25 +357,23 @@ class GVert:
             self.update()
         
         if self.is_cross():
-            angle = (math.pi/2 - der3.angle(der0))*v
-            cross = der3.cross(der0).normalized()
-            self.gedge3.rotate_gverts_at(self, Quaternion(cross, -angle))
-            self.gedge0.rotate_gverts_at(self, Quaternion(cross,  angle))
+            cross = self.snap_norm.normalized()
             
-            angle = (math.pi/2 - der0.angle(der1))*v
-            cross = der0.cross(der1).normalized()
-            self.gedge0.rotate_gverts_at(self, Quaternion(cross, -angle))
-            self.gedge1.rotate_gverts_at(self, Quaternion(cross,  angle))
+            ang30 = (math.pi/2 - vector_angle_between(der3,der0,cross))*v
+            self.gedge3.rotate_gverts_at(self, Quaternion(cross,  ang30))
+            self.gedge0.rotate_gverts_at(self, Quaternion(cross, -ang30))
             
-            angle = (math.pi/2 - der1.angle(der2))*v
-            cross = der1.cross(der2).normalized()
-            self.gedge1.rotate_gverts_at(self, Quaternion(cross, -angle))
-            self.gedge2.rotate_gverts_at(self, Quaternion(cross,  angle))
+            ang01 = (math.pi/2 - vector_angle_between(der0,der1,cross))*v
+            self.gedge0.rotate_gverts_at(self, Quaternion(cross,  ang01))
+            self.gedge1.rotate_gverts_at(self, Quaternion(cross, -ang01))
             
-            angle = (math.pi/2 - der2.angle(der3))*v
-            cross = der2.cross(der3).normalized()
-            self.gedge2.rotate_gverts_at(self, Quaternion(cross, -angle))
-            self.gedge3.rotate_gverts_at(self, Quaternion(cross,  angle))
+            ang12 = (math.pi/2 - vector_angle_between(der1,der2,cross))*v
+            self.gedge1.rotate_gverts_at(self, Quaternion(cross,  ang12))
+            self.gedge2.rotate_gverts_at(self, Quaternion(cross, -ang12))
+            
+            ang23 = (math.pi/2 - vector_angle_between(der2,der3,cross))*v
+            self.gedge2.rotate_gverts_at(self, Quaternion(cross,  ang23))
+            self.gedge3.rotate_gverts_at(self, Quaternion(cross, -ang23))
             
             self.update()
         
@@ -381,15 +393,16 @@ class GEdge:
         self.gvert2 = gvert2
         self.gvert3 = gvert3
         
+        # create caching vars
+        self.cache_igverts = []             # cached interval gverts
+                                            # even-indexed igverts are poly "centers"
+                                            #  odd-indexed igverts are poly "edges"
+        
         gvert0.connect_gedge(self)
         gvert1.connect_gedge_inner(self)
         gvert2.connect_gedge_inner(self)
         gvert3.connect_gedge(self)
         
-        # create caching vars
-        self.cache_igverts = []             # cached interval gverts
-                                            # even-indexed igverts are poly "centers"
-                                            #  odd-indexed igverts are poly "edges"
     
     def rotate_gverts_at(self, gv, quat):
         if gv == self.gvert0:
@@ -407,6 +420,8 @@ class GEdge:
     
     def disconnect(self):
         self.gvert0.disconnect_gedge(self)
+        self.gvert1.disconnect_gedge(self)
+        self.gvert2.disconnect_gedge(self)
         self.gvert3.disconnect_gedge(self)
     
     def update_visibility(self, rv3d):
@@ -417,8 +432,14 @@ class GEdge:
     def gverts(self):
         return [self.gvert0,self.gvert1,self.gvert2,self.gvert3]
     
-    def get_derivative_at(self, gv):
-        p0,p1,p2,p3 = self.gvert0.position,self.gvert1.position,self.gvert2.position,self.gvert3.position
+    def get_derivative_at(self, gv, ignore_igverts=False):
+        if not ignore_igverts and len(self.cache_igverts) < 3:
+            if self.gvert0 == gv:
+                return self.gvert3.position - self.gvert0.position
+            if self.gvert3 == gv:
+                return self.gvert0.position - self.gvert3.position
+            assert False, "gv is not an endpoint"
+        p0,p1,p2,p3 = self.get_positions()
         if self.gvert0 == gv:
             return cubic_bezier_derivative(p0,p1,p2,p3,0)
         if self.gvert3 == gv:
@@ -690,9 +711,9 @@ class PolyStrips(object):
         stroke: list of tuples (3d location, pressure)
         '''
         
-        threshold_tooshort     = self.length_scale / 200 # 0.003
-        threshold_junctiondist = self.length_scale / 150 # 0.003
-        threshold_splitdist    = self.length_scale / 200
+        threshold_tooshort     = self.length_scale / 200 # 200
+        threshold_junctiondist = self.length_scale / 150 # 150
+        threshold_splitdist    = self.length_scale / 140 # 200
         
         # too short?
         if len(stroke) < 4:
@@ -764,12 +785,12 @@ class PolyStrips(object):
                 elif closeto_i1: sgv3 = gv_split
             
             if closeto_p0 or closeto_p3:
-                if closeto_p0 and gedge.gvert0.count_gedges()==4: continue
-                if closeto_p3 and gedge.gvert3.count_gedges()==4: continue
                 if closeto_i0:
                     sgv0 = gedge.gvert0 if closeto_p0 else gedge.gvert3
+                    if sgv0.count_gedges() == 4: sgv0 = None
                 if closeto_i1:
                     sgv3 = gedge.gvert0 if closeto_p0 else gedge.gvert3
+                    if sgv3.count_gedges() == 4: sgv3 = None
             
             if not closeto_i0 and not closeto_i1:
                 # break stroke
@@ -900,6 +921,17 @@ class PolyStrips(object):
                 cc1 = cc2
         
         return (verts,quads)
+    
+    def rip_gvert(self, gvert):
+        if gvert.is_unconnected(): return
+        l_gedges = gvert.get_gedges_notnone()
+        for ge in l_gedges:
+            ngv = gvert.clone()
+            l_gv = [ngv if gv==gvert else gv for gv in ge.gverts()]
+            self.disconnect_gedge(ge)
+            self.create_gedge(*l_gv)
+            self.gverts += [ngv]
+        
 
 
 

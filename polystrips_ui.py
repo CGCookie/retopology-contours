@@ -287,6 +287,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     def scale_tool_gvert(self, command, eventd):
         if command == 'init':
+            self.footer = 'Scaling GVerts'
             sgv = self.sel_gvert
             lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
             self.tool_data = [(gv,Vector(gv.position)) for gv in lgv]
@@ -310,6 +311,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     def scale_tool_gvert_radius(self, command, eventd):
         if command == 'init':
+            self.footer = 'Scaling GVert radius'
             self.tool_data = self.sel_gvert.radius
         elif command == 'undo':
             self.sel_gvert.radius = self.tool_data
@@ -324,6 +326,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     def grab_tool_gvert(self, command, eventd):
         if command == 'init':
+            self.footer = 'Translating GVert position'
             self.tool_data = self.sel_gvert.position
         elif command == 'undo':
             self.sel_gvert.position = self.tool_data
@@ -337,6 +340,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     def grab_tool_gvert_neighbors(self, command, eventd):
         if command == 'init':
+            self.footer = 'Translating GVerts positions'
             sgv = self.sel_gvert
             lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
             self.tool_data = [(sgv,sgv.position)] + [(gv,Vector(gv.position)) for gv in lgv]
@@ -352,6 +356,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     def rotate_tool_gvert_neighbors(self, command, eventd):
         if command == 'init':
+            self.footer = 'Rotating GVerts'
             self.tool_data = [(gv,Vector(gv.position)) for gv in self.sel_gvert.get_inner_gverts()]
         elif command == 'undo':
             for gv,p in self.tool_data:
@@ -402,6 +407,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
     
     def modal_main(self, eventd):
+        self.footer = ''
         
         #############################################
         # general navigation
@@ -415,9 +421,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:
             self.create_mesh(eventd['context'])
+            eventd['context'].area.header_text_set()
             return 'finish'
         
         if eventd['press'] in {'ESC'}:
+            eventd['context'].area.header_text_set()
             return 'cancel'
         
         
@@ -438,6 +446,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         
         if eventd['press'] == 'LEFTMOUSE':                                          # start sketching
+            self.footer = 'Sketching'
             x,y = eventd['mouse']
             self.sketch_curpos = (x,y)
             self.sketch = [(x,y)]
@@ -486,6 +495,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sel_gedge,self.sel_gvert = None,None
             return ''
         
+        if eventd['press'] == 'CTRL+U':
+            for gv in self.polystrips.gverts:
+                gv.update_gedges()
+        
         
         ###################################
         # selected gedge commands
@@ -506,6 +519,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 t,d = self.sel_gedge.get_closest_point(pt)
                 self.polystrips.split_gedge_at_t(self.sel_gedge, t)
                 self.sel_gedge = None
+            
+            if eventd['press'] == 'U':
+                self.sel_gedge.gvert0.update_gedges()
+                self.sel_gedge.gvert3.update_gedges()
+                return ''
         
         
         ###################################
@@ -566,15 +584,23 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
             
-            if eventd['press'] == 'CTRL+R':
+            if eventd['press'] == 'R':
                 self.ready_tool(eventd, self.rotate_tool_gvert_neighbors)
                 return 'rotate tool'
+            
+            if eventd['press'] == 'U':
+                self.sel_gvert.update_gedges()
+                return ''
+            
+            if eventd['press'] == 'CTRL+R':
+                self.polystrips.rip_gvert(self.sel_gvert)
+                self.sel_gvert = None
+                return ''
             
         return ''
     
     
     def modal_sketching(self, eventd):
-        
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
             lx,ly = self.sketch[-1]
@@ -672,6 +698,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         eventd = self.get_event_details(context, event)
         
+        if self.footer_last != self.footer:
+            context.area.header_text_set('PolyStrips: %s' % self.footer)
+            self.footer_last = self.footer
+        
         FSM = {}
         FSM['main']         = self.modal_main
         FSM['nav']          = self.modal_nav
@@ -756,6 +786,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.sketch_curpos = (0,0)
         self.sketch = []
         self.post_update = True
+        
+        self.footer = ''
+        self.footer_last = ''
         
         self.last_matrix = None
         
