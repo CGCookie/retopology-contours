@@ -471,6 +471,13 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max = 100,
             )
     
+    quad_prev_radius = IntProperty(
+            name="Polysketch Pixel Brush Radius",
+            description = "Pixel brush size",
+            default=15,
+            )
+    
+    
     def draw(self, context):
         layout = self.layout
 

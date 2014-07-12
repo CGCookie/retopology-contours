@@ -31,7 +31,7 @@ from mathutils import Vector, Matrix
 from math import sqrt
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 import contour_utilities, general_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver
+from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, PolySkecthLine, ContourCutSeries, ContourStatePreserver, SketchBrush
 from polystrips import PolyStrips, GVert, GEdge
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
@@ -233,14 +233,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         bgl.glLineWidth(1)
         
-        ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.cur_pos, self.obj, settings)
-        hit_p3d,hit_norm,hit_idx = hit
-        if hit_idx != -1:
-            mx = self.obj.matrix_world
-            hit_p3d = mx * hit_p3d
-            radius = self.stroke_radius
-            draw_circle(context, hit_p3d, hit_norm.normalized(), radius, (1,1,1,.5))
+        if self.mode != 'brush scale tool':
+            ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.cur_pos, self.obj, settings)
+            hit_p3d,hit_norm,hit_idx = hit
+            if hit_idx != -1:
+                mx = self.obj.matrix_world
+                hit_p3d = mx * hit_p3d
+                radius = self.stroke_radius
+                draw_circle(context, hit_p3d, hit_norm.normalized(), radius, (1,1,1,.5))
         
+        self.sketch_brush.draw(context)
     
     
     def create_mesh(self, context):
@@ -394,7 +396,18 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv.position = p+q*(up-p)
                 gv.update()
                 
-    
+    def scale_brush_pixel_radius(self,command, eventd):
+        if command == 'init':
+            self.footer = 'Scale Brush Pixel Size'
+            self.tool_data = self.stroke_radius
+            
+        elif command == 'undo':
+            self.stroke_radius = self.tool_data
+        
+        else:
+            x,y = command
+            self.sketch_brush.brush_pix_size_interact(x, y, precise = eventd['shift'])
+           
     ##############################
     # modal functions
     
@@ -456,6 +469,21 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #####################################
         # general
         
+        if eventd['type'] == 'MOUSEMOVE':  #mouse movement/hovering
+            #update brush and brush size
+            x,y = eventd['mouse']
+            self.sketch_brush.update_mouse_move_hover(eventd['context'], x,y)
+            self.sketch_brush.make_circles()
+            self.sketch_brush.get_brush_world_size(eventd['context'])
+            
+            if self.sketch_brush.world_width:
+                self.stroke_radius = self.sketch_brush.world_width
+            #continue?
+        
+        if eventd['press'] == 'F':
+            self.ready_tool(eventd, self.scale_brush_pixel_radius)
+            return 'brush scale tool'
+        
         if eventd['press'] == 'Q':                                                  # profiler printout
             profiler.printout()
             return ''
@@ -486,6 +514,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 return ''
             pt = pts[0]
             
+            #picking happens based on world scale
             threshold_pick = self.length_scale * 0.005
             
             if self.sel_gvert or self.sel_gedge:
@@ -717,7 +746,36 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         return ''
     
-    
+    def modal_scale_brush_pixel_tool(self, eventd):
+        '''
+        This is the pixel brush radius
+        self.tool_fn is expected to be self.
+        '''
+        mx,my = eventd['mouse']
+
+        if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
+            self.sketch_brush.brush_pix_size_confirm(eventd['context'])
+            if self.sketch_brush.world_width:
+                self.stroke_radius = self.sketch_brush.world_width
+
+            return 'main'
+        
+        if eventd['press'] in {'ESC', 'RIGHTMOUSE'}:
+            self.sketch_brush.brush_pix_size_cancel(eventd['context'])
+            self.tool_fn('undo', eventd)
+            
+            return 'main'
+        
+        if eventd['type'] == 'MOUSEMOVE':
+            '''
+            '''
+            self.tool_fn((mx,my), eventd)
+            
+            return ''
+        
+        return ''
+        
+        
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
@@ -735,6 +793,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         FSM['scale tool']   = self.modal_scale_tool
         FSM['grab tool']    = self.modal_grab_tool
         FSM['rotate tool']  = self.modal_rotate_tool
+        FSM['brush scale tool'] = self.modal_scale_brush_pixel_tool
         
         self.cur_pos = eventd['mouse']
         nmode = FSM[self.mode](eventd)
@@ -803,7 +862,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self._timer = None
     
     def invoke(self, context, event):
-        #settings = context.user_preferences.addons[AL.FolderName].preferences
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         #return {'CANCELLED'}
         #return {'RUNNING_MODAL'}
         
@@ -816,6 +875,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.is_navigating = False
         self.sketch_curpos = (0,0)
         self.sketch = []
+        
         self.post_update = True
         
         self.footer = ''
@@ -836,8 +896,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.bme = bmesh.new()
         self.bme.from_mesh(self.me)
         
+        #world stroke radius
         self.stroke_radius = 0.01 * self.length_scale # 0.005 * self.length_scale
+        #screen_stroke_radius
+        self.screen_stroke_radius = 20 #TODO, hood to settings
         
+        self.sketch_brush = SketchBrush(context, 
+                                        settings, 
+                                        event.mouse_region_x, event.mouse_region_y, 
+                                        settings.quad_prev_radius, 
+                                        self.obj)
         self.sel_gedge = None
         self.sel_gvert = None
         
