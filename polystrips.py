@@ -545,7 +545,7 @@ class GEdge:
             return
         
         # compute difference for smoothly interpolating radii
-        s = (r3-r0) / (c-1)
+        s = (r3-r0) / float(c-1)
         
         # compute how much space is left over (to be added to each interval)
         tot = r0*(c+1) + s*(c+1)*c/2
@@ -655,7 +655,7 @@ class PolyStrips(object):
     def create_gvert(self, co, radius=0.005):
         #if type(co) is not Vector: co = Vector(co)
         p0  = co
-        r0  = self.length_scale * radius
+        r0  = radius
         n0  = Vector((0,0,1))
         tx0 = Vector((1,0,0))
         ty0 = Vector((0,1,0))
@@ -736,6 +736,8 @@ class PolyStrips(object):
         
         
         sgv0,sgv3 = None,None
+        r0 = stroke[0][1]
+        r3 = stroke[-1][1]
         
         # check for junctions
         for i_gedge,gedge in enumerate(self.gedges):
@@ -765,7 +767,7 @@ class PolyStrips(object):
                 pt0,pr0 = stroke[min_i0]
                 cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t, self.length_scale)
                 
-                gv_split = self.create_gvert(cb0[3])
+                gv_split = self.create_gvert(cb0[3], radius=(r0+r3)/2)
                 
                 gv0_0 = gedge.gvert0
                 gv0_1 = self.create_gvert(cb0[1])
@@ -804,7 +806,7 @@ class PolyStrips(object):
         for i,bpts in enumerate(l_bpts):
             t0,t3,bpt0,bpt1,bpt2,bpt3 = bpts
             if i == 0:
-                gv0 = self.create_gvert(bpt0) if not sgv0 else sgv0
+                gv0 = self.create_gvert(bpt0, radius=r0) if not sgv0 else sgv0
                 fgv = gv0
             else:
                 gv0 = pregv
@@ -816,9 +818,9 @@ class PolyStrips(object):
                 if (bpt3-l_bpts[0][2]).length < threshold_junctiondist:
                     gv3 = fgv
                 else:
-                    gv3 = self.create_gvert(bpt3) if not sgv3 else sgv3
+                    gv3 = self.create_gvert(bpt3, radius=r3) if not sgv3 else sgv3
             else:
-                gv3 = self.create_gvert(bpt3)
+                gv3 = self.create_gvert(bpt3, radius=r3)
             
             self.create_gedge(gv0,gv1,gv2,gv3)
             pregv = gv3

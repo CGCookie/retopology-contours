@@ -101,6 +101,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     def draw_callback(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
+        region = context.region
         r3d = context.space_data.region_3d
         
         draw_original_strokes   = False
@@ -231,6 +232,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             contour_utilities.draw_polyline_from_points(context, [self.action_center, self.mode_pos], (0,0,0,0.5), 1, "GL_LINE_STIPPLE")
         
         bgl.glLineWidth(1)
+        
+        ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.cur_pos, self.obj, settings)
+        hit_p3d,hit_norm,hit_idx = hit
+        if hit_idx != -1:
+            mx = self.obj.matrix_world
+            hit_p3d = mx * hit_p3d
+            radius = self.stroke_radius
+            draw_circle(context, hit_p3d, hit_norm.normalized(), radius, (1,1,1,.5))
+        
     
     
     def create_mesh(self, context):
@@ -263,13 +273,18 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     def ready_tool(self, eventd, tool_fn):
         rgn   = eventd['context'].region
         r3d   = eventd['context'].space_data.region_3d
-        loc   = self.sel_gvert.position
         mx,my = eventd['mouse']
-        cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
+        if self.sel_gvert:
+            loc   = self.sel_gvert.position
+            cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
+        elif self.sel_gvert:
+            loc   = (self.sel_gedge.gvert0.position + self.sel_gedge.gvert3.position) / 2.0
+            cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
+        else:
+            cx,cy = mx-100,my
         rad   = math.sqrt((mx-cx)**2 + (my-cy)**2)
         
         self.action_center = (cx,cy)
-        self.mode_pos      = (mx,my)
         self.mode_start    = (mx,my)
         self.action_radius = rad
         self.mode_radius   = rad
@@ -319,10 +334,19 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
         else:
             m = command
-            sgv = self.sel_gvert
-            sgv.radius *= m
-            sgv.update()
+            self.sel_gvert.radius *= m
+            self.sel_gvert.update()
             self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
+    
+    def scale_tool_stroke_radius(self, command, eventd):
+        if command == 'init':
+            self.footer = 'Scaling Stroke radius'
+            self.tool_data = self.stroke_radius
+        elif command == 'undo':
+            self.stroke_radius = self.tool_data
+        else:
+            m = command
+            self.stroke_radius *= m
     
     def grab_tool_gvert(self, command, eventd):
         if command == 'init':
@@ -499,6 +523,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             for gv in self.polystrips.gverts:
                 gv.update_gedges()
         
+        if eventd['press'] == 'B':
+            self.ready_tool(eventd, self.scale_tool_stroke_radius)
+            return 'scale tool'
+        
         
         ###################################
         # selected gedge commands
@@ -616,7 +644,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             # tessellate stroke (if needed) so we have good stroke sampling
             length_tess = self.length_scale / 700
             p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
-            stroke = [(p,1) for p in p3d]
+            stroke = [(p,self.stroke_radius) for p in p3d]
             self.sketch = []
             self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
@@ -642,7 +670,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if eventd['type'] == 'MOUSEMOVE':
             self.tool_fn(cr / pr, eventd)
-            self.mode_pos    = (mx,my)
             self.mode_radius = cr
             return ''
         
@@ -663,7 +690,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         if eventd['type'] == 'MOUSEMOVE':
             self.tool_fn((mx-px,my-py), eventd)
-            self.mode_pos    = (mx,my)
             return ''
         
         return ''
@@ -686,7 +712,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             ang = vp.angle(vm) * (-1 if vp.cross(vm).z<0 else 1)
             self.tool_rot += ang
             self.tool_fn(self.tool_rot, eventd)
-            self.mode_pos = (mx,my)
             return ''
         
         return ''
@@ -710,7 +735,9 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         FSM['grab tool']    = self.modal_grab_tool
         FSM['rotate tool']  = self.modal_rotate_tool
         
+        self.cur_pos = eventd['mouse']
         nmode = FSM[self.mode](eventd)
+        self.mode_pos = eventd['mouse']
         
         self.is_navigating = (nmode == 'nav')
         if nmode == 'nav': return {'PASS_THROUGH'}
@@ -721,6 +748,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
         
         if nmode: self.mode = nmode
+        
+        
         
         return {'RUNNING_MODAL'}
     
@@ -779,6 +808,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         self.mode = 'main'
         self.mode_pos      = (0,0)
+        self.cur_pos       = (0,0)
         self.mode_radius   = 0
         self.action_center = (0,0)
         self.action_radius = 0
@@ -797,11 +827,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
         
         self.obj = context.object
+        self.scale = self.obj.scale[0]
         self.length_scale = get_object_length_scale(self.obj)
+        
         self.me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
         self.me.update()
         self.bme = bmesh.new()
         self.bme.from_mesh(self.me)
+        
+        self.stroke_radius = 0.01 * self.length_scale # 0.005 * self.length_scale
         
         self.sel_gedge = None
         self.sel_gvert = None

@@ -84,7 +84,7 @@ def draw_circle(context, c,n,r,col,step=10):
     y = n.cross(x).normalized() * r
     d2r = math.pi/180
     p3d = [c+x*math.cos(i*d2r)+y*math.sin(i*d2r) for i in range(0,360+step,step)]
-    contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
+    draw_polyline_from_3dpoints(context, p3d, col, 1, "GL_LINE_SMOOTH")
 
 def edge_loops_from_bmedges(bmesh, bm_edges):
     """
@@ -289,7 +289,7 @@ def ray_cast_region2d(region, rv3d, screen_coord, ob, settings):
     ray_start_local  = imx * ray_origin
     ray_target_local = imx * ray_target
     
-    if settings.debug > 1:
+    if settings.debug > 3:
         print('ray_persp  = ' + str(rv3d.is_perspective))
         print('ray_origin = ' + str(ray_origin))
         print('ray_target = ' + str(ray_target))
