@@ -185,7 +185,8 @@ def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=
     l_ad = [s for d,s in general_utilities.iter_running_sum(l_d)]
     dist = sum(l_d)
     if dist <= 0:
-        return [(t0,t3,l_co[0],l_co[0],l_co[0],l_co[0])]
+        dprint('cubic_bezier_fit_points: returning []')
+        return [] #[(t0,t3,l_co[0],l_co[0],l_co[0],l_co[0])]
     l_t  = [ad/dist for ad in l_ad]
     
     ex,x0,x1,x2,x3 = cubic_bezier_fit_value([co[0] for co in l_co], l_t)

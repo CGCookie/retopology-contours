@@ -128,9 +128,12 @@ class GVert:
         
         l_gedges = self.get_gedges_notnone()
         l_vecs   = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
+        if any(v.length == 0 for v in l_vecs): print (l_vecs)
+        #l_vecs = [v if v.length else Vector((1,0,0)) for v in l_vecs]
         l_gedges = sort_objects_by_angles(norm, l_gedges, l_vecs)
         l_vecs   = [ge.get_derivative_at(self).normalized() for ge in l_gedges]
         if any(v.length == 0 for v in l_vecs): print(l_vecs)
+        #l_vecs = [v if v.length else Vector((1,0,0)) for v in l_vecs]
         l_angles = [vector_angle_between(v0,v1,norm) for v0,v1 in zip(l_vecs,l_vecs[1:]+[l_vecs[0]])]
         
         connect_count = len(l_gedges)
@@ -706,25 +709,32 @@ class PolyStrips(object):
         
         return (ge0,ge1)
     
-    def insert_gedge_from_stroke(self, stroke):
+    def insert_gedge_from_stroke(self, stroke, sgv0=None, sgv3=None, depth=0, sgedges=None):
         '''
         stroke: list of tuples (3d location, pressure)
         '''
         
-        threshold_tooshort     = self.length_scale / 200 # 200
-        threshold_junctiondist = self.length_scale / 150 # 150
-        threshold_splitdist    = self.length_scale / 140 # 200
+        assert depth < 10
+        if not sgedges: sgedges = set()
+        
+        threshold_tooshort     = self.length_scale / 150 # 200
+        threshold_junctiondist = self.length_scale /  50 # 150
+        threshold_splitdist    = self.length_scale / 200 # 200
         
         # too short?
-        if len(stroke) < 4:
-            print('Too few samples in stroke (subsample??)')
+        if len(stroke) <= 6:
+            dprint('Too few samples in stroke (subsample??)')
             #subsampling function in contour_utils.space_evenly_on_path
             return
         tot_length = sum((s0[0]-s1[0]).length for s0,s1 in zip(stroke[:-1],stroke[1:]))
-        if tot_length < threshold_tooshort:
-            print('Stroke too short (%f)' % tot_length)
+        dprint('stroke len: %f' % tot_length)
+        if tot_length < threshold_tooshort and not (sgv0 and sgv3):
+            dprint('Stroke too short (%f)' % tot_length)
             return
         
+        if sgv0 and sgv0==sgv3:
+            dprint('Stroke uses same endpoints?')
+            return
         
         # TODO: self intersection tests!
         # check for self-intersections
@@ -735,70 +745,108 @@ class PolyStrips(object):
         #        pt1,pr1 = info1
         
         
-        sgv0,sgv3 = None,None
         r0 = stroke[0][1]
         r3 = stroke[-1][1]
         
         # check for junctions
         for i_gedge,gedge in enumerate(self.gedges):
+            #if gedge in sgedges: continue
+            
             p0,p1,p2,p3 = gedge.get_positions()
             
             min_i0,min_t,min_d = -1,-1,0
             # find closest distance between stroke and gedge
             for i0,info0 in enumerate(stroke):
+                if sgv0 and i0 <= 6: continue
+                if sgv3 and i0 >= len(stroke)-7: continue
+                
                 pt0,pr0 = info0
                 split_t,split_d = gedge.get_closest_point(pt0)
                 #(split_t,split_d) = cubic_bezier_find_closest_t_approx(p0,p1,p2,p3,pt0)
                 if min_i0 == -1 or split_d <= min_d: min_i0,min_t,min_d = i0,split_t,split_d
             if min_i0 == -1 or min_d > max([threshold_junctiondist,threshold_splitdist]): continue
             
+            if min_i0 <= 6: min_i0 = 0 if not sgv0 else 7
+            if min_i0 >= len(stroke)-7: min_i0 = len(stroke)-1 if not sgv3 else len(stroke)-8
+            
             split_bpt = cubic_bezier_blend_t(p0,p1,p2,p3,min_t)
             
-            closeto_i0 = (min_i0 < 3)
-            closeto_i1 = (min_i0 > len(stroke)-4)
-            closeto_p0 = ((split_bpt-p0).length <= threshold_junctiondist)
-            closeto_p3 = ((split_bpt-p3).length <= threshold_junctiondist)
+            closeto_p0 = ((split_bpt-p0).length <= threshold_junctiondist) and gedge.gvert0.count_gedges()<4
+            closeto_p3 = ((split_bpt-p3).length <= threshold_junctiondist) and gedge.gvert3.count_gedges()<4
             
-            if not closeto_p0 and not closeto_p3 and min_d <= threshold_splitdist:
-                # not close to endpoint of bezier, so split bezier and recurse
-                
-                dprint('Splitting gedge %i at %f; Splitting stroke at %i' % (i_gedge,min_t,min_i0))
-                
-                pt0,pr0 = stroke[min_i0]
-                cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t, self.length_scale)
-                
-                gv_split = self.create_gvert(cb0[3], radius=(r0+r3)/2)
-                
-                gv0_0 = gedge.gvert0
-                gv0_1 = self.create_gvert(cb0[1])
-                gv0_2 = self.create_gvert(cb0[2])
-                gv0_3 = gv_split
-                
-                gv1_0 = gv_split
-                gv1_1 = self.create_gvert(cb1[1])
-                gv1_2 = self.create_gvert(cb1[2])
-                gv1_3 = gedge.gvert3
-                
-                self.disconnect_gedge(gedge)
-                ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
-                ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
-                
-                if closeto_i0:   sgv0 = gv_split
-                elif closeto_i1: sgv3 = gv_split
-            
-            if closeto_p0 or closeto_p3:
-                if closeto_i0:
-                    sgv0 = gedge.gvert0 if closeto_p0 else gedge.gvert3
-                    if sgv0.count_gedges() == 4: sgv0 = None
-                if closeto_i1:
-                    sgv3 = gedge.gvert0 if closeto_p0 else gedge.gvert3
-                    if sgv3.count_gedges() == 4: sgv3 = None
-            
-            if not closeto_i0 and not closeto_i1:
-                # break stroke
-                self.insert_gedge_from_stroke(stroke[:min_i0])
-                self.insert_gedge_from_stroke(stroke[min_i0:])
+            if closeto_p0 and gedge.gvert0.count_gedges() < 4:
+                sgedges = set(sgedges) | {gedge}
+                if min_i0 == 0:
+                    dprint('Joining gedge %i at p0; Joining stroke at 0' % (i_gedge))
+                    self.insert_gedge_from_stroke(stroke, sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
+                elif min_i0 == len(stroke)-1:
+                    dprint('Joining gedge %i at p0; Joining stroke at %i' % (i_gedge,len(stroke)-1))
+                    self.insert_gedge_from_stroke(stroke, sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1, sgedges=sgedges)
+                else:
+                    dprint('Joining gedge %i at p0; Splitting stroke at 0-%i-%i' % (i_gedge,min_i0,len(stroke)-1))
+                    self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1, sgedges=sgedges)
+                    self.insert_gedge_from_stroke(stroke[min_i0:], sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
                 return
+            
+            if closeto_p3 and gedge.gvert3.count_gedges() < 4:
+                sgedges = set(sgedges) | {gedge}
+                if min_i0 == 0:
+                    dprint('Joining gedge %i at p3; Joining stroke at 0' % (i_gedge,))
+                    self.insert_gedge_from_stroke(stroke, sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
+                elif min_i0 == len(stroke)-1:
+                    dprint('Joining gedge %i at p3; Joining stroke at %i' % (i_gedge,len(stroke)-1))
+                    self.insert_gedge_from_stroke(stroke, sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1, sgedges=sgedges)
+                else:
+                    dprint('Joining gedge %i at p3; Splitting stroke at 0-%i-%i' % (i_gedge,min_i0,len(stroke)-1))
+                    self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1, sgedges=sgedges)
+                    self.insert_gedge_from_stroke(stroke[min_i0:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
+                return
+                
+            
+            pt0,pr0 = stroke[min_i0]
+            cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t, self.length_scale)
+            
+            gv_split = self.create_gvert(cb0[3], radius=(r0+r3)/2)
+            
+            gv0_0 = gedge.gvert0
+            gv0_1 = self.create_gvert(cb0[1])
+            gv0_2 = self.create_gvert(cb0[2])
+            gv0_3 = gv_split
+            
+            gv1_0 = gv_split
+            gv1_1 = self.create_gvert(cb1[1])
+            gv1_2 = self.create_gvert(cb1[2])
+            gv1_3 = gedge.gvert3
+            
+            self.disconnect_gedge(gedge)
+            ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
+            ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
+            
+            gv0_0.update()
+            gv0_0.update_gedges()
+            gv_split.update()
+            gv_split.update_gedges()
+            gv1_3.update()
+            gv1_3.update_gedges()
+            
+            # debugging printout
+            if (ge0.gvert1.position-ge0.gvert0.position).length == 0: dprint('ge0.der0 = 0')
+            if (ge0.gvert2.position-ge0.gvert3.position).length == 0: dprint('ge0.der3 = 0')
+            if (ge1.gvert1.position-ge1.gvert0.position).length == 0: dprint('ge1.der0 = 0')
+            if (ge1.gvert2.position-ge1.gvert3.position).length == 0: dprint('ge1.der3 = 0')
+            
+            sgedges = set(sgedges) | {ge0,ge1}
+            if min_i0 == 0:
+                dprint('Splitting gedge %i at %f; Joining stroke at 0' % (i_gedge,min_t))
+                self.insert_gedge_from_stroke(stroke, sgv0=gv_split, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
+            elif min_i0 == len(stroke)-1:
+                dprint('Splitting gedge %i at %f; Joining stroke at %i' % (i_gedge,min_t,len(stroke)-1))
+                self.insert_gedge_from_stroke(stroke, sgv0=sgv0, sgv3=gv_split, depth=depth+1, sgedges=sgedges)
+            else:
+                dprint('Splitting gedge %i at %f; Splitting stroke at 0-%i-%i' % (i_gedge,min_t,min_i0,len(stroke)-1))
+                self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gv_split, depth=depth+1, sgedges=sgedges)
+                self.insert_gedge_from_stroke(stroke[min_i0:], sgv0=gv_split, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
+            return
             
         
         l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke], self.length_scale)
@@ -810,20 +858,33 @@ class PolyStrips(object):
                 fgv = gv0
             else:
                 gv0 = pregv
-                
+            
             gv1 = self.create_gvert(bpt1)
             gv2 = self.create_gvert(bpt2)
             
             if i == len(l_bpts)-1:
-                if (bpt3-l_bpts[0][2]).length < threshold_junctiondist:
-                    gv3 = fgv
-                else:
-                    gv3 = self.create_gvert(bpt3, radius=r3) if not sgv3 else sgv3
+                #if (bpt3-l_bpts[0][2]).length < threshold_junctiondist:
+                #    gv3 = fgv
+                #else:
+                #    gv3 = self.create_gvert(bpt3, radius=r3) if not sgv3 else sgv3
+                gv3 = self.create_gvert(bpt3, radius=r3) if not sgv3 else sgv3
             else:
                 gv3 = self.create_gvert(bpt3, radius=r3)
             
+            if (gv1.position-gv0.position).length == 0: dprint('gv01.der = 0')
+            if (gv2.position-gv3.position).length == 0: dprint('gv32.der = 0')
+            if (gv0.position-gv3.position).length == 0:
+                dprint('gv03.der = 0')
+                dprint(l_bpts)
+                dprint(str(sgv0.position) if sgv0 else 'None')
+                dprint(str(sgv3.position) if sgv3 else 'None')
+            
             self.create_gedge(gv0,gv1,gv2,gv3)
             pregv = gv3
+            gv0.update()
+            gv0.update_gedges()
+        gv3.update()
+        gv3.update_gedges()
         
     def dissolve_gvert(self, gvert, tessellation=20):
         if not (gvert.is_endtoend() or gvert.is_ljunction()):

@@ -646,6 +646,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
             stroke = [(p,self.stroke_radius) for p in p3d]
             self.sketch = []
+            dprint('inserting stroke')
             self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
             self.polystrips.update_visibility(eventd['r3d'])
