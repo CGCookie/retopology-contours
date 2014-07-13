@@ -4491,7 +4491,8 @@ class SketchBrush(object):
         #draw the sample points which are raycast
         if self.world_sample_points != []:
             #TODO color and size
-            contour_utilities.draw_3d_points(context, self.world_sample_points, (1,1,1,1), 3)
+            #contour_utilities.draw_3d_points(context, self.world_sample_points, (1,1,1,1), 3)
+            pass
     
         #draw the preview circle if changing brush size
         if self.preview_circle != []:

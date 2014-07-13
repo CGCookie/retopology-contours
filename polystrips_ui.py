@@ -245,7 +245,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 radius = self.stroke_radius
                 draw_circle(context, hit_p3d, hit_norm.normalized(), radius, (1,1,1,.5))
         
-        #self.sketch_brush.draw(context)
+        self.sketch_brush.draw(context)
     
     
     def create_mesh(self, context):
