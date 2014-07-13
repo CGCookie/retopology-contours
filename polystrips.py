@@ -725,10 +725,6 @@ class PolyStrips(object):
         assert depth < 10
         if not sgedges: sgedges = set()
         
-        threshold_tooshort     = self.length_scale / 150 # 200
-        threshold_junctiondist = self.length_scale /  50 # 150
-        threshold_splitdist    = self.length_scale / 200 # 200
-        
         # too few samples?
         if len(stroke) <= 1:
             dprint('Too few samples in stroke (subsample??)')
@@ -814,7 +810,8 @@ class PolyStrips(object):
                     self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1, sgedges=sgedges)
                     self.insert_gedge_from_stroke(stroke[min_i0:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1, sgedges=sgedges)
                 return
-                
+            
+            if min_d > threshold_splitdist: continue
             
             pt0,pr0 = stroke[min_i0]
             cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t, self.length_scale)
