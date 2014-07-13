@@ -275,11 +275,11 @@ def ray_cast_region2d(region, rv3d, screen_coord, ob, settings):
         if not rv3d.is_perspective:
             # need to back up the ray's origin, because ortho projection has front and back
             # projection planes at inf
-            ray_origin = ray_origin + ray_vector * 1000
-            ray_target = ray_origin - ray_vector * 2000
+            ray_origin = ray_origin + ray_vector * 100
+            ray_target = ray_origin - ray_vector * 100
             ray_vector = -ray_vector # why does this need to be negated?
         else:
-            ray_target = ray_origin + ray_vector * 1000
+            ray_target = ray_origin + ray_vector * 100
         #TODO: make a max ray depth or pull this depth from clip depth
     else:
         ray_vector = region_2d_to_vector_3d(region, rv3d, screen_coord)
