@@ -215,6 +215,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 p0,p1,p2,p3 = gv.get_corners()
                 p3d = [p0,p1,p2,p3,p0]
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+                
+            self.sel_gedge.draw_info(context)
         
         if self.sel_gvert:
             col = color_gvert_midpoints
