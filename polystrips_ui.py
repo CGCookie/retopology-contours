@@ -308,6 +308,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             sgv = self.sel_gvert
             lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
             self.tool_data = [(gv,Vector(gv.position)) for gv in lgv]
+        elif command == 'commit':
+            pass
         elif command == 'undo':
             for gv,p in self.tool_data:
                 gv.position = p
@@ -330,6 +332,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if command == 'init':
             self.footer = 'Scaling GVert radius'
             self.tool_data = self.sel_gvert.radius
+        elif command == 'commit':
+            pass
         elif command == 'undo':
             self.sel_gvert.radius = self.tool_data
             self.sel_gvert.update()
@@ -344,6 +348,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if command == 'init':
             self.footer = 'Scaling Stroke radius'
             self.tool_data = self.stroke_radius
+        elif command == 'commit':
+            pass
         elif command == 'undo':
             self.stroke_radius = self.tool_data
         else:
@@ -354,6 +360,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if command == 'init':
             self.footer = 'Translating GVert position'
             self.tool_data = self.sel_gvert.position
+        elif command == 'commit':
+            pass
         elif command == 'undo':
             self.sel_gvert.position = self.tool_data
             self.sel_gvert.update()
@@ -370,6 +378,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             sgv = self.sel_gvert
             lgv = [ge.gvert1 if ge.gvert0==sgv else ge.gvert2 for ge in sgv.get_gedges() if ge]
             self.tool_data = [(sgv,sgv.position)] + [(gv,Vector(gv.position)) for gv in lgv]
+        elif command == 'commit':
+            pass
         elif command == 'undo':
             for gv,p in self.tool_data:
                 gv.position = p
@@ -384,6 +394,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if command == 'init':
             self.footer = 'Rotating GVerts'
             self.tool_data = [(gv,Vector(gv.position)) for gv in self.sel_gvert.get_inner_gverts()]
+        elif command == 'commit':
+            pass
         elif command == 'undo':
             for gv,p in self.tool_data:
                 gv.position = p
@@ -400,10 +412,14 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if command == 'init':
             self.footer = 'Scale Brush Pixel Size'
             self.tool_data = self.stroke_radius
-            
+        elif command == 'commit':
+            self.sketch_brush.brush_pix_size_confirm(eventd['context'])
+            if self.sketch_brush.world_width:
+                self.stroke_radius = self.sketch_brush.world_width
+            pass
         elif command == 'undo':
+            self.sketch_brush.brush_pix_size_cancel(eventd['context'])
             self.stroke_radius = self.tool_data
-        
         else:
             x,y = command
             self.sketch_brush.brush_pix_size_interact(x, y, precise = eventd['shift'])
@@ -692,6 +708,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         cr = math.sqrt((mx-cx)**2 + (my-cy)**2)
         
         if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
+            self.tool_fn('commit', eventd)
             return 'main'
         
         if eventd['press'] == 'ESC':
@@ -712,6 +729,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         sx,sy = self.mode_start
         
         if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
+            self.tool_fn('commit', eventd)
             return 'main'
         
         if eventd['press'] == 'ESC':
@@ -730,6 +748,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         px,py = self.mode_pos
         
         if eventd['press'] in {'RET', 'NUMPAD_ENTER', 'LEFTMOUSE'}:
+            self.tool_fn('commit', eventd)
             return 'main'
         
         if eventd['press'] == 'ESC':
@@ -754,14 +773,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         mx,my = eventd['mouse']
 
         if eventd['press'] in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
-            self.sketch_brush.brush_pix_size_confirm(eventd['context'])
-            if self.sketch_brush.world_width:
-                self.stroke_radius = self.sketch_brush.world_width
-
+            self.tool_fn('commit', eventd)
             return 'main'
         
         if eventd['press'] in {'ESC', 'RIGHTMOUSE'}:
-            self.sketch_brush.brush_pix_size_cancel(eventd['context'])
             self.tool_fn('undo', eventd)
             
             return 'main'
