@@ -4389,6 +4389,8 @@ class SketchBrush(object):
         region = context.region  
         rv3d = context.space_data.region_3d
         center = (self.x,self.y)
+        wrld_mx = self.ob.matrix_world
+        
         vec, center_ray = contour_utilities.ray_cast_region2d(region, rv3d, center, self.ob, self.settings)
         vec.normalize()
         widths = []
@@ -4398,8 +4400,8 @@ class SketchBrush(object):
             for pt in self.sample_points:
                 V, ray = contour_utilities.ray_cast_region2d(region, rv3d, pt, self.ob, self.settings)
                 if ray[2] != -1:
-                    widths.append((ray[0] - center_ray[0]).length)
-                    self.world_sample_points.append(ray[0])
+                    widths.append((wrld_mx * ray[0] - wrld_mx * center_ray[0]).length)
+                    self.world_sample_points.append(wrld_mx * ray[0])
             
             if len(widths):
                 #average and correct for the view being parallel to the surfaec normal
