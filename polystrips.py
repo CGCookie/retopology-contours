@@ -690,23 +690,30 @@ class PolyStrips(object):
     
     def split_gedge_at_t(self, gedge, t):
         p0,p1,p2,p3 = gedge.get_positions()
+        r0,r1,r2,r3 = gedge.get_radii()
         cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
+        rm = cubic_bezier_blend_t(r0,r1,r2,r3, t)
         
-        gv_split = self.create_gvert(cb0[3])
+        gv_split = self.create_gvert(cb0[3], radius=rm)
         
         gv0_0 = gedge.gvert0
-        gv0_1 = self.create_gvert(cb0[1])
-        gv0_2 = self.create_gvert(cb0[2])
+        gv0_1 = self.create_gvert(cb0[1], radius=rm)
+        gv0_2 = self.create_gvert(cb0[2], radius=rm)
         gv0_3 = gv_split
         
         gv1_0 = gv_split
-        gv1_1 = self.create_gvert(cb1[1])
-        gv1_2 = self.create_gvert(cb1[2])
+        gv1_1 = self.create_gvert(cb1[1], radius=rm)
+        gv1_2 = self.create_gvert(cb1[2], radius=rm)
         gv1_3 = gedge.gvert3
         
         self.disconnect_gedge(gedge)
         ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
         ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
+        
+        ge0.gvert0.update()
+        ge1.gvert3.update()
+        gv_split.update()
+        gv_split.update_gedges()
         
         return (ge0,ge1)
     
@@ -722,11 +729,18 @@ class PolyStrips(object):
         threshold_junctiondist = self.length_scale /  50 # 150
         threshold_splitdist    = self.length_scale / 200 # 200
         
-        # too short?
-        if len(stroke) <= 6:
+        # too few samples?
+        if len(stroke) <= 1:
             dprint('Too few samples in stroke (subsample??)')
             #subsampling function in contour_utils.space_evenly_on_path
             return
+        
+        r0,r3 = stroke[0][1],stroke[-1][1]
+        
+        threshold_tooshort     = (r0+r3)/2
+        threshold_junctiondist = (r0+r3)/2 * 2
+        threshold_splitdist    = (r0+r3)/2 / 2
+        
         tot_length = sum((s0[0]-s1[0]).length for s0,s1 in zip(stroke[:-1],stroke[1:]))
         dprint('stroke len: %f' % tot_length)
         if tot_length < threshold_tooshort and not (sgv0 and sgv3):
@@ -746,8 +760,6 @@ class PolyStrips(object):
         #        pt1,pr1 = info1
         
         
-        r0 = stroke[0][1]
-        r3 = stroke[-1][1]
         
         # check for junctions
         for i_gedge,gedge in enumerate(self.gedges):
@@ -807,16 +819,18 @@ class PolyStrips(object):
             pt0,pr0 = stroke[min_i0]
             cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3,min_t, self.length_scale)
             
-            gv_split = self.create_gvert(cb0[3], radius=(r0+r3)/2)
+            rm = (r0+r3)/2
+            
+            gv_split = self.create_gvert(cb0[3], radius=rm)
             
             gv0_0 = gedge.gvert0
-            gv0_1 = self.create_gvert(cb0[1])
-            gv0_2 = self.create_gvert(cb0[2])
+            gv0_1 = self.create_gvert(cb0[1], radius=rm)
+            gv0_2 = self.create_gvert(cb0[2], radius=rm)
             gv0_3 = gv_split
             
             gv1_0 = gv_split
-            gv1_1 = self.create_gvert(cb1[1])
-            gv1_2 = self.create_gvert(cb1[2])
+            gv1_1 = self.create_gvert(cb1[1], radius=rm)
+            gv1_2 = self.create_gvert(cb1[2], radius=rm)
             gv1_3 = gedge.gvert3
             
             self.disconnect_gedge(gedge)
@@ -850,7 +864,7 @@ class PolyStrips(object):
             return
             
         
-        l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke], self.length_scale)
+        l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke], min(r0,r3) / 20)
         pregv,fgv = None,None
         for i,bpts in enumerate(l_bpts):
             t0,t3,bpt0,bpt1,bpt2,bpt3 = bpts
@@ -860,14 +874,10 @@ class PolyStrips(object):
             else:
                 gv0 = pregv
             
-            gv1 = self.create_gvert(bpt1)
-            gv2 = self.create_gvert(bpt2)
+            gv1 = self.create_gvert(bpt1,radius=(r0+r3)/2)
+            gv2 = self.create_gvert(bpt2,radius=(r0+r3)/2)
             
             if i == len(l_bpts)-1:
-                #if (bpt3-l_bpts[0][2]).length < threshold_junctiondist:
-                #    gv3 = fgv
-                #else:
-                #    gv3 = self.create_gvert(bpt3, radius=r3) if not sgv3 else sgv3
                 gv3 = self.create_gvert(bpt3, radius=r3) if not sgv3 else sgv3
             else:
                 gv3 = self.create_gvert(bpt3, radius=r3)
@@ -907,13 +917,17 @@ class PolyStrips(object):
         t0,t3,p0,p1,p2,p3 = cubic_bezier_fit_points(pts, self.length_scale, allow_split=False)[0]
         
         gv0 = gedge0.gvert3 if gedge0.gvert0 == gvert else gedge0.gvert0
-        gv1 = self.create_gvert(p1)
-        gv2 = self.create_gvert(p2)
+        gv1 = self.create_gvert(p1, gvert.radius)
+        gv2 = self.create_gvert(p2, gvert.radius)
         gv3 = gedge1.gvert3 if gedge1.gvert0 == gvert else gedge1.gvert0
         
         self.disconnect_gedge(gedge0)
         self.disconnect_gedge(gedge1)
         self.create_gedge(gv0,gv1,gv2,gv3)
+        gv0.update()
+        gv0.update_gedges()
+        gv3.update()
+        gv3.update_gedges()
     
     def create_mesh(self):
         
