@@ -712,7 +712,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.tool_fn('commit', eventd)
             return 'main'
         
-        if eventd['press'] == 'ESC':
+        if eventd['press'] in {'ESC', 'RIGHTMOUSE'}:
             self.tool_fn('undo', eventd)
             return 'main'
         
@@ -733,7 +733,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.tool_fn('commit', eventd)
             return 'main'
         
-        if eventd['press'] == 'ESC':
+        if eventd['press'] in {'ESC', 'RIGHTMOUSE'}:
             self.tool_fn('undo', eventd)
             return 'main'
         
@@ -752,7 +752,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.tool_fn('commit', eventd)
             return 'main'
         
-        if eventd['press'] == 'ESC':
+        if eventd['press'] in {'ESC', 'RIGHTMOUSE'}:
             self.tool_fn('undo', eventd)
             return 'main'
         
