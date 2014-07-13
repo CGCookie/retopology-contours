@@ -4417,7 +4417,7 @@ class SketchBrush(object):
                 
             w = contour_utilities.ray_cast_world_size(region, rv3d, center, self.pxl_rad, self.ob, self.settings)
             self.world_width = w if w and w < float('inf') else self.ob.dimensions.length * 1/self.settings.density_factor
-            print(w)
+            #print(w)
             
         
         
