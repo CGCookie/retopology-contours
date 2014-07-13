@@ -64,6 +64,7 @@ def cubic_bezier_blend_weights(v0, v1, v2, v3, weights):
     b0,b1,b2,b3 = weights
     return v0*b0 + v1*b1 + v2*b2 + v3*b3
 
+#http://en.wikipedia.org/wiki/De_Casteljau's_algorithm
 def cubic_bezier_decasteljau_subdivide(p0,p1,p2,p3):
     q0,q1,q2 = (p0+p1)/2, (p1+p2)/2, (p2+p3)/2
     r0,r1    = (q0+q1)/2, (q1+q2)/2
