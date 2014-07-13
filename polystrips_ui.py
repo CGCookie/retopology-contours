@@ -412,11 +412,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if command == 'init':
             self.footer = 'Scale Brush Pixel Size'
             self.tool_data = self.stroke_radius
+            x,y = eventd['mouse']
+            self.sketch_brush.brush_pix_size_init(eventd['context'], x, y)
         elif command == 'commit':
             self.sketch_brush.brush_pix_size_confirm(eventd['context'])
             if self.sketch_brush.world_width:
                 self.stroke_radius = self.sketch_brush.world_width
-            pass
         elif command == 'undo':
             self.sketch_brush.brush_pix_size_cancel(eventd['context'])
             self.stroke_radius = self.tool_data
