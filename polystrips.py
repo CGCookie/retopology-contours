@@ -33,6 +33,7 @@ import bmesh
 import blf, bgl
 import itertools
 from polystrips_utilities import *
+from polystrips_draw import *
 from general_utilities import iter_running_sum, dprint, get_object_length_scale, profiler
 
 #Make the addon name and location accessible
@@ -625,24 +626,6 @@ class GEdge:
                     yield (prev0,cur0,cur1,prev1)
             prev0,prev1 = cur0,cur1
 
-    def draw_info(self,context):
-        '''
-        helper draw module to display info about the Gedge
-        '''
-        
-        if len(self.cache_igverts) > 4:
-            n_quads = math.floor(len(self.cache_igverts)/2) + 1
-            mid_vert_ind = math.floor(len(self.cache_igverts)/2)
-            mid_vert = self.cache_igverts[mid_vert_ind]
-            info = str(n_quads)
-            
-            position_3d = mid_vert.position + 1.5 * mid_vert.tangent_y * mid_vert.radius
-            position_2d = location_3d_to_region_2d(context.region, context.space_data.region_3d,position_3d)
-            ''' draw text '''
-            txt_width, txt_height = blf.dimensions(0, info) 
-            blf.position(0, position_2d[0]-(txt_width/2), position_2d[1]-(txt_height/2), 0)
-            blf.draw(0, info)
-        
 
 class PolyStrips(object):
     def __init__(self, context, obj):
