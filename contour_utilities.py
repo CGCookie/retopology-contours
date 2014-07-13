@@ -293,14 +293,12 @@ def ray_cast_world_size(region, rv3d, screen_coord, screen_size, ob, settings):
     
     pt = mx * pt
     
-    print('%f  %f' % (screen_coord[0], screen_size))
-    
     screen_coord_offset = (screen_coord[0]+screen_size, screen_coord[1])
     ray_origin_offset,ray_target_offset = get_ray_origin_target(region, rv3d, screen_coord_offset, ob)
     ray_direction_offset = (ray_target_offset - ray_origin_offset).normalized()
     
     d = get_ray_plane_intersection(ray_origin_offset, ray_direction_offset, pt, rv3d.view_rotation*Vector((0,0,-1)))
-    pt_offset = ray_origin_offset + ray_direction * d
+    pt_offset = ray_origin_offset + ray_direction_offset * d
     
     return (pt-pt_offset).length
 
