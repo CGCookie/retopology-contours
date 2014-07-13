@@ -32,6 +32,7 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vecto
 import bmesh
 import blf
 import itertools
+from general_utilities import dprint
 
 #from development.cgc-retopology import contour_utilities
 
@@ -4347,7 +4348,7 @@ class CutLineManipulatorWidget(object):
                     contour_utilities.draw_polyline_from_points(context, [p6_2d, p4_2d], self.color ,2 , "GL_STIPPLE")
 
 class SketchBrush(object):
-    def __init__(self,context,settings, x,y,pixel_radius, ob, n_samples = 4):
+    def __init__(self,context,settings, x,y,pixel_radius, ob, n_samples = 15):
         
         self.settings = settings  #should be input from user prefs
         
@@ -4403,10 +4404,12 @@ class SketchBrush(object):
                     widths.append((wrld_mx * ray[0] - wrld_mx * center_ray[0]).length)
                     self.world_sample_points.append(wrld_mx * ray[0])
             
-            if len(widths):
-                #average and correct for the view being parallel to the surfaec normal
-                self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))                
-                #self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))
+            l = len(widths)
+            if l:
+                # take median and correct for the view being parallel to the surface normal
+                widths.sort()
+                w = widths[int(l/2)+1] if l%2==1 else (widths[int(l/2)-1]+widths[int(l/2)+1])/2
+                self.world_width = w * abs(vec.dot(center_ray[1].normalized()))
 
             else:
                 #defalt quad size in case we don't get to raycast succesfully

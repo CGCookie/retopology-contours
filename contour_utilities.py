@@ -27,6 +27,7 @@ import time
 import math
 import random
 from itertools import chain,combinations
+from general_utilities import dprint
 
 from collections import deque
 
@@ -260,6 +261,22 @@ def ray_cast_visible(verts, ob, rv3d):
     
     return [ob.ray_cast(s,t)[2]==-1 for s,t in zip(source,target)]
 
+def get_ray_plane_intersection(ray_origin, ray_direction, plane_point, plane_normal):
+    d = ray_direction.dot(plane_normal)
+    if ray_direction.dot(plane_normal) <= 0.001: return float('inf')
+    return (plane_point-ray_origin).dot(plane_normal) / d
+
+def get_ray_origin(ray_origin, ray_direction, ob):
+    mx = ob.matrix_world
+    q = ob.rotation_quaternion
+    bbox = [Vector(v) for v in ob.bound_box]
+    bm,bM = min(bbox),max(bbox)
+    x,y,z = Vector((1,0,0)),Vector((0,1,0)),Vector((0,0,1))
+    planes = [(bm,x), (bm,y), (bm,z), (bM,-x), (bM,-y), (bM,-z)]
+    dists = [get_ray_plane_intersection(ray_origin,ray_direction,mx*p0,q*no) for p0,no in planes]
+    dprint(dists, l=4)
+    return ray_origin + ray_direction * min(dists)
+
 def ray_cast_region2d(region, rv3d, screen_coord, ob, settings):
     '''
     performs ray casting on object given region, rv3d, and coords wrt region.
@@ -275,9 +292,14 @@ def ray_cast_region2d(region, rv3d, screen_coord, ob, settings):
         if not rv3d.is_perspective:
             # need to back up the ray's origin, because ortho projection has front and back
             # projection planes at inf
-            ray_origin = ray_origin + ray_vector * 100
-            ray_target = ray_origin - ray_vector * 100
-            ray_vector = -ray_vector # why does this need to be negated?
+            if abs(ray_vector.y)<1:
+                ray_vector = -ray_vector # why does this need to be negated?
+                # but not when ortho front/back view??
+            r0 = get_ray_origin(ray_origin, ray_vector, ob)
+            r1 = get_ray_origin(ray_origin, -ray_vector, ob)
+            dprint(str(r0) + '->' + str(r1), l=4)
+            ray_origin = r0
+            ray_target = r1
         else:
             ray_target = ray_origin + ray_vector * 100
         #TODO: make a max ray depth or pull this depth from clip depth
