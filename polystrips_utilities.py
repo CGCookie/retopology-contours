@@ -32,6 +32,7 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vecto
 import bmesh
 import blf
 import itertools
+from general_utilities import dprint
 
 def blender_bezier_to_even_points(b_ob, dist):
     
@@ -217,8 +218,10 @@ def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=
     ex,x0,x1,x2,x3 = cubic_bezier_fit_value([co[0] for co in l_co], l_t)
     ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co], l_t)
     ez,z0,z1,z2,z3 = cubic_bezier_fit_value([co[2] for co in l_co], l_t)
+    tot_error = ex+ey+ez
+    dprint('total error = %f (%f)' % (tot_error,error_scale))
     
-    if ex+ey+ez < 0.0004*error_scale or depth == 4 or len(l_co)<=15 or not allow_split:
+    if tot_error < error_scale or depth == 4 or len(l_co)<=15 or not allow_split:
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
         return [(t0,t3,p0,p1,p2,p3)]
     
@@ -251,7 +254,7 @@ def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=
     l_co_left  = l_co[:ind_split]
     l_co_right = l_co[ind_split:]
     tsplit = ind_split / (len(l_co)-1)
-    return cubic_bezier_fit_points(l_co_left, depth+1, t0, tsplit) + cubic_bezier_fit_points(l_co_right, depth+1, tsplit, t3)
+    return cubic_bezier_fit_points(l_co_left, error_scale, depth=depth+1, t0=t0, t3=tsplit) + cubic_bezier_fit_points(l_co_right, error_scale, depth=depth+1, t0=tsplit, t3=t3)
 
 def cubic_bezier_split(p0, p1, p2, p3, t_split, error_scale, tessellate=10):
     tm0 = t_split / tessellate
