@@ -364,6 +364,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.footer = 'Translating GVert position'
             self.tool_data = self.sel_gvert.position
         elif command == 'commit':
+            self.sel_gvert.update_gedges()
             pass
         elif command == 'undo':
             self.sel_gvert.position = self.tool_data
@@ -371,7 +372,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
         else:
             dx,dy = command
-            self.sel_gvert.position += (self.tool_x*dx + self.tool_y*dy) * self.length_scale / 1000
+            self.sel_gvert.position += (self.tool_x*dx + self.tool_y*dy) * self.sel_gvert.radius / 2
             self.sel_gvert.update()
             self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
     
