@@ -457,6 +457,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if handle_nav:
             self.post_update = True
             self.is_navigating = True
+            
+            x,y = eventd['mouse']
+            self.sketch_brush.update_mouse_move_hover(eventd['context'], x,y)
+            self.sketch_brush.make_circles()
+            self.sketch_brush.get_brush_world_size(eventd['context'])
+            
+            if self.sketch_brush.world_width:
+                self.stroke_radius = self.sketch_brush.world_width
+                
             return 'nav' if eventd['value']=='PRESS' else 'main'
         
         self.is_navigating = False
@@ -517,11 +526,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return ''
         
         
-        if eventd['press'] == 'LEFTMOUSE':                                          # start sketching
+        if eventd['press'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:                      # start sketching
             self.footer = 'Sketching'
             x,y = eventd['mouse']
             self.sketch_curpos = (x,y)
-            self.sketch = [(x,y)]
+            if eventd['shift'] and self.sel_gvert:
+                gvx,gvy = location_3d_to_region_2d(eventd['region'], eventd['r3d'], self.sel_gvert.position)
+                self.sketch = [(gvx,gvy), (x,y)]
+            else:
+                self.sketch = [(x,y)]
             self.sel_gvert = None
             self.sel_gedge = None
             return 'sketch'
@@ -686,7 +699,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1)]
             return ''
         
-        if eventd['release'] == 'LEFTMOUSE':
+        if eventd['release'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:
             p3d = general_utilities.ray_cast_path(eventd['context'], self.obj, self.sketch) if len(self.sketch) > 1 else []
             if len(p3d) <= 1: return 'main'
             
