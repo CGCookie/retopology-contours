@@ -4403,11 +4403,9 @@ class SketchBrush(object):
             
             if len(widths):
                 #average and correct for the view being parallel to the surfaec normal
-                self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))
-                
+                self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))                
                 #self.world_width = sum(widths)/len(widths) * abs(vec.dot(center_ray[1].normalized()))
-                
-                
+
             else:
                 #defalt quad size in case we don't get to raycast succesfully
                 self.world_width = self.ob.dimensions.length * 1/self.settings.density_factor
@@ -4426,8 +4424,7 @@ class SketchBrush(object):
             if new_x < 0:
                 new_x = self.x + self.pxl_rad
                 self.screen_hand_reverse = True
-            
-        
+
         #NOTE.  Widget coordinates are in area space.
         #cursor warp takes coordinates in window space!
         #need to check that this works with t panel, n panel etc.
@@ -4435,7 +4432,6 @@ class SketchBrush(object):
         
         
     def brush_pix_size_interact(self,mouse_x,mouse_y, precise = False):
-        
         #this handles right handedness and reflecting for screen
         side_factor = (-1 + 2 * self.right_handed) * (1 - 2 * self.screen_hand_reverse)
         
@@ -4446,9 +4442,7 @@ class SketchBrush(object):
             
         if rad_diff < 0:
             rad_diff =  self.pxl_rad*(math.exp(rad_diff/self.pxl_rad) - 1)
-        
-        
-               
+
         self.new_rad = self.pxl_rad + rad_diff    
         self.preview_circle = contour_utilities.simple_circle(self.x, self.y, self.new_rad, 20)
         self.preview_circle.append(self.preview_circle[0])
