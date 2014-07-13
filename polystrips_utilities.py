@@ -34,6 +34,30 @@ import blf
 import itertools
 from general_utilities import dprint
 
+def blender_bezier_to_even_points(b_ob, dist):
+    
+    mx = b_ob.matrix_world
+    paths = []
+    for spline in b_ob.data.splines:
+        total_verts = []
+        pregv = None
+        for bp0,bp1 in zip(spline.bezier_points[:-1],spline.bezier_points[1:]):
+            p0 = pregv if pregv else mx * bp0.co
+            p1 = mx * bp0.handle_right
+            p2 = mx * bp1.handle_left
+            p3 = mx * bp1.co
+            
+            points = cubic_bezier_points_dist(p0, p1, p2, p3, dist, first=True)
+            total_verts.extend(points)
+            
+            L = contour_utilities.get_path_length(total_verts)
+            n = round(L/dist)
+            new_verts = contour_utilities.space_evenly_on_path(total_verts, [(0,1),(1,2)], n, 0)
+        paths.append(new_verts)
+        
+        
+    return(paths)
+            
 def quadratic_bezier_weights(t):
     t0,t1 = t,(1-t)
     b0 = t1*t1
@@ -65,6 +89,7 @@ def cubic_bezier_blend_weights(v0, v1, v2, v3, weights):
     b0,b1,b2,b3 = weights
     return v0*b0 + v1*b1 + v2*b2 + v3*b3
 
+#http://en.wikipedia.org/wiki/De_Casteljau's_algorithm
 def cubic_bezier_decasteljau_subdivide(p0,p1,p2,p3):
     q0,q1,q2 = (p0+p1)/2, (p1+p2)/2, (p2+p3)/2
     r0,r1    = (q0+q1)/2, (q1+q2)/2
