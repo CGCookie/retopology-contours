@@ -58,11 +58,8 @@ global contour_mesh_cache
 #TODO...find a home for this!
 def rad_press_mix(r, p):
     
-    if p < .25:
-        p = .25
-    if p > 1:
-        p = 1
-            
+    p = max(0.25,p)
+    
     return r*p
     
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
