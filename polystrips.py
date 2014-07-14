@@ -519,31 +519,6 @@ class GEdge:
             i += 1
         return min_t,min_d
     
-    def find_stroke_crossing(self, stroke):
-        lstrs = list(zip(stroke[:-1],stroke[1:]))
-        lsegs = list(zip(self.cache_igverts[:-1],self.cache_igverts[1:]))
-        tot = sum((gv0.position-gv1.position).length for gv0,gv1 in lsegs)
-        i_seg,t,l = 0,0,len(self.cache_igverts)
-        for gv0,gv1 in lsegs:
-            p0,p1 = gv0.position,gv1.position
-            pd = p1 - p0
-            ld = pd.length
-            d = pd / ld
-            y = gv0.tangent_y
-            #n = gv0.normal
-            #y = d.cross(n).normalized()
-            for i,info in enumerate(lstrs):
-                pt0,pt1 = info[0][0]-p0,info[1][0]-p0
-                d0,d1 = pt0.dot(d),pt1.dot(d)
-                if d0 < 0 and d1 < 0: continue
-                if d0 >= ld and d1 >= ld: continue
-                d0,d1 = y.dot(pt0),y.dot(pt1)
-                if d0*d1 <= 0:
-                    dprint('cross %i/%i %f' % (i,len(stroke)-1,t/tot))
-                    return (i,t/tot)
-            t += (p1-p0).length
-            i_seg += 1
-        return None
     
     def update(self, debug=False):
         '''
@@ -777,99 +752,125 @@ class PolyStrips(object):
         #        pt1,pr1 = info1
         
         
-        def closest_distance_stroke_point(stroke, point):
-            min_i,min_d = -1,-1
+        def threshold_distance_stroke_point(stroke, point, threshold_radius):
+            min_i0,min_i1 = -1,-1
+            was_close = False
             for i,info in enumerate(stroke):
                 pt,pr = info
                 d = (pt-point).length
-                if min_i == -1 or d < min_d: min_i,min_d = i,d
-            return (min_i,min_d)
+                is_close = (d < threshold_radius)
+                if i == 0: was_close = is_close
+                if not was_close and is_close: min_i0 = i
+                if was_close and not is_close: min_i1 = i
+                was_close = is_close
+            return (min_i0,min_i1)
         
-        def closest_distance_stroke_gedge(stoke, gedge):
-            min_i,min_t,min_d = -1,-1,-1
-            for i,info in enumerate(stroke):
-                pt,pr = info
-                t,d = gedge.get_closest_point(pt)
-                if min_i == -1 or d < min_d: min_i,min_t,min_d = i,t,d
-            return (min_i,min_t,min_d)
+        def find_stroke_crossing(gedge, stroke):
+            def find_crossing(lstrs, lps):
+                t = 0
+                for i0,i1 in zip(lps[:-1],lps[1:]):
+                    p0,r0,y0 = i0
+                    p1,r1,y1 = i1
+                    if r0 == 0: r0 = r1
+                    
+                    p0 = p0 + y0 * r0
+                    p1 = p1 + y1 * r1
+                    
+                    v10 = p1-p0
+                    l10 = v10.length
+                    d10 = v10 / l10
+                    
+                    for i,info in enumerate(lstrs):
+                        pt0,pt1 = info[0][0], info[1][0]
+                        vpt01 = pt1-pt0
+                        lpt01 = vpt01.length
+                        dir_pt01 = vpt01 / lpt01
+                        
+                        dist_pt0 = y0.dot(pt0-p0)
+                        proj_dir = y0.dot(dir_pt01)
+                        if abs(proj_dir) <= 0.001:
+                            # nearly parallel segments
+                            continue
+                        
+                        dist_dir = dist_pt0 / proj_dir
+                        if dist_dir < 0 or dist_dir > lpt01:
+                            # does not cross stroke segment
+                            continue
+                        
+                        ptc = pt0 + dir_pt01 * dist_dir
+                        tc = (ptc-p0).length
+                        if tc < 0 or tc > l10:
+                            # does not cross gedge segment
+                            continue
+                        
+                        # crosses!!
+                        tot = sum((_i0[0] - _i1[0]).length for _i0,_i1 in zip(lps[:-1],lps[1:]))
+                        return (i, (t+tc)/tot, dist_pt0)
+                    t += l10
+                return None
+            lstrs = list(zip(stroke[:-1],stroke[1:]))
+            odds = [gv for i,gv in enumerate(gedge.cache_igverts) if i%2==1]
+            
+            cross0 = find_crossing(lstrs, [(gv.position,gv.radius, gv.tangent_y) for gv in odds])
+            cross1 = find_crossing(lstrs, [(gv.position,gv.radius,-gv.tangent_y) for gv in odds])
+            
+            return sorted([x for x in [cross0,cross1] if x], key=lambda x: x[0])
         
         # check for gedge splitting
         for i_gedge,gedge in enumerate(self.gedges):
             p0,p1,p2,p3 = gedge.get_positions()
             
             # check if we're close to either endpoint
-            if gedge.gvert0.count_gedges() < 4:
-                min_i,min_d = closest_distance_stroke_point(stroke, p0)
-                if min_d < threshold_junctiondist and min_i <= 6:
-                    if not sgv0:
-                        dprint('Joining gedge %i at p0; Joining stroke at 0' % (i_gedge,))
-                        self.insert_gedge_from_stroke(stroke[min_i+1:], sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1)
-                        return
-                elif min_d < threshold_junctiondist and min_i >= len(stroke)-7:
-                    if not sgv3:
-                        dprint('Joining gedge %i at p0; Joining stroke at %i' % (i_gedge,len(stroke)-1))
-                        self.insert_gedge_from_stroke(stroke[:min_i], sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1)
-                        return
-                elif min_d < threshold_junctiondist:
-                    dprint('Joining gedge %i at p0; Splitting stroke at 0-%i-%i' % (i_gedge,min_i,len(stroke)-1))
-                    self.insert_gedge_from_stroke(stroke[:min_i], sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1)
-                    self.insert_gedge_from_stroke(stroke[min_i+1:], sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1)
-                    return
-                
-            if gedge.gvert3.count_gedges() < 4:
-                min_i,min_d = closest_distance_stroke_point(stroke, p3)
-                if min_d < threshold_junctiondist and min_i <= 6:
-                    if not sgv0:
-                        dprint('Joining gedge %i at p3; Joining stroke at 0' % (i_gedge,))
-                        self.insert_gedge_from_stroke(stroke[min_i+1:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1)
-                        return
-                elif min_d < threshold_junctiondist and min_i >= len(stroke)-7:
-                    if not sgv3:
-                        dprint('Joining gedge %i at p3; Joining stroke at %i' % (i_gedge,len(stroke)-1))
-                        self.insert_gedge_from_stroke(stroke[:min_i], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1)
-                        return
-                elif min_d < threshold_junctiondist:
-                    dprint('Joining gedge %i at p3; Splitting stroke at 0-%i-%i' % (i_gedge,min_i,len(stroke)-1))
-                    self.insert_gedge_from_stroke(stroke[:min_i], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1)
-                    self.insert_gedge_from_stroke(stroke[min_i+1:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1)
-                    return
+            is_joined = False
             
-            dprint('checking cross')
-            cross = gedge.find_stroke_crossing(stroke)
-            if cross:
-                i,t = cross
-            else:
-                continue
-                min_i,min_t,min_d = -1,-1,-1
-                for i in range(7):
-                    t,d = gedge.get_closest_point(stroke[i][0])
-                    if min_i == -1 or d < min_d: min_i,min_t,min_d = i,t,d
-                    t,d = gedge.get_closest_point(stroke[-i][0])
-                    if min_i == -1 or d < min_d: min_i,min_t,min_d = i,t,d
-                if min_i == -1 or min_d >= threshold_splitdist: continue
-                i,t = min_i,min_t
-                dprint('close enough to split %i %f' % (i,t))
+            min_i0,min_i1 = threshold_distance_stroke_point(stroke, p0, threshold_junctiondist)
             
-            cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
+            if min_i0 != -1 and gedge.gvert0.count_gedges() < 4:
+                dprint('Joining gedge %i at p0; Joining stroke at 0-%i' % (i_gedge,min_i0))
+                self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1)
+                is_joined = True
+            if min_i1 != -1 and gedge.gvert0.count_gedges() < 4:
+                dprint('Joining gedge %i at p0; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
+                self.insert_gedge_from_stroke(stroke[min_i1:], sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1)
+                is_joined = True
+            if is_joined: return
             
+            min_i0,min_i1 = threshold_distance_stroke_point(stroke, p3, threshold_junctiondist)
+            
+            if min_i0 != -1 and gedge.gvert3.count_gedges() < 4:
+                dprint('Joining gedge %i at p3; Joining stroke at 0-%i' % (i_gedge,min_i0))
+                self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1)
+                is_joined = True
+            if min_i1 != -1 and gedge.gvert3.count_gedges() < 4:
+                dprint('Joining gedge %i at p3; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
+                self.insert_gedge_from_stroke(stroke[min_i1:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1)
+                is_joined = True
+            if is_joined: return
+            
+            # check if stroke crosses any gedges
+            crosses = find_stroke_crossing(gedge, stroke)
+            if not crosses: continue
+            
+            num_crosses = len(crosses)
+            t = sum(_t for _i,_t,_d in crosses) / num_crosses
+            dprint('stroke crosses %i gedge %i times [%s], t=%f' % (i_gedge, num_crosses, ','.join('(%i,%f,%f)'%x for x in crosses), t))
+            
+            cb_split = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
+            assert len(cb_split) == 2, 'Could not split bezier (' + (','.join(str(p) for p in [p0,p1,p2,p3])) + ') at %f' % t
+            cb0,cb1 = cb_split
             rm = (r0+r3)/2
-            
             gv_split = self.create_gvert(cb0[3], radius=rm)
-            
             gv0_0 = gedge.gvert0
             gv0_1 = self.create_gvert(cb0[1], radius=rm)
             gv0_2 = self.create_gvert(cb0[2], radius=rm)
             gv0_3 = gv_split
-            
             gv1_0 = gv_split
             gv1_1 = self.create_gvert(cb1[1], radius=rm)
             gv1_2 = self.create_gvert(cb1[2], radius=rm)
             gv1_3 = gedge.gvert3
-            
             self.disconnect_gedge(gedge)
             ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
             ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
-            
             gv0_0.update()
             gv0_0.update_gedges()
             gv_split.update()
@@ -883,16 +884,21 @@ class PolyStrips(object):
             if (ge1.gvert1.position-ge1.gvert0.position).length == 0: dprint('ge1.der0 = 0')
             if (ge1.gvert2.position-ge1.gvert3.position).length == 0: dprint('ge1.der3 = 0')
             
-            if i <= 6:
-                dprint('Splitting gedge %i at %f; Joining stroke at 0' % (i_gedge,t))
-                self.insert_gedge_from_stroke(stroke[i+1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
-            elif i >= len(stroke)-7:
-                dprint('Splitting gedge %i at %f; Joining stroke at %i' % (i_gedge,t,len(stroke)-1))
-                self.insert_gedge_from_stroke(stroke[:i], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
-            else:
-                dprint('Splitting gedge %i at %f; Splitting stroke at 0-%i-%i' % (i_gedge,t,i,len(stroke)-1))
-                self.insert_gedge_from_stroke(stroke[:i], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
-                self.insert_gedge_from_stroke(stroke[i+1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
+            i0 = crosses[0][0]
+            if num_crosses == 1:
+                if crosses[0][2] > 0:
+                    # started stroke inside
+                    if sgv0: dprint('Warning: sgv0 is not None!!')
+                    self.insert_gedge_from_stroke(stroke[i0+1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
+                else:
+                    # started stroke outside
+                    if sgv3: dprint('Warning: sgv3 is not None!!')
+                    self.insert_gedge_from_stroke(stroke[:i0+0], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
+                return
+            
+            i1 = crosses[1][0]+1
+            self.insert_gedge_from_stroke(stroke[:i0], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
+            self.insert_gedge_from_stroke(stroke[i1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
             return
             
         
