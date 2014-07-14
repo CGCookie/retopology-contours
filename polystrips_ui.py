@@ -655,11 +655,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 return 'scale tool'
             
             
-            if eventd['press'] == 'G':
+            if eventd['press'] == 'CTRL+G':
                 self.ready_tool(eventd, self.grab_tool_gvert)
                 return 'grab tool'
             
-            if eventd['press'] == 'CTRL+G':
+            if eventd['press'] == 'G':
                 self.ready_tool(eventd, self.grab_tool_gvert_neighbors)
                 return 'grab tool'
             
