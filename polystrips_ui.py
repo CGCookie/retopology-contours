@@ -728,7 +728,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     
     def modal_sketching(self, eventd):
-        my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],3))
+        my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],2) + ' ' + str(round(self.stroke_radius_pressure),2))
         print(my_str)
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
@@ -750,6 +750,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return ''
         
         if eventd['release'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:
+            #correct for 0 pressure on release
+            if self.sketch[-1][1] == 0:
+                self.sketch[-1] = self.sketch[-2]
+                
             p3d = general_utilities.ray_cast_stroke(eventd['context'], self.obj, self.sketch) if len(self.sketch) > 1 else []
             if len(p3d) <= 1: return 'main'
             
