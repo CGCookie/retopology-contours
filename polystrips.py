@@ -542,20 +542,22 @@ class GEdge:
         
         if self.force_count and self.n_quads:
             c = 2 * (self.n_quads - 2)
-            # compute difference for smoothly interpolating radii
+            
+            #average width of GEdges internal quads
+            davg = (l - r0 - r3)/c
+            # compute difference for smoothly interpolating radii perpendicular to GEdge
             s = (r3-r0) / float(c-1) 
-            print('s is %f' % s)
+            #print('s is %f' % s)
             # compute how much space is left over (to be added to each interval)
-            tot = r0*(c+1) + s*(c+1)*c/2
+            #tot = r0*(c+1) + s*(c+1)*c/2
             
             
-            o = l -r0 - tot
-            oc = o / (c + 1)
-            print('leftover %f' % oc)
+            #o = l -r0 - tot
+            #oc = o / (c + 1)
+            #print('leftover %f' % oc)
             
             # compute interval lengths, ts, blend weights
-            l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
-            print(l_widths)
+            l_widths = [0] + [r0] + [davg for i in range(1,c)] + [r3]
             l_ts = [p/l for w,p in iter_running_sum(l_widths)]
             l_weights = [cubic_bezier_weights(t) for t in l_ts]
             
@@ -1008,6 +1010,11 @@ class PolyStrips(object):
                 if i == l-2:
                     cc2 = c2
                     cc3 = c3
+                
+                elif i == len(ge.cache_igverts) - 1 and ge.force_count:
+                    print('did the funky math')
+                    p2, p3 = ge.gvert3.get_corners_of(ge)
+                    cc2, cc3 = verts.index(imx * p2), verts.index(imx * p3)
                 else:
                     p2 = gvert.position-gvert.tangent_y*gvert.radius
                     p3 = gvert.position+gvert.tangent_y*gvert.radius

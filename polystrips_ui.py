@@ -178,7 +178,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             for c0,c1,c2,c3 in gedge.iter_segments(only_visible=True):
                 contour_utilities.draw_polyline_from_3dpoints(context, [c0,c1,c2,c3,c0], col, w, "GL_LINE_SMOOTH")
             
-        
         for gv in self.polystrips.gverts:
             if not gv.is_visible(): continue
             p0,p1,p2,p3 = gv.get_corners()
