@@ -94,8 +94,6 @@ def cubic_bezier_decasteljau_subdivide(p0,p1,p2,p3):
     q0,q1,q2 = (p0+p1)/2, (p1+p2)/2, (p2+p3)/2
     r0,r1    = (q0+q1)/2, (q1+q2)/2
     s        = (r0+r1)/2
-    l0 = cubic_bezier_length(p0,q0,r0,s)
-    l1 = cubic_bezier_length(s,r1,q2,p3)
     return [(p0,q0,r0,s),(s,r1,q2,p3)]
 
 def cubic_bezier_length(p0, p1, p2, p3, threshold=0.05):
@@ -144,6 +142,25 @@ def cubic_bezier_find_closest_t_approx(p0, p1, p2, p3, p, max_depth=8, steps=10)
                 min_t,min_d = t,d
         t0,t1 = max(t0,min_t-td),min(t1,min_t+td)
     return (min_t,min_d)
+
+def cubic_bezier_find_closest_t_approx_distance(p0,p1,p2,p3, dist, threshold=0.1):
+    def find_t(p0,p1,p2,p3,d,t0,t1,threshold):
+        if d <= 0: return (0,0)
+        l03 = (p0-p3).length
+        l0123 = (p0-p1).length + (p1-p2).length + (p2-p3).length
+        if l03/l0123 > (1-threshold):
+            # close enough to approx as line
+            if l03 < d:
+                return (l03, t1-t0)
+            return (d, (t1-t0)*(d/l03))
+        t05 = (t0+t1)/2
+        subd = cubic_bezier_decasteljau_subdivide(p0,p1,p2,p3)
+        dret0,tret0 = find_t(subd[0][0], subd[0][1], subd[0][2], subd[0][3], d, t0, t05, threshold)
+        dret1,tret1 = find_t(subd[1][0], subd[1][1], subd[1][2], subd[1][3], d-dret0, t05, t1, threshold)
+        return (dret1, tret0+tret1)
+    dret,tret = find_t(p0,p1,p2,p3,dist,0,1,threshold)
+    return tret
+    
 
 def cubic_bezier_fit_value(l_v, l_t):
     def compute_error(v0,v1,v2,v3,l_v,l_t):
