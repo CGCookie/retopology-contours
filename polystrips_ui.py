@@ -106,7 +106,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         r3d = context.space_data.region_3d
         
         draw_original_strokes   = False
-        draw_bezier_directions  = False
+        draw_bezier_directions  = True
         draw_gvert_orientations = False
         draw_unconnected_gverts = False
         draw_gvert_unsnapped    = False
