@@ -128,6 +128,30 @@ def ray_cast_path(context, ob, screen_coords):
     
     return world_coords
 
+def ray_cast_stroke(context, ob, stroke):
+    '''
+    strokes have form [((x,y),p)] with a pressure or radius value
+    
+    returns list [Vector(x,y,z), p] leaving the pressure/scale value untouched
+    '''
+    rgn  = context.region
+    rv3d = context.space_data.region_3d
+    mx   = ob.matrix_world
+    imx  = mx.inverted()
+    
+    r2d_origin = region_2d_to_origin_3d
+    r2d_vector = region_2d_to_vector_3d
+    
+    rays = [(r2d_origin(rgn, rv3d, co[0]),r2d_vector(rgn, rv3d, co[0]).normalized()) for co in stroke]
+    
+    back = 0 if rv3d.is_perspective else 1
+    mult = 100 * (1 if rv3d.is_perspective else -1)
+    
+    hits = [ob.ray_cast(imx*(o-d*back*mult), imx*(o+d*mult)) for i, (o,d) in enumerate(rays)]
+    world_stroke = [(mx*hit[0],stroke[i][1])  for hit in hits if hit[2] != -1]
+    
+    return world_stroke
+
 def frange(start, end, step):
     v = start
     if step > 0:

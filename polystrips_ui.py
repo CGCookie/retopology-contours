@@ -55,6 +55,16 @@ global contour_cache
 global contour_mesh_cache
 
 
+#TODO...find a home for this!
+def press_rad_mix(r, p):
+    
+    if p < .25:
+        p = .25
+    if p > 1:
+        p = 1
+            
+    return r*p
+    
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     bl_idname = "cgcookie.polystrips"
     bl_label  = "PolyStrips"
@@ -233,10 +243,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
             contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
             
-            info = str(round(self.sketch_pressure[-1],3))
+            info = str(round(self.sketch_pressure,3))
             ''' draw text '''
-            txt_width, txt_height = blf.dimensions(0, info) 
-            blf.position(0, self.sketch_curpos[0] - txt_width/2, self.sketch_curpos[1] + txt_height, 0)
+            txt_width, txt_height = blf.dimensions(0, info)
+            d = self.sketch_brush.pxl_rad
+            blf.position(0, self.sketch_curpos[0] - txt_width/2, self.sketch_curpos[1] + d + txt_height, 0)
             blf.draw(0, info)
         
             
@@ -251,7 +262,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             if hit_idx != -1:
                 mx = self.obj.matrix_world
                 hit_p3d = mx * hit_p3d
-                radius = self.stroke_radius
+                radius = self.stroke_radius_pressure
                 draw_circle(context, hit_p3d, hit_norm.normalized(), radius, (1,1,1,.5))
         
         self.sketch_brush.draw(context)
@@ -539,14 +550,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if eventd['press'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:                      # start sketching
             self.footer = 'Sketching'
             x,y = eventd['mouse']
+            p = eventd['pressure']
             self.sketch_curpos = (x,y)
             if eventd['shift'] and self.sel_gvert:
                 gvx,gvy = location_3d_to_region_2d(eventd['region'], eventd['r3d'], self.sel_gvert.position)
-                self.sketch = [(gvx,gvy), (x,y)]
-                self.sketch_pressure = [1, eventd['pressure']]
+                self.sketch = [(gvx,gvy,1), (x,y,p)]
+                
             else:
-                self.sketch = [(x,y)]
-                self.sketch_pressure = [eventd['pressure']]
+                self.sketch = [(x,y,p)]
+
                 
             self.sel_gvert = None
             self.sel_gedge = None
@@ -706,23 +718,26 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     def modal_sketching(self, eventd):
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
-            lx,ly = self.sketch[-1]
+            p = eventd['pressure']
+            (lx,ly),lp = self.sketch[-1]
             self.sketch_curpos = (x,y)
+            self.sketch_pressure = p
             ss0,ss1 = self.stroke_smoothing,1-self.stroke_smoothing
-            self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1)]
-            self.sketch_pressure += [eventd['pressure']] #TODO smooth pressure?
+            
+            self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1), lp*ss0 + p*ss1]
+            
+            self.stroke_radius_pressure = press_rad_mix(self.stroke_radius, self.sketch_pressure)
             return ''
         
         if eventd['release'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:
-            p3d = general_utilities.ray_cast_path(eventd['context'], self.obj, self.sketch) if len(self.sketch) > 1 else []
+            p3d = general_utilities.ray_cast_stroke(eventd['context'], self.obj, self.sketch) if len(self.sketch) > 1 else []
             if len(p3d) <= 1: return 'main'
             
             # tessellate stroke (if needed) so we have good stroke sampling
             length_tess = self.length_scale / 700
             p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
-            stroke = [(p,self.stroke_radius) for p in p3d]
+            stroke = [(p,self.stroke_radius) for i,p in enumerate(p3d)]
             self.sketch = []
-            self.sketch_pressure = []
             dprint('inserting stroke')
             self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
@@ -921,8 +936,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.action_radius = 0
         self.is_navigating = False
         self.sketch_curpos = (0,0)
+        self.sketch_pressure = 1
         self.sketch = []
-        self.sketch_pressure = []
         
         self.post_update = True
         
@@ -945,7 +960,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.bme.from_mesh(self.me)
         
         #world stroke radius
-        self.stroke_radius = 0.01 * self.length_scale # 0.005 * self.length_scale
+        self.stroke_radius = 0.01 * self.length_scale
+        self.stroke_radius_pressure = 0.01 * self.length_scale
         #screen_stroke_radius
         self.screen_stroke_radius = 20 #TODO, hood to settings
         
