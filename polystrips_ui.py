@@ -56,7 +56,7 @@ global contour_mesh_cache
 
 
 #TODO...find a home for this!
-def rad_press_mix(r, p, map = 3):
+def rad_press_mix(r, p, map = 1):
     
     if map == 0:
         p = max(0.25,p)
@@ -269,8 +269,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             if hit_idx != -1:
                 mx = self.obj.matrix_world
                 hit_p3d = mx * hit_p3d
-                radius = self.stroke_radius_pressure
-                draw_circle(context, hit_p3d, hit_norm.normalized(), radius, (1,1,1,.5))
+                draw_circle(context, hit_p3d, hit_norm.normalized(), self.stroke_radius_pressure, (1,1,1,.5))
         
         self.sketch_brush.draw(context)
     
@@ -729,10 +728,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     
     def modal_sketching(self, eventd):
+        my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],3))
+        print(my_str)
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
             p = eventd['pressure']
-            print(p)
             stroke_point = self.sketch[-1]
 
             (lx, ly) = stroke_point[0]
