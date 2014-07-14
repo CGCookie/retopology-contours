@@ -111,6 +111,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         draw_unconnected_gverts = False
         draw_gvert_unsnapped    = False
         draw_gedge_bezier       = False
+        draw_gedge_index        = False
         
         color_selected          = (.5,1,.5,.8)
         
@@ -154,7 +155,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 draw_circle(context, stroke[-1][0], Vector((0,1,0)),0.003,(.5,.5,.5,.8))
         
         
-        for ind,gedge in enumerate(self.polystrips.gedges):
+        for i_ge,gedge in enumerate(self.polystrips.gedges):
             if draw_bezier_directions:
                 p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
                 n0,n1,n2,n3 = gedge.gvert0.snap_norm, gedge.gvert1.snap_norm, gedge.gvert2.snap_norm, gedge.gvert3.snap_norm
@@ -178,8 +179,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             for c0,c1,c2,c3 in gedge.iter_segments(only_visible=True):
                 contour_utilities.draw_polyline_from_3dpoints(context, [c0,c1,c2,c3,c0], col, w, "GL_LINE_SMOOTH")
             
+            if draw_gedge_index:
+                draw_gedge_text(gedge, context, str(i_ge))
+            
         
-        for gv in self.polystrips.gverts:
+        for i_gv,gv in enumerate(self.polystrips.gverts):
             if not gv.is_visible(): continue
             p0,p1,p2,p3 = gv.get_corners()
             

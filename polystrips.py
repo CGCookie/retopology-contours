@@ -724,11 +724,16 @@ class PolyStrips(object):
         
         assert depth < 10
         
+        spc = '  '*depth + '- '
+        
         # too few samples?
         if len(stroke) <= 1:
-            dprint('Too few samples in stroke (subsample??)')
+            dprint(spc+'Too few samples in stroke (subsample??)')
             #subsampling function in contour_utils.space_evenly_on_path
             return
+        if sgv0 and sgv0==sgv3 and sgv0.count_gedges() >= 3:
+            dprint(spc+'cannot connect stroke to same gvert (too many gedges)')
+            sgv3 = None
         
         r0,r3 = stroke[0][1],stroke[-1][1]
         
@@ -737,9 +742,9 @@ class PolyStrips(object):
         threshold_splitdist    = (r0+r3)/2 / 2
         
         tot_length = sum((s0[0]-s1[0]).length for s0,s1 in zip(stroke[:-1],stroke[1:]))
-        dprint('stroke len: %f' % tot_length)
+        dprint(spc+'stroke len: %f' % tot_length)
         if tot_length < threshold_tooshort and not (sgv0 and sgv3):
-            dprint('Stroke too short (%f)' % tot_length)
+            dprint(spc+'Stroke too short (%f)' % tot_length)
             return
         
         
@@ -761,7 +766,9 @@ class PolyStrips(object):
                 is_close = (d < threshold_radius)
                 if i == 0: was_close = is_close
                 if not was_close and is_close: min_i0 = i
-                if was_close and not is_close: min_i1 = i
+                if was_close and not is_close:
+                    min_i1 = i
+                    break
                 was_close = is_close
             return (min_i0,min_i1)
         
@@ -784,22 +791,24 @@ class PolyStrips(object):
                         pt0,pt1 = info[0][0], info[1][0]
                         vpt01 = pt1-pt0
                         lpt01 = vpt01.length
-                        dir_pt01 = vpt01 / lpt01
+                        dir_pt01 = vpt01.normalized()
                         
-                        dist_pt0 = y0.dot(pt0-p0)
                         proj_dir = y0.dot(dir_pt01)
-                        if abs(proj_dir) <= 0.001:
+                        if abs(proj_dir) <= 0.0001:
                             # nearly parallel segments
                             continue
                         
+                        dist_pt0 = y0.dot(pt0-p0)
                         dist_dir = dist_pt0 / proj_dir
-                        if dist_dir < 0 or dist_dir > lpt01:
+                        if dist_dir < 0 or dist_dir >= lpt01:
                             # does not cross stroke segment
                             continue
                         
-                        ptc = pt0 + dir_pt01 * dist_dir
+                        proj_pt0_gedge = p0+d10*(d10.dot(pt0-p0))
+                        ptc = proj_pt0_gedge + d10*dist_dir
+                        #ptc = pt0 + dir_pt01 * dist_dir
                         tc = (ptc-p0).length
-                        if tc < 0 or tc > l10:
+                        if tc < 0 or tc >= l10:
                             # does not cross gedge segment
                             continue
                         
@@ -826,11 +835,11 @@ class PolyStrips(object):
             min_i0,min_i1 = threshold_distance_stroke_point(stroke, p0, threshold_junctiondist)
             
             if min_i0 != -1 and gedge.gvert0.count_gedges() < 4:
-                dprint('Joining gedge %i at p0; Joining stroke at 0-%i' % (i_gedge,min_i0))
+                dprint(spc+'Joining gedge[%i].gvert0; Joining stroke at 0-%i' % (i_gedge,min_i0))
                 self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1)
                 is_joined = True
             if min_i1 != -1 and gedge.gvert0.count_gedges() < 4:
-                dprint('Joining gedge %i at p0; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
+                dprint(spc+'Joining gedge[%i].gvert0; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
                 self.insert_gedge_from_stroke(stroke[min_i1:], sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1)
                 is_joined = True
             if is_joined: return
@@ -838,11 +847,11 @@ class PolyStrips(object):
             min_i0,min_i1 = threshold_distance_stroke_point(stroke, p3, threshold_junctiondist)
             
             if min_i0 != -1 and gedge.gvert3.count_gedges() < 4:
-                dprint('Joining gedge %i at p3; Joining stroke at 0-%i' % (i_gedge,min_i0))
+                dprint(spc+'Joining gedge[%i].gvert3; Joining stroke at 0-%i' % (i_gedge,min_i0))
                 self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1)
                 is_joined = True
             if min_i1 != -1 and gedge.gvert3.count_gedges() < 4:
-                dprint('Joining gedge %i at p3; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
+                dprint(spc+'Joining gedge[%i].gvert3; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
                 self.insert_gedge_from_stroke(stroke[min_i1:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1)
                 is_joined = True
             if is_joined: return
@@ -853,7 +862,7 @@ class PolyStrips(object):
             
             num_crosses = len(crosses)
             t = sum(_t for _i,_t,_d in crosses) / num_crosses
-            dprint('stroke crosses %i gedge %i times [%s], t=%f' % (i_gedge, num_crosses, ','.join('(%i,%f,%f)'%x for x in crosses), t))
+            dprint(spc+'stroke crosses %i gedge %ix [%s], t=%f' % (i_gedge, num_crosses, ','.join('(%i,%f,%f)'%x for x in crosses), t))
             
             cb_split = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
             assert len(cb_split) == 2, 'Could not split bezier (' + (','.join(str(p) for p in [p0,p1,p2,p3])) + ') at %f' % t
@@ -879,20 +888,20 @@ class PolyStrips(object):
             gv1_3.update_gedges()
             
             # debugging printout
-            if (ge0.gvert1.position-ge0.gvert0.position).length == 0: dprint('ge0.der0 = 0')
-            if (ge0.gvert2.position-ge0.gvert3.position).length == 0: dprint('ge0.der3 = 0')
-            if (ge1.gvert1.position-ge1.gvert0.position).length == 0: dprint('ge1.der0 = 0')
-            if (ge1.gvert2.position-ge1.gvert3.position).length == 0: dprint('ge1.der3 = 0')
+            if (ge0.gvert1.position-ge0.gvert0.position).length == 0: dprint(spc+'ge0.der0 = 0')
+            if (ge0.gvert2.position-ge0.gvert3.position).length == 0: dprint(spc+'ge0.der3 = 0')
+            if (ge1.gvert1.position-ge1.gvert0.position).length == 0: dprint(spc+'ge1.der0 = 0')
+            if (ge1.gvert2.position-ge1.gvert3.position).length == 0: dprint(spc+'ge1.der3 = 0')
             
             i0 = crosses[0][0]
             if num_crosses == 1:
                 if crosses[0][2] > 0:
                     # started stroke inside
-                    if sgv0: dprint('Warning: sgv0 is not None!!')
+                    if sgv0: dprint(spc+'Warning: sgv0 is not None!!')
                     self.insert_gedge_from_stroke(stroke[i0+1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
                 else:
                     # started stroke outside
-                    if sgv3: dprint('Warning: sgv3 is not None!!')
+                    if sgv3: dprint(spc+'Warning: sgv3 is not None!!')
                     self.insert_gedge_from_stroke(stroke[:i0+0], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
                 return
             
@@ -902,6 +911,7 @@ class PolyStrips(object):
             return
             
         
+        dprint(spc+'creating gedge!')
         l_bpts = cubic_bezier_fit_points([pt for pt,pr in stroke], min(r0,r3) / 20)
         pregv,fgv = None,None
         for i,bpts in enumerate(l_bpts):
@@ -923,10 +933,10 @@ class PolyStrips(object):
             if (gv1.position-gv0.position).length == 0: dprint('gv01.der = 0')
             if (gv2.position-gv3.position).length == 0: dprint('gv32.der = 0')
             if (gv0.position-gv3.position).length == 0:
-                dprint('gv03.der = 0')
-                dprint(l_bpts)
-                dprint(str(sgv0.position) if sgv0 else 'None')
-                dprint(str(sgv3.position) if sgv3 else 'None')
+                dprint(spc+'gv03.der = 0')
+                dprint(spc+str(l_bpts))
+                dprint(spc+(str(sgv0.position) if sgv0 else 'None'))
+                dprint(spc+(str(sgv3.position) if sgv3 else 'None'))
             
             self.create_gedge(gv0,gv1,gv2,gv3)
             pregv = gv3

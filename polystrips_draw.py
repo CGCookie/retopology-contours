@@ -39,22 +39,28 @@ from general_utilities import iter_running_sum, dprint, get_object_length_scale,
 #Make the addon name and location accessible
 AL = general_utilities.AddonLocator()
 
-def draw_gedge_info(gedge,context):
-    '''
-    helper draw module to display info about the Gedge
-    '''
-    
+def draw_gedge_text(gedge,context, text):
     l = len(gedge.cache_igverts)
     if l > 4:
         n_quads = math.floor(l/2) + 1
         mid_vert_ind = math.floor(l/2)
         mid_vert = gedge.cache_igverts[mid_vert_ind]
-        info = str(n_quads)
-        
         position_3d = mid_vert.position + 1.5 * mid_vert.tangent_y * mid_vert.radius
-        position_2d = location_3d_to_region_2d(context.region, context.space_data.region_3d,position_3d)
-        ''' draw text '''
-        txt_width, txt_height = blf.dimensions(0, info) 
-        blf.position(0, position_2d[0]-(txt_width/2), position_2d[1]-(txt_height/2), 0)
-        blf.draw(0, info)
+    else:
+        position_3d = (gedge.gvert0.position + gedge.gvert3.position)/2
     
+    position_2d = location_3d_to_region_2d(context.region, context.space_data.region_3d,position_3d)
+    txt_width, txt_height = blf.dimensions(0, text)
+    blf.position(0, position_2d[0]-(txt_width/2), position_2d[1]-(txt_height/2), 0)
+    blf.draw(0, text)
+
+def draw_gedge_info(gedge,context):
+    '''
+    helper draw module to display info about the Gedge
+    '''
+    l = len(gedge.cache_igverts)
+    if l > 4:
+        n_quads = math.floor(l/2) + 1
+    else:
+        n_quads = 3
+    draw_gedge_text(gedge, context, str(n_quads))

@@ -219,7 +219,7 @@ def cubic_bezier_fit_points(l_co, error_scale, depth=0, t0=0, t3=1, allow_split=
     ey,y0,y1,y2,y3 = cubic_bezier_fit_value([co[1] for co in l_co], l_t)
     ez,z0,z1,z2,z3 = cubic_bezier_fit_value([co[2] for co in l_co], l_t)
     tot_error = ex+ey+ez
-    dprint('total error = %f (%f)' % (tot_error,error_scale))
+    dprint('total error = %f (%f)' % (tot_error,error_scale), l=4)
     
     if tot_error < error_scale or depth == 4 or len(l_co)<=15 or not allow_split:
         p0,p1,p2,p3 = Vector((x0,y0,z0)),Vector((x1,y1,z1)),Vector((x2,y2,z2)),Vector((x3,y3,z3))
