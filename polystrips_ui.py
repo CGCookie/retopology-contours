@@ -738,6 +738,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             (lx, ly) = stroke_point[0]
             lr = stroke_point[1]
             self.sketch_curpos = (x,y)
+            self.sketch_pressure = p
 
             ss0,ss1 = self.stroke_smoothing,1-self.stroke_smoothing
             r = rad_press_mix(self.stroke_radius, self.sketch_pressure)
