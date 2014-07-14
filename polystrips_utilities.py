@@ -261,9 +261,9 @@ def cubic_bezier_split(p0, p1, p2, p3, t_split, error_scale, tessellate=10):
     tm1 = (1-t_split) / tessellate
     pts0 = [cubic_bezier_blend_t(p0,p1,p2,p3,tm0*i) for i in range(tessellate+1)]
     pts1 = [cubic_bezier_blend_t(p0,p1,p2,p3,t_split+tm1*i) for i in range(tessellate+1)]
-    cb0 = cubic_bezier_fit_points(pts0, error_scale, allow_split=False)[0][2:]
-    cb1 = cubic_bezier_fit_points(pts1, error_scale, allow_split=False)[0][2:]
-    return [cb0,cb1]
+    cb0 = cubic_bezier_fit_points(pts0, error_scale, allow_split=False)
+    cb1 = cubic_bezier_fit_points(pts1, error_scale, allow_split=False)
+    return [cb[0][2:] for cb in [cb0,cb1] if cb]
 
 def vector_angle_between(v0, v1, vcross):
     a = v0.angle(v1)
