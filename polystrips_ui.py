@@ -81,6 +81,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         event_alt     = 'ALT+'   if event.alt   else ''
         event_ftype   = event_ctrl + event_shift + event_alt + event.type
         
+        
         return {
             'context':  context,
             'region':   context.region,
@@ -96,6 +97,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             'release':  event_ftype if event.value=='RELEASE' else None,
             
             'mouse':    (float(event.mouse_region_x), float(event.mouse_region_y)),
+            'pressure': 1 if not hasattr(event, 'pressure') else event.pressure
             }
     
     
@@ -230,7 +232,14 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if self.mode == 'sketch':
             contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
             contour_utilities.draw_polyline_from_points(context, self.sketch, (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
+            
+            info = str(round(self.sketch_pressure[-1],3))
+            ''' draw text '''
+            txt_width, txt_height = blf.dimensions(0, info) 
+            blf.position(0, self.sketch_curpos[0] - txt_width/2, self.sketch_curpos[1] + txt_height, 0)
+            blf.draw(0, info)
         
+            
         if self.mode in {'scale tool','rotate tool'}:
             contour_utilities.draw_polyline_from_points(context, [self.action_center, self.mode_pos], (0,0,0,0.5), 1, "GL_LINE_STIPPLE")
         
@@ -534,8 +543,11 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             if eventd['shift'] and self.sel_gvert:
                 gvx,gvy = location_3d_to_region_2d(eventd['region'], eventd['r3d'], self.sel_gvert.position)
                 self.sketch = [(gvx,gvy), (x,y)]
+                self.sketch_pressure = [1, eventd['pressure']]
             else:
                 self.sketch = [(x,y)]
+                self.sketch_pressure = [eventd['pressure']]
+                
             self.sel_gvert = None
             self.sel_gedge = None
             return 'sketch'
@@ -698,6 +710,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.sketch_curpos = (x,y)
             ss0,ss1 = self.stroke_smoothing,1-self.stroke_smoothing
             self.sketch += [(lx*ss0+x*ss1, ly*ss0+y*ss1)]
+            self.sketch_pressure += [eventd['pressure']] #TODO smooth pressure?
             return ''
         
         if eventd['release'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:
@@ -709,6 +722,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             p3d = [(p0+(p1-p0).normalized()*x) for p0,p1 in zip(p3d[:-1],p3d[1:]) for x in frange(0,(p0-p1).length,length_tess)] + [p3d[-1]]
             stroke = [(p,self.stroke_radius) for p in p3d]
             self.sketch = []
+            self.sketch_pressure = []
             dprint('inserting stroke')
             self.polystrips.insert_gedge_from_stroke(stroke)
             self.polystrips.remove_unconnected_gverts()
@@ -908,6 +922,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         self.is_navigating = False
         self.sketch_curpos = (0,0)
         self.sketch = []
+        self.sketch_pressure = []
         
         self.post_update = True
         
