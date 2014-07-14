@@ -35,6 +35,7 @@ import itertools
 from polystrips_utilities import *
 from polystrips_draw import *
 from general_utilities import iter_running_sum, dprint, get_object_length_scale, profiler
+import polystrips_utilities
 
 #Make the addon name and location accessible
 AL = general_utilities.AddonLocator()
@@ -534,6 +535,7 @@ class GEdge:
         r0,r1,r2,r3 = self.get_radii()
         n0,n1,n2,n3 = self.get_normals()
         
+        find_t = polystrips_utilities.cubic_bezier_find_closest_t_approx_distance
         # get bezier length
         l = self.get_length()
         
@@ -541,25 +543,19 @@ class GEdge:
             c = 2 * (self.n_quads - 1)
             
             #average width of GEdges internal quads
-            davg = (l - r0 - r3)/c
+            davg = (l - r0 - r3)/(2 * (self.n_quads - 2))
             # compute difference for smoothly interpolating radii perpendicular to GEdge
             s = (r3-r0) / float(c-1) 
-            #print('s is %f' % s)
-            # compute how much space is left over (to be added to each interval)
-            #tot = r0*(c+1) + s*(c+1)*c/2
-            
-            
-            #o = l -r0 - tot
-            #oc = o / (c + 1)
-            #print('leftover %f' % oc)
             
             # compute interval lengths, ts, blend weights
-            l_widths = [0] + [r0] + [davg for i in range(1,c)] + [r3]
-            l_ts = [float(i)/float(c) for i in range(c+1)]
-            #l_ts = [p/l for w,p in iter_running_sum(l_widths)]
-            l_weights = [cubic_bezier_weights(t) for t in l_ts]
+            l_widths = [0] + [r0] + [davg for i in range(1,c-1)] + [r3]
             
-            s = (r3-r0)/float(c-1)
+
+            l_ts = [float(i)/float(c) for i in range(c+1)]  #pure time distribution
+            l_ts1 = [dist/l for w,dist in iter_running_sum(l_widths)]  #assume constant velocity on curve
+            l_ts2 = [find_t(p0, p1, p2, p3, dist, threshold = l/10) for w,dist in iter_running_sum(l_widths)]  #pure lenght distribution
+            
+            l_weights = [cubic_bezier_weights(t) for t in l_ts2]
         
         else:
             # find "optimal" count for subdividing spline
@@ -1012,10 +1008,10 @@ class PolyStrips(object):
                     cc2 = c2
                     cc3 = c3
                 
-                elif i == len(ge.cache_igverts) - 1 and ge.force_count:
-                    print('did the funky math')
-                    p2, p3 = ge.gvert3.get_corners_of(ge)
-                    cc2, cc3 = verts.index(imx * p2), verts.index(imx * p3)
+                #elif i == len(ge.cache_igverts) - 1 and ge.force_count:
+                    #print('did the funky math')
+                    #p2, p3 = ge.gvert3.get_corners_of(ge)
+                    #cc2, cc3 = verts.index(imx * p2), verts.index(imx * p3)
                 else:
                     p2 = gvert.position-gvert.tangent_y*gvert.radius
                     p3 = gvert.position+gvert.tangent_y*gvert.radius
