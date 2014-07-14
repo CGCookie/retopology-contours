@@ -537,11 +537,8 @@ class GEdge:
         # get bezier length
         l = self.get_length()
         
-        # find "optimal" count for subdividing spline
-        cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
-        
         if self.force_count and self.n_quads:
-            c = 2 * (self.n_quads - 2)
+            c = 2 * (self.n_quads - 1)
             
             #average width of GEdges internal quads
             davg = (l - r0 - r3)/c
@@ -558,11 +555,15 @@ class GEdge:
             
             # compute interval lengths, ts, blend weights
             l_widths = [0] + [r0] + [davg for i in range(1,c)] + [r3]
-            l_ts = [p/l for w,p in iter_running_sum(l_widths)]
+            l_ts = [float(i)/float(c) for i in range(c+1)]
+            #l_ts = [p/l for w,p in iter_running_sum(l_widths)]
             l_weights = [cubic_bezier_weights(t) for t in l_ts]
             
-            
+            s = (r3-r0)/float(c-1)
+        
         else:
+            # find "optimal" count for subdividing spline
+            cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
             
             c = 0
             for ctest in range(max(4,cmin-2),cmax+2):
@@ -575,7 +576,7 @@ class GEdge:
             if c <= 1:
                 self.cache_igverts = []
                 return
-        
+    
             # compute difference for smoothly interpolating radii
             s = (r3-r0) / float(c-1)
             
