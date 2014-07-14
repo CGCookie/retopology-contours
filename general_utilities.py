@@ -132,7 +132,8 @@ def ray_cast_stroke(context, ob, stroke):
     '''
     strokes have form [((x,y),p)] with a pressure or radius value
     
-    returns list [Vector(x,y,z), p] leaving the pressure/scale value untouched
+    returns list [Vector(x,y,z), p] leaving the pressure/radius value untouched
+    does drop any values that do not successrfully ray_cast
     '''
     rgn  = context.region
     rv3d = context.space_data.region_3d
@@ -148,7 +149,7 @@ def ray_cast_stroke(context, ob, stroke):
     mult = 100 * (1 if rv3d.is_perspective else -1)
     
     hits = [ob.ray_cast(imx*(o-d*back*mult), imx*(o+d*mult)) for i, (o,d) in enumerate(rays)]
-    world_stroke = [(mx*hit[0],stroke[i][1])  for hit in hits if hit[2] != -1]
+    world_stroke = [(mx*hit[0],stroke[i][1])  for i, hit in enumerate(hits) if hit[2] != -1]
     
     return world_stroke
 
