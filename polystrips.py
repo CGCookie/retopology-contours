@@ -248,10 +248,10 @@ class GVert:
                 return igv1.position - igv1.tangent_y*r1
             return (igv0.position+igv0.tangent_y*r0 + igv1.position-igv1.tangent_y*r1)/2
         
-        igv0 = None if not self.gedge0 else self.gedge0.get_igvert_at(self)
-        igv1 = None if not self.gedge1 else self.gedge1.get_igvert_at(self)
-        igv2 = None if not self.gedge2 else self.gedge2.get_igvert_at(self)
-        igv3 = None if not self.gedge3 else self.gedge3.get_igvert_at(self)
+        igv0 = None if (not self.gedge0 or self.gedge0.force_count) else self.gedge0.get_igvert_at(self)
+        igv1 = None if (not self.gedge1 or self.gedge0.force_count) else self.gedge1.get_igvert_at(self)
+        igv2 = None if (not self.gedge2 or self.gedge0.force_count) else self.gedge2.get_igvert_at(self)
+        igv3 = None if (not self.gedge3 or self.gedge0.force_count) else self.gedge3.get_igvert_at(self)
         
         r0 = 0 if not igv0 else (igv0.radius*(1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1))
         r1 = 0 if not igv1 else (igv1.radius*(1 if igv1.tangent_x.dot(self.snap_tany)<0 else -1))
@@ -397,6 +397,9 @@ class GEdge:
         self.gvert2 = gvert2
         self.gvert3 = gvert3
         
+        self.force_count = False
+        self.n_quads = None
+        
         # create caching vars
         self.cache_igverts = []             # cached interval gverts
                                             # even-indexed igverts are poly "centers"
@@ -536,34 +539,57 @@ class GEdge:
         
         # find "optimal" count for subdividing spline
         cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
-        c = 0
-        for ctest in range(max(4,cmin-2),cmax+2):
-            s = (r3-r0) / (ctest-1)
-            tot = r0*(ctest+1) + s*(ctest+1)*ctest/2
-            if tot > l:
-                break
-            if ctest % 2 == 1:
-                c = ctest
-        if c <= 1:
-            self.cache_igverts = []
-            return
         
-        # compute difference for smoothly interpolating radii
-        s = (r3-r0) / float(c-1)
+        if self.force_count and self.n_quads:
+            c = 2 * (self.n_quads - 2)
+            # compute difference for smoothly interpolating radii
+            s = (r3-r0) / float(c-1) 
+            print('s is %f' % s)
+            # compute how much space is left over (to be added to each interval)
+            tot = r0*(c+1) + s*(c+1)*c/2
+            
+            
+            o = l -r0 - tot
+            oc = o / (c + 1)
+            print('leftover %f' % oc)
+            
+            # compute interval lengths, ts, blend weights
+            l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
+            print(l_widths)
+            l_ts = [p/l for w,p in iter_running_sum(l_widths)]
+            l_weights = [cubic_bezier_weights(t) for t in l_ts]
+            
+            
+        else:
+            
+            c = 0
+            for ctest in range(max(4,cmin-2),cmax+2):
+                s = (r3-r0) / (ctest-1)
+                tot = r0*(ctest+1) + s*(ctest+1)*ctest/2
+                if tot > l:
+                    break
+                if ctest % 2 == 1:
+                    c = ctest
+            if c <= 1:
+                self.cache_igverts = []
+                return
         
-        # compute how much space is left over (to be added to each interval)
-        tot = r0*(c+1) + s*(c+1)*c/2
-        o = l - tot
-        oc = o / (c+1)
-        
-        # compute interval lengths, ts, blend weights
-        l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
-        l_ts = [p/l for w,p in iter_running_sum(l_widths)]
-        l_weights = [cubic_bezier_weights(t) for t in l_ts]
+            # compute difference for smoothly interpolating radii
+            s = (r3-r0) / float(c-1)
+            
+            # compute how much space is left over (to be added to each interval)
+            tot = r0*(c+1) + s*(c+1)*c/2
+            o = l - tot
+            oc = o / (c+1)
+            
+            # compute interval lengths, ts, blend weights
+            l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
+            l_ts = [p/l for w,p in iter_running_sum(l_widths)]
+            l_weights = [cubic_bezier_weights(t) for t in l_ts]
         
         # compute interval pos, rad, norm, tangent x, tangent y
         l_pos   = [cubic_bezier_blend_weights(p0,p1,p2,p3,weights) for weights in l_weights]
-        l_radii = l_widths
+        l_radii = [r0 + i*s for i in range(c+2)]
         l_norms = [cubic_bezier_blend_weights(n0,n1,n2,n3,weights).normalized() for weights in l_weights]
         l_tanx  = [cubic_bezier_derivative(p0,p1,p2,p3,t).normalized() for t in l_ts]
         l_tany  = [t.cross(n).normalized() for t,n in zip(l_tanx,l_norms)]

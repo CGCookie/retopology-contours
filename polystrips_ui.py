@@ -615,6 +615,12 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gedge.gvert0.update_gedges()
                 self.sel_gedge.gvert3.update_gedges()
                 return ''
+            
+            if eventd['press'] == 'S':
+                self.sel_gedge.n_quads = 10
+                self.sel_gedge.force_count = True
+                self.sel_gedge.update()
+                return ''
         
         
         ###################################
