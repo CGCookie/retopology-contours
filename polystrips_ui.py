@@ -56,7 +56,7 @@ global contour_mesh_cache
 
 
 #TODO...find a home for this!
-def rad_press_mix(r, p, map = 1):
+def rad_press_mix(r, p, map = 3):
     
     if map == 0:
         p = max(0.25,p)
@@ -68,7 +68,7 @@ def rad_press_mix(r, p, map = 1):
         p = max(0.05,p)
     
     elif map == 3:
-        p = .6 * (2.25*p-1)/((2.25*p-1)**2 +1)**.5 + .5
+        p = .7 * (2.25*p-1)/((2.25*p-1)**2 +1)**.5 + .55
     
     return r*p
     
