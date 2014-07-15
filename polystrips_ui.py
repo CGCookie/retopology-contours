@@ -562,7 +562,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             
             r = rad_press_mix(self.stroke_radius, p)
-            print('pressure raw: %f, radius: %f, pressure_radius %f' % (p,self.stroke_radius, r))
+            #print('pressure raw: %f, radius: %f, pressure_radius %f' % (p,self.stroke_radius, r))
             self.sketch_curpos = (x,y)
             if eventd['shift'] and self.sel_gvert:
                 gvx,gvy = location_3d_to_region_2d(eventd['region'], eventd['r3d'], self.sel_gvert.position)
@@ -728,8 +728,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     
     def modal_sketching(self, eventd):
-        my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],2)) + ' ' + str(round(self.stroke_radius_pressure,2))
-        print(my_str)
+        #my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],2)) + ' ' + str(round(self.stroke_radius_pressure,2))
+        #print(my_str)
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
             p = eventd['pressure']
