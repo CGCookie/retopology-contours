@@ -501,11 +501,11 @@ class GEdge:
             self.gvert3.radius
             )
     
-    def get_length(self):
+    def get_length(self, precision = 64):
         p0,p1,p2,p3 = self.get_positions()
         mx = self.obj.matrix_world
         imx = mx.inverted()
-        p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/64.0) for t in range(65)]
+        p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/precision) for t in range(precision+1)]
         p3d = [mx*self.obj.closest_point_on_mesh(imx * p)[0] for p in p3d]
         return sum((p1-p0).length for p0,p1 in zip(p3d[:-1],p3d[1:]))
         #return cubic_bezier_length(p0,p1,p2,p3)
@@ -538,6 +538,10 @@ class GEdge:
         find_t = polystrips_utilities.cubic_bezier_find_closest_t_approx_distance
         # get bezier length
         l = self.get_length()
+        #l1 = self.get_length(precision = 10)
+        #l2 = self.get_length(precision = 20)
+        #l3 = self.get_length(precision = 100)
+        #print('lengths %f, %f, %f, %f' % (l,l1,l2,l3))
         
         if self.force_count and self.n_quads:
             c = 2 * (self.n_quads - 1)
@@ -550,12 +554,12 @@ class GEdge:
             # compute interval lengths, ts, blend weights
             l_widths = [0] + [r0] + [davg for i in range(1,c-1)] + [r3]
             
-
+            print(l_widths)
             l_ts = [float(i)/float(c) for i in range(c+1)]  #pure time distribution
             l_ts1 = [dist/l for w,dist in iter_running_sum(l_widths)]  #assume constant velocity on curve
-            l_ts2 = [find_t(p0, p1, p2, p3, dist, threshold = l/10) for w,dist in iter_running_sum(l_widths)]  #pure lenght distribution
+            l_ts2 = [find_t(p0, p1, p2, p3, dist, threshold = .05) for w,dist in iter_running_sum(l_widths)]  #pure lenght distribution
             
-            l_weights = [cubic_bezier_weights(t) for t in l_ts2]
+            l_weights = [cubic_bezier_weights(t) for t in l_ts1]
         
         else:
             # find "optimal" count for subdividing spline
@@ -595,7 +599,8 @@ class GEdge:
         
         # create igverts!
         self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
-        
+        if not self.force_count:
+            self.n_quads = int((len(self.cache_igverts)+1)/2)
         '''
         snaps already computed igverts to surface of object ob
         '''
