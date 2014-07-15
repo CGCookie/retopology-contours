@@ -719,7 +719,9 @@ class PolyStrips(object):
     
     def insert_gedge_from_stroke(self, stroke, sgv0=None, sgv3=None, depth=0):
         '''
-        stroke: list of tuples (3d location, pressure)
+        stroke: list of tuples (3d location, radius)
+        yikes....pressure and radius need to be reconciled!
+        for now, assumes 
         '''
         
         assert depth < 10
