@@ -728,7 +728,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     
     
     def modal_sketching(self, eventd):
-        my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],2) + ' ' + str(round(self.stroke_radius_pressure),2))
+        my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],2)) + ' ' + str(round(self.stroke_radius_pressure,2))
         print(my_str)
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
