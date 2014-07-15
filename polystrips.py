@@ -410,6 +410,7 @@ class GEdge:
         
         self.zip_to_gedge   = None
         self.zip_side       = 1
+        self.zip_dir        = 1
         
         self.zip_attached   = []
         
@@ -423,14 +424,22 @@ class GEdge:
         gvert2.connect_gedge_inner(self)
         gvert3.connect_gedge(self)
     
-    def zip_to(self, gedge, t0, t3):
+    def zip_to(self, gedge):
         assert not self.zip_to_gedge
+        
         self.zip_to_gedge = gedge
         gedge.zip_attached += [self]
+        
+        # which side are we on and which way are we going?
+        self.zip_side = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.position-gedge.gvert0.position)>0 else -1
+        self.zip_dir  = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.snap_tany)>0 else -1
+        
+        t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25)
         self.gvert0.zip_over_gedge = self
         self.gvert0.zip_t          = t0
         self.gvert3.zip_over_gedge = self
         self.gvert3.zip_t          = t3
+        
         self.update()
     
     def unzip(self):
@@ -457,6 +466,8 @@ class GEdge:
             assert False
     
     def disconnect(self):
+        if self.zip_to_gedge:
+            self.unzip()
         self.gvert0.disconnect_gedge(self)
         self.gvert1.disconnect_gedge(self)
         self.gvert2.disconnect_gedge(self)
@@ -574,12 +585,15 @@ class GEdge:
             loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
             loigv.reverse()
         
+        side = self.zip_side
+        zdir = self.zip_dir
+        
         r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(ic)
         l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
-        l_pos   = [oigv.position+oigv.tangent_y*self.zip_side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
+        l_pos   = [oigv.position+oigv.tangent_y*side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
         l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
-        l_tanx  = [oigv.tangent_x for _i,oigv in enumerate(loigv)]
-        l_tany  = [oigv.tangent_y for _i,oigv in enumerate(loigv)]
+        l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
+        l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
         
         self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
         self.snap_igverts()

@@ -660,19 +660,20 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             if eventd['press'] == 'Z':
                 if self.sel_gedge.zip_to_gedge:
                     self.sel_gedge.unzip()
-                else:
-                    x,y = eventd['mouse']
-                    pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
-                    if not pts:
-                        self.sel_gvert,self.sel_gedge = None,None
-                        return ''
-                    pt = pts[0]
-                    for ge in self.polystrips.gedges:
-                        if ge == self.sel_gedge: continue
-                        if not ge.is_picked(pt): continue
-                        self.sel_gedge.zip_to(ge, 0.25, 0.75)
-                        return ''
+                    return ''
                 
+                x,y = eventd['mouse']
+                pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+                if not pts:
+                    self.sel_gvert,self.sel_gedge = None,None
+                    return ''
+                pt = pts[0]
+                for ge in self.polystrips.gedges:
+                    if ge == self.sel_gedge: continue
+                    if not ge.is_picked(pt): continue
+                    self.sel_gedge.zip_to(ge)
+                    return ''
+                return ''
         
         
         ###################################
