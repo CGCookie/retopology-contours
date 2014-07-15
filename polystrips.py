@@ -64,6 +64,10 @@ class GVert:
         self.gedge3 = None
         self.gedge_inner = None
         
+        self.zip_over_gedge = None      # which gedge to zip over (which gets updated...)
+        self.zip_t          = 0         # where do we attach?
+        self.zip_snap_end   = False     # do we snap to endpoint of zip_over_gedge?
+        
         self.doing_update = False
         
         self.visible = True
@@ -182,6 +186,13 @@ class GVert:
         else: assert False
         self.update_gedges()
         pr.done()
+    
+    def replace_gedge(self, gedge, ngedge):
+        if self.gedge0 == gedge: self.gedge0 = ngedge
+        elif self.gedge1 == gedge: self.gedge1 = ngedge
+        elif self.gedge2 == gedge: self.gedge2 = ngedge
+        elif self.gedge3 == gedge: self.gedge3 = ngedge
+        else: assert False
     
     def snap_corners(self):
         pr = profiler.start()
@@ -397,6 +408,11 @@ class GEdge:
         self.gvert2 = gvert2
         self.gvert3 = gvert3
         
+        self.zip_to_gedge   = None
+        self.zip_side       = 1
+        
+        self.zip_attached   = []
+        
         # create caching vars
         self.cache_igverts = []             # cached interval gverts
                                             # even-indexed igverts are poly "centers"
@@ -406,7 +422,25 @@ class GEdge:
         gvert1.connect_gedge_inner(self)
         gvert2.connect_gedge_inner(self)
         gvert3.connect_gedge(self)
-        
+    
+    def zip_to(self, gedge, t0, t3):
+        assert not self.zip_to_gedge
+        self.zip_to_gedge = gedge
+        gedge.zip_attached += [self]
+        self.gvert0.zip_over_gedge = self
+        self.gvert0.zip_t          = t0
+        self.gvert3.zip_over_gedge = self
+        self.gvert3.zip_t          = t3
+        self.update()
+    
+    def unzip(self):
+        assert self.zip_to_gedge
+        gedge = self.zip_to_gedge
+        self.zip_to_gedge = None
+        gedge.zip_attached = [ge for ge in gedge.zip_attached if ge != self]
+        self.gvert0.zip_over_gedge = None
+        self.gvert3.zip_over_gedge = None
+        self.update()
     
     def rotate_gverts_at(self, gv, quat):
         if gv == self.gvert0:
@@ -519,14 +553,48 @@ class GEdge:
             i += 1
         return min_t,min_d
     
-    
-    def update(self, debug=False):
+    def update_zip(self, debug=False):
         '''
-        recomputes interval gverts along gedge
-        note: considering only the radii of end points
-        note: approx => not snapped to surface
+        recomputes interval gverts along gedge---zipped version
+        extend off of igverts of self.zip_to_gedge
         '''
         
+        l = len(self.zip_to_gedge.cache_igverts)
+        
+        t0 = self.gvert0.zip_t
+        t3 = self.gvert3.zip_t
+        i0 = int(float(l-1)*t0/2)*2
+        i3 = int((float(l-1)*t3+1)/2)*2
+        
+        if i3 >= i0:
+            ic = (i3-i0)+1
+            loigv = [self.zip_to_gedge.cache_igverts[i0+_i] for _i in range(ic)]
+        else:
+            ic = (i0-i3)+1
+            loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
+            loigv.reverse()
+        
+        r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(ic)
+        l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
+        l_pos   = [oigv.position+oigv.tangent_y*self.zip_side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
+        l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
+        l_tanx  = [oigv.tangent_x for _i,oigv in enumerate(loigv)]
+        l_tany  = [oigv.tangent_y for _i,oigv in enumerate(loigv)]
+        
+        self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
+        self.snap_igverts()
+        
+        self.gvert0.position = self.cache_igverts[0].position
+        self.gvert1.position = self.cache_igverts[1].position
+        self.gvert2.position = self.cache_igverts[-2].position
+        self.gvert3.position = self.cache_igverts[-1].position
+        
+        self.gvert0.update(do_edges=False)
+        self.gvert1.update(do_edges=False)
+        self.gvert2.update(do_edges=False)
+        self.gvert3.update(do_edges=False)
+    
+    def update_nozip(self, debug=False):
         p0,p1,p2,p3 = self.get_positions()
         r0,r1,r2,r3 = self.get_radii()
         n0,n1,n2,n3 = self.get_normals()
@@ -571,6 +639,30 @@ class GEdge:
         # create igverts!
         self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
         
+        self.snap_igverts()
+        
+        self.gvert0.update(do_edges=False)
+        self.gvert1.update(do_edges=False)
+        self.gvert2.update(do_edges=False)
+        self.gvert3.update(do_edges=False)
+        
+    
+    def update(self, debug=False):
+        '''
+        recomputes interval gverts along gedge
+        note: considering only the radii of end points
+        note: approx => not snapped to surface
+        '''
+        
+        if self.zip_to_gedge:
+            self.update_zip(debug=debug)
+        else:
+            self.update_nozip(debug=debug)
+        
+        for zgedge in self.zip_attached:
+            zgedge.update(debug=debug)
+        
+    def snap_igverts(self):
         '''
         snaps already computed igverts to surface of object ob
         '''
@@ -584,10 +676,6 @@ class GEdge:
             igv.normal = (mx3x3 * n).normalized()
             igv.tangent_y = igv.normal.cross(igv.tangent_x).normalized()
         
-        self.gvert0.update(do_edges=False)
-        self.gvert1.update(do_edges=False)
-        self.gvert2.update(do_edges=False)
-        self.gvert3.update(do_edges=False)
     
     def is_picked(self, pt):
         for p0,p1,p2,p3 in self.iter_segments(only_visible=True):
@@ -870,6 +958,7 @@ class PolyStrips(object):
             assert len(cb_split) == 2, 'Could not split bezier (' + (','.join(str(p) for p in [p0,p1,p2,p3])) + ') at %f' % t
             cb0,cb1 = cb_split
             rm = (r0+r3)/2
+            
             gv_split = self.create_gvert(cb0[3], radius=rm)
             gv0_0 = gedge.gvert0
             gv0_1 = self.create_gvert(cb0[1], radius=rm)
@@ -879,9 +968,11 @@ class PolyStrips(object):
             gv1_1 = self.create_gvert(cb1[1], radius=rm)
             gv1_2 = self.create_gvert(cb1[2], radius=rm)
             gv1_3 = gedge.gvert3
+            
             self.disconnect_gedge(gedge)
             ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
             ge1 = self.create_gedge(gv1_0,gv1_1,gv1_2,gv1_3)
+            
             gv0_0.update()
             gv0_0.update_gedges()
             gv_split.update()

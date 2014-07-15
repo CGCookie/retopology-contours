@@ -125,7 +125,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         r3d = context.space_data.region_3d
         
         draw_original_strokes   = False
-        draw_bezier_directions  = True
+        draw_gedge_directions   = True
         draw_gvert_orientations = False
         draw_unconnected_gverts = False
         draw_gvert_unsnapped    = False
@@ -136,6 +136,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         color_gedge             = (1,.5,.5,.8)
         color_gedge_nocuts      = (.5,.2,.2,.8)
+        color_gedge_zipped      = (.5,.7,.7,.8)
         
         color_gvert_unconnected = (.2,.2,.2,.8)
         color_gvert_endpoint    = (.2,.2,.5,.8)
@@ -175,16 +176,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         
         for i_ge,gedge in enumerate(self.polystrips.gedges):
-            if draw_bezier_directions:
+            if draw_gedge_directions:
                 p0,p1,p2,p3 = gedge.gvert0.snap_pos, gedge.gvert1.snap_pos, gedge.gvert2.snap_pos, gedge.gvert3.snap_pos
                 n0,n1,n2,n3 = gedge.gvert0.snap_norm, gedge.gvert1.snap_norm, gedge.gvert2.snap_norm, gedge.gvert3.snap_norm
                 pm = cubic_bezier_blend_t(p0,p1,p2,p3,0.5)
                 px = cubic_bezier_derivative(p0,p1,p2,p3,0.5).normalized()
                 pn = (n0+n3).normalized()
                 py = pn.cross(px).normalized()
-                rs = 0.0015
-                rl = 0.0007
-                p3d = [pm,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
+                rs = (gedge.gvert0.radius+gedge.gvert3.radius) * 0.35
+                rl = rs * 0.75
+                p3d = [pm-px*rs,pm+px*rs,pm+px*(rs-rl)+py*rl,pm+px*rs,pm+px*(rs-rl)-py*rl]
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.8,0.8,0.8,0.8),1, "GL_LINE_SMOOTH")
             
             if draw_gedge_bezier:
@@ -193,6 +194,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 contour_utilities.draw_polyline_from_3dpoints(context, p3d, (0.5,0.5,0.5,0.8),1, "GL_LINE_SMOOTH")
             
             col = color_gedge if len(gedge.cache_igverts) else color_gedge_nocuts
+            if gedge.zip_to_gedge: col = color_gedge_zipped
             if gedge == self.sel_gedge: col = sel_fn(col)
             w = 2 if len(gedge.cache_igverts) else 5
             for c0,c1,c2,c3 in gedge.iter_segments(only_visible=True):
@@ -233,22 +235,23 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 contour_utilities.draw_polyline_from_3dpoints(context, [p,p+n*0.01], (0,0,1,1), 1, "GL_LINE_SMOOTH")
         
         if self.sel_gedge:
-            col = color_gvert_midpoints
-            for gv in self.sel_gedge.get_inner_gverts():
-                if not gv.is_visible(): continue
-                p0,p1,p2,p3 = gv.get_corners()
-                p3d = [p0,p1,p2,p3,p0]
-                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
-                
+            if not self.sel_gedge.zip_to_gedge:
+                col = color_gvert_midpoints
+                for gv in self.sel_gedge.get_inner_gverts():
+                    if not gv.is_visible(): continue
+                    p0,p1,p2,p3 = gv.get_corners()
+                    p3d = [p0,p1,p2,p3,p0]
+                    contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
             draw_gedge_info(self.sel_gedge, context)
         
         if self.sel_gvert:
-            col = color_gvert_midpoints
-            for gv in self.sel_gvert.get_inner_gverts():
-                if not gv.is_visible(): continue
-                p0,p1,p2,p3 = gv.get_corners()
-                p3d = [p0,p1,p2,p3,p0]
-                contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
+            if not self.sel_gvert.zip_over_gedge:
+                col = color_gvert_midpoints
+                for gv in self.sel_gvert.get_inner_gverts():
+                    if not gv.is_visible(): continue
+                    p0,p1,p2,p3 = gv.get_corners()
+                    p3d = [p0,p1,p2,p3,p0]
+                    contour_utilities.draw_polyline_from_3dpoints(context, p3d, col, 2, "GL_LINE_SMOOTH")
         
         if self.mode == 'sketch':
             contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1][0]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
@@ -588,18 +591,16 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 return ''
             pt = pts[0]
             
-            #picking happens based on world scale
-            threshold_pick = self.length_scale * 0.005
-            
             if self.sel_gvert or self.sel_gedge:
                 # check if user is picking an inner control point
-                lcpts = []
-                if self.sel_gedge:
+                if self.sel_gedge and not self.sel_gedge.zip_to_gedge:
                     lcpts = [self.sel_gedge.gvert1,self.sel_gedge.gvert2]
-                else:
+                elif self.sel_gvert and not self.sel_gvert.zip_over_gedge:
                     sgv = self.sel_gvert
                     lge = self.sel_gvert.get_gedges()
                     lcpts = [ge.get_inner_gvert_at(sgv) for ge in lge if ge] + [sgv]
+                else:
+                    lcpts = []
                 for cpt in lcpts:
                     if not cpt.is_picked(pt): continue
                     self.sel_gvert = cpt
@@ -655,6 +656,23 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gedge.gvert0.update_gedges()
                 self.sel_gedge.gvert3.update_gedges()
                 return ''
+            
+            if eventd['press'] == 'Z':
+                if self.sel_gedge.zip_to_gedge:
+                    self.sel_gedge.unzip()
+                else:
+                    x,y = eventd['mouse']
+                    pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+                    if not pts:
+                        self.sel_gvert,self.sel_gedge = None,None
+                        return ''
+                    pt = pts[0]
+                    for ge in self.polystrips.gedges:
+                        if ge == self.sel_gedge: continue
+                        if not ge.is_picked(pt): continue
+                        self.sel_gedge.zip_to(ge, 0.25, 0.75)
+                        return ''
+                
         
         
         ###################################
@@ -677,13 +695,17 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             
             
             if eventd['press'] == 'CTRL+NUMPAD_PLUS':
-                self.scale_gvert_radius(1.100000)
-                self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
+                self.sel_gvert.zip_t = min(1, self.sel_gvert.zip_t + 0.05)
+                self.sel_gvert.zip_over_gedge.update()
+                #self.scale_gvert_radius(1.100000)
+                #self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
             
             if eventd['press'] == 'CTRL+NUMPAD_MINUS':
-                self.scale_gvert_radius(0.909091)
-                self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
+                self.sel_gvert.zip_t = max(0, self.sel_gvert.zip_t - 0.05)
+                self.sel_gvert.zip_over_gedge.update()
+                #self.scale_gvert_radius(0.909091)
+                #self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
                 
             if eventd['press'] == 'S':
