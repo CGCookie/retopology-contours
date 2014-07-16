@@ -55,9 +55,8 @@ def blender_bezier_to_even_points(b_ob, dist):
             new_verts = contour_utilities.space_evenly_on_path(total_verts, [(0,1),(1,2)], n, 0)
         paths.append(new_verts)
         
-        
     return(paths)
-            
+             
 def quadratic_bezier_weights(t):
     t0,t1 = t,(1-t)
     b0 = t1*t1
@@ -161,6 +160,47 @@ def cubic_bezier_find_closest_t_approx_distance(p0,p1,p2,p3, dist, threshold=0.1
     dret,tret = find_t(p0,p1,p2,p3,dist,0,1,threshold)
     return tret
     
+def cubic_bezier_t_of_s(p0,p1,p2,p3, steps = 100):
+    '''
+    returns a dictionary mapping of arclen values ot t values
+    approximated at steps along the curve.  Dumber method than
+    the decastelejue subdivision.
+    '''
+    s_t_map = {}
+    s_t_map[0] = 0
+    vi0 = p0
+    cumul_length = 0      
+    for i in range(1,steps+1):
+        t = i/steps
+        weights = cubic_bezier_weights(i/steps)
+        vi1 = cubic_bezier_blend_weights(p0, p1, p2, p3, weights)    
+        cumul_length += (vi1 - vi0).length
+        s_t_map[cumul_length] = t
+        vi0 = vi1
+        
+    return s_t_map
+
+def closest_t_of_s(s_t_map, s):
+    '''
+    '''
+    d0 = 0
+    t = 1  #in case we don't find a d > s
+    for i,d in enumerate(s_t_map):
+        if d >= s:
+            if i == 0:
+                return 0
+            t1 = s_t_map[d]
+            t0 = s_t_map[d0]
+            t = t0 + (t1-t0) * (s - d0)/(d-d0)
+            return t
+        else:
+            d0 = d
+        
+    return t
+         
+        
+    
+
 
 def cubic_bezier_fit_value(l_v, l_t):
     def compute_error(v0,v1,v2,v3,l_v,l_t):

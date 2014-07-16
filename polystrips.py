@@ -249,10 +249,15 @@ class GVert:
                 return igv1.position - igv1.tangent_y*r1
             return (igv0.position+igv0.tangent_y*r0 + igv1.position-igv1.tangent_y*r1)/2
         
-        igv0 = None if (not self.gedge0 or self.gedge0.force_count) else self.gedge0.get_igvert_at(self)
-        igv1 = None if (not self.gedge1 or self.gedge0.force_count) else self.gedge1.get_igvert_at(self)
-        igv2 = None if (not self.gedge2 or self.gedge0.force_count) else self.gedge2.get_igvert_at(self)
-        igv3 = None if (not self.gedge3 or self.gedge0.force_count) else self.gedge3.get_igvert_at(self)
+        #igv0 = None if (not self.gedge0 or self.gedge0.force_count) else self.gedge0.get_igvert_at(self)
+        #igv1 = None if (not self.gedge1 or self.gedge0.force_count) else self.gedge1.get_igvert_at(self)
+        #igv2 = None if (not self.gedge2 or self.gedge0.force_count) else self.gedge2.get_igvert_at(self)
+        #igv3 = None if (not self.gedge3 or self.gedge0.force_count) else self.gedge3.get_igvert_at(self)
+        
+        igv0 = None if not self.gedge0 else self.gedge0.get_igvert_at(self)
+        igv1 = None if not self.gedge1 else self.gedge1.get_igvert_at(self)
+        igv2 = None if not self.gedge2 else self.gedge2.get_igvert_at(self)
+        igv3 = None if not self.gedge3 else self.gedge3.get_igvert_at(self)
         
         r0 = 0 if not igv0 else (igv0.radius*(1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1))
         r1 = 0 if not igv1 else (igv1.radius*(1 if igv1.tangent_x.dot(self.snap_tany)<0 else -1))
@@ -535,31 +540,40 @@ class GEdge:
         r0,r1,r2,r3 = self.get_radii()
         n0,n1,n2,n3 = self.get_normals()
         
-        find_t = polystrips_utilities.cubic_bezier_find_closest_t_approx_distance
+        #get s_t_map
+        if self.n_quads:
+            step = 20* self.n_quads
+        else:
+            step = 100
+        s_t_map = polystrips_utilities.cubic_bezier_t_of_s(p0, p1, p2, p3, steps = step )
         # get bezier length
-        l = self.get_length()
-        #l1 = self.get_length(precision = 10)
-        #l2 = self.get_length(precision = 20)
-        #l3 = self.get_length(precision = 100)
-        #print('lengths %f, %f, %f, %f' % (l,l1,l2,l3))
-        
+        #l = self.get_length()  <-this is more accurate, but we need consistency
+        l = max(s_t_map)
         if self.force_count and self.n_quads:
+            #number of segments
             c = 2 * (self.n_quads - 1)
-            
-            #average width of GEdges internal quads
-            davg = (l - r0 - r3)/(2 * (self.n_quads - 2))
             # compute difference for smoothly interpolating radii perpendicular to GEdge
-            s = (r3-r0) / float(c-1) 
+            s = (r3-r0) / float(c)  #(c-1?) c+1 verts inexed 0 to c.  at cth vert f(n) = r0 + s*n f(0) = r0 f(c) = r3  = ro + c *s
+            
+            #method 1, leave end quads with R0 and R3 preserved
+            #average width of GEdges internal quads
+            #davg = (l - r0 - r3)/(2 * (self.n_quads - 2)) #what if davg is negative?
+            # compute interval lengths, ts, blend weights leaving end quads radius same
+            #l_widths = [0] + [r0] + [davg for i in range(1,c-1)] + [r3]
+            
+            #method 2
+            L = c * r0 +  s*(c+1)*c/2  #integer run sum
+            os = L -l
+            d_os = os/c
             
             # compute interval lengths, ts, blend weights
-            l_widths = [0] + [r0] + [davg for i in range(1,c-1)] + [r3]
-            
-            print(l_widths)
-            l_ts = [float(i)/float(c) for i in range(c+1)]  #pure time distribution
-            l_ts1 = [dist/l for w,dist in iter_running_sum(l_widths)]  #assume constant velocity on curve
-            l_ts2 = [find_t(p0, p1, p2, p3, dist, threshold = .05) for w,dist in iter_running_sum(l_widths)]  #pure lenght distribution
-            
-            l_weights = [cubic_bezier_weights(t) for t in l_ts1]
+            l_widths = [0] + [r0 + s*i - d_os for i in range(c)]
+
+            #l_ts = [float(i)/float(c) for i in range(c+1)]  #pure time distribution
+            #l_ts1 = [dist/l for w,dist in iter_running_sum(l_widths)]  #assume constant velocity on curve
+            l_ts = [polystrips_utilities.closest_t_of_s(s_t_map, dist) for w,dist in iter_running_sum(l_widths)]  #pure lenght distribution
+
+            l_weights = [cubic_bezier_weights(t) for t in l_ts]
         
         else:
             # find "optimal" count for subdividing spline
