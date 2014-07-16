@@ -434,6 +434,7 @@ class GEdge:
     def zip_to(self, gedge):
         assert not self.zip_to_gedge
         
+        #create parent/child like relationship
         self.zip_to_gedge = gedge
         gedge.zip_attached += [self]
         
@@ -441,7 +442,7 @@ class GEdge:
         self.zip_side = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.position-gedge.gvert0.position)>0 else -1
         self.zip_dir  = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.snap_tany)>0 else -1
         
-        t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25)
+        t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25) #why these values?
         self.gvert0.zip_over_gedge = self
         self.gvert0.zip_t          = t0
         self.gvert3.zip_over_gedge = self
@@ -583,7 +584,7 @@ class GEdge:
         
         t0 = self.gvert0.zip_t
         t3 = self.gvert3.zip_t
-        i0 = int(float(l-1)*t0/2)*2
+        i0 = int(float(l-1)*t0/2)*2   #assumption linear distribution in t which is true for non forced n_quads and most of situations -PM
         i3 = int((float(l-1)*t3+1)/2)*2
         
         if i0 == i3:
@@ -595,10 +596,10 @@ class GEdge:
             
         else:
             if i3 > i0:
-                ic = (i3-i0)+1
+                ic = (i3-i0)+1  #number of ig verts to make
                 if i3>len(self.zip_to_gedge.cache_igverts):
                     dprint('%i %i %i' % (i0,i3,ic))
-                loigv = [self.zip_to_gedge.cache_igverts[i0+_i] for _i in range(ic)]
+                loigv = [self.zip_to_gedge.cache_igverts[i0+_i] for _i in range(ic)]  #steal parents ig verts
             elif i3 < i0:
                 ic = (i0-i3)+1
                 if i0>len(self.zip_to_gedge.cache_igverts):
@@ -630,7 +631,71 @@ class GEdge:
         self.gvert1.update(do_edges=False)
         self.gvert2.update(do_edges=False)
         self.gvert3.update(do_edges=False)
-    
+
+    def spawn_zip_child(self, debug=False, side = 1, t0 = 0, t3 = 1):
+        '''
+        creates a new Gedge which is fully zipped on upper or
+        lower side.  Flow is in same direction
+        '''
+        
+        new_gedge = GEdge(self.obj, self.length_scale, self.gvert0.clone(), self.gvert1.clone(), self.gvert2.clone(), self.gvert3.clone())
+        l = len(self.cache_igverts)
+        
+        new_gedge.gvert0.zip_t = t0
+        new_gedge.gvert3.zip_t = t3
+        i0 = int(float(l-1)*t0/2)*2   #assumption linear distribution in t which is true for non forced n_quads and most of situations -PM
+        i3 = int((float(l-1)*t3+1)/2)*2
+        
+        if i0 == i3:
+            dprint('i0 == i3')
+            new_gedge.cache_igverts = []
+            
+            ic = 0
+            loigv = []
+            del new_gedge
+            return None
+        else:
+            if i3 > i0:
+                ic = (i3-i0)+1  #number of ig verts to make
+                if i3>len(self.cache_igverts):
+                    dprint('%i %i %i' % (i0,i3,ic))
+                loigv = [self.cache_igverts[i0+_i] for _i in range(ic)]  #steal parents ig verts
+            elif i3 < i0:
+                ic = (i0-i3)+1
+                if i0>len(self.cache_igverts):
+                    dprint('%i %i %i' % (i3,i0,ic))
+                loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
+                loigv.reverse()
+            
+            #side = self.zip_side  side is now input variable
+            zdir = 1
+            
+            r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(max(1,ic))
+            l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
+            l_pos   = [oigv.position+oigv.tangent_y*side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
+            l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
+            l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
+            l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
+            
+            [(fit_t0,fit_t3,fit_p0,fit_p1,fit_p2,fit_p3)] = cubic_bezier_fit_points(l_pos, r0/10, depth=0, t0=0, t3=1, allow_split=True)
+            new_gedge.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
+            new_gedge.snap_igverts()
+            
+            assert len(new_gedge.cache_igverts)>=2, 'not enough! %i (%f) %i (%f) %i' % (i0,t0,i3,t3,ic)
+            
+            new_gedge.gvert0.position = fit_p0
+            new_gedge.gvert1.position = fit_p1
+            new_gedge.gvert2.position = fit_p2
+            new_gedge.gvert3.position = fit_p3
+            new_gedge.update()
+            
+            new_gedge.gvert0.update(do_edges=False)
+            new_gedge.gvert1.update(do_edges=False)
+            new_gedge.gvert2.update(do_edges=False)
+            new_gedge.gvert3.update(do_edges=False)
+        
+            return new_gedge
+           
     def update_nozip(self, debug=False):
         p0,p1,p2,p3 = self.get_positions()
         r0,r1,r2,r3 = self.get_radii()
