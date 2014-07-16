@@ -627,10 +627,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             for gv in self.polystrips.gverts:
                 gv.update_gedges()
         
-        if eventd['press'] == 'B':
-            self.ready_tool(eventd, self.scale_tool_stroke_radius)
-            return 'scale tool'
-        
         
         ###################################
         # selected gedge commands
@@ -674,6 +670,13 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     self.sel_gedge.zip_to(ge)
                     return ''
                 return ''
+            
+            if eventd['press'] == 'A':
+                self.sel_gvert = self.sel_gedge.gvert0
+                self.sel_gedge = None
+            if eventd['press'] == 'B':
+                self.sel_gvert = self.sel_gedge.gvert3
+                self.sel_gedge = None
         
         
         ###################################
@@ -694,21 +697,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.polystrips.update_visibility(eventd['r3d'])
                 return ''
             
-            
-            if eventd['press'] == 'CTRL+NUMPAD_PLUS':
-                self.sel_gvert.zip_t = min(1, self.sel_gvert.zip_t + 0.05)
-                self.sel_gvert.zip_over_gedge.update()
-                #self.scale_gvert_radius(1.100000)
-                #self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
-                return ''
-            
-            if eventd['press'] == 'CTRL+NUMPAD_MINUS':
-                self.sel_gvert.zip_t = max(0, self.sel_gvert.zip_t - 0.05)
-                self.sel_gvert.zip_over_gedge.update()
-                #self.scale_gvert_radius(0.909091)
-                #self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
-                return ''
-                
             if eventd['press'] == 'S':
                 self.ready_tool(eventd, self.scale_tool_gvert_radius)
                 return 'scale tool'
@@ -751,6 +739,24 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gvert = None
                 return ''
             
+            if self.sel_gvert.zip_over_gedge:
+                gvthis = self.sel_gvert
+                gvthat = self.sel_gvert.get_zip_pair()
+                
+                if eventd['press'] == 'CTRL+NUMPAD_PLUS':
+                    max_t = 1 if gvthis.zip_t>gvthat.zip_t else gvthat.zip_t-0.05
+                    gvthis.zip_t = min(gvthis.zip_t+0.05, max_t)
+                    gvthis.zip_over_gedge.update()
+                    dprint('+ %f %f' % (min(gvthis.zip_t, gvthat.zip_t),max(gvthis.zip_t, gvthat.zip_t)))
+                    return ''
+                
+                if eventd['press'] == 'CTRL+NUMPAD_MINUS':
+                    min_t = 0 if gvthis.zip_t<gvthat.zip_t else gvthat.zip_t+0.05
+                    gvthis.zip_t = max(gvthis.zip_t-0.05, min_t)
+                    gvthis.zip_over_gedge.update()
+                    dprint('- %f %f' % (min(gvthis.zip_t, gvthat.zip_t),max(gvthis.zip_t, gvthat.zip_t)))
+                    return ''
+                
         return ''
     
     

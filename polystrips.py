@@ -105,6 +105,13 @@ class GVert:
     
     def get_inner_gverts(self): return [ge.get_inner_gvert_at(self) for ge in self.get_gedges_notnone()]
     
+    def get_zip_pair(self):
+        ge = self.zip_over_gedge
+        if not ge: return None
+        if ge.gvert0==self: return ge.gvert3
+        if ge.gvert3==self: return ge.gvert0
+        assert False
+    
     def disconnect_gedge(self, gedge):
         pr = profiler.start()
         if self.gedge_inner == gedge:
@@ -468,6 +475,8 @@ class GEdge:
     def disconnect(self):
         if self.zip_to_gedge:
             self.unzip()
+        for ge in self.zip_attached:
+            ge.unzip()
         self.gvert0.disconnect_gedge(self)
         self.gvert1.disconnect_gedge(self)
         self.gvert2.disconnect_gedge(self)
@@ -577,31 +586,45 @@ class GEdge:
         i0 = int(float(l-1)*t0/2)*2
         i3 = int((float(l-1)*t3+1)/2)*2
         
-        if i3 >= i0:
-            ic = (i3-i0)+1
-            loigv = [self.zip_to_gedge.cache_igverts[i0+_i] for _i in range(ic)]
+        if i0 == i3:
+            dprint('i0 == i3')
+            self.cache_igverts = []
+            
+            ic = 0
+            loigv = []
+            
         else:
-            ic = (i0-i3)+1
-            loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
-            loigv.reverse()
-        
-        side = self.zip_side
-        zdir = self.zip_dir
-        
-        r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(ic)
-        l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
-        l_pos   = [oigv.position+oigv.tangent_y*side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
-        l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
-        l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
-        l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
-        
-        self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
-        self.snap_igverts()
-        
-        self.gvert0.position = self.cache_igverts[0].position
-        self.gvert1.position = self.cache_igverts[1].position
-        self.gvert2.position = self.cache_igverts[-2].position
-        self.gvert3.position = self.cache_igverts[-1].position
+            if i3 > i0:
+                ic = (i3-i0)+1
+                if i3>len(self.zip_to_gedge.cache_igverts):
+                    dprint('%i %i %i' % (i0,i3,ic))
+                loigv = [self.zip_to_gedge.cache_igverts[i0+_i] for _i in range(ic)]
+            elif i3 < i0:
+                ic = (i0-i3)+1
+                if i0>len(self.zip_to_gedge.cache_igverts):
+                    dprint('%i %i %i' % (i3,i0,ic))
+                loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
+                loigv.reverse()
+            
+            side = self.zip_side
+            zdir = self.zip_dir
+            
+            r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(max(1,ic))
+            l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
+            l_pos   = [oigv.position+oigv.tangent_y*side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
+            l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
+            l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
+            l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
+            
+            self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
+            self.snap_igverts()
+            
+            assert len(self.cache_igverts)>=2, 'not enough! %i (%f) %i (%f) %i' % (i0,t0,i3,t3,ic)
+            
+            self.gvert0.position = self.cache_igverts[0].position
+            self.gvert1.position = (self.cache_igverts[0].position+self.cache_igverts[-1].position)/2
+            self.gvert2.position = (self.cache_igverts[0].position+self.cache_igverts[-1].position)/2
+            self.gvert3.position = self.cache_igverts[-1].position
         
         self.gvert0.update(do_edges=False)
         self.gvert1.update(do_edges=False)
