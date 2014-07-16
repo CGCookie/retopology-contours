@@ -550,10 +550,11 @@ class GEdge:
         #l = self.get_length()  <-this is more accurate, but we need consistency
         l = max(s_t_map)
         if self.force_count and self.n_quads:
+
             #number of segments
             c = 2 * (self.n_quads - 1)
             # compute difference for smoothly interpolating radii perpendicular to GEdge
-            s = (r3-r0) / float(c)  #(c-1?) c+1 verts inexed 0 to c.  at cth vert f(n) = r0 + s*n f(0) = r0 f(c) = r3  = ro + c *s
+            s = (r3-r0) / float(c+1)  #(c-1?) c+1 verts inexed 0 to c.  at cth vert f(n) = r0 + s*n f(0) = r0 f(c) = r3  = ro + c *s
             
             #method 1, leave end quads with R0 and R3 preserved
             #average width of GEdges internal quads
@@ -607,6 +608,9 @@ class GEdge:
         # compute interval pos, rad, norm, tangent x, tangent y
         l_pos   = [cubic_bezier_blend_weights(p0,p1,p2,p3,weights) for weights in l_weights]
         l_radii = [r0 + i*s for i in range(c+2)]
+        
+        #Verify smooth radius interpolation
+        #print('R0 %f, R3 %f, r0 %f, r3 %f ' % (r0,r3,l_radii[0],l_radii[-1]))
         l_norms = [cubic_bezier_blend_weights(n0,n1,n2,n3,weights).normalized() for weights in l_weights]
         l_tanx  = [cubic_bezier_derivative(p0,p1,p2,p3,t).normalized() for t in l_ts]
         l_tany  = [t.cross(n).normalized() for t,n in zip(l_tanx,l_norms)]
