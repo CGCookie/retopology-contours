@@ -36,6 +36,22 @@ from mathutils.geometry import intersect_line_plane, intersect_point_line, dista
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 
 
+
+def in_view_3d(context, event):
+    
+    if context.area.type != 'VIEW_3D':
+        return False
+    x, y = event.mouse_x, event.mouse_y
+    
+    t_panel = context.area.regions[1]
+    n_panel = context.area.regions[3]
+    view_3d_region_x = Vector((context.area.x + t_panel.width, context.area.x + context.area.width - n_panel.width))
+    view_3d_region_y = Vector((context.region.y, context.region.y+context.region.height))
+        
+    in_view_3d = x > view_3d_region_x[0] and x < view_3d_region_x[1] and y > view_3d_region_y[0] and y < view_3d_region_y[1]
+    
+    return in_view_3d
+
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
     self._handle = bpy.types.SpaceView3D.draw_handler_add(self.menu.draw, (self, context), 'WINDOW', 'POST_PIXEL')
