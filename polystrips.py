@@ -66,6 +66,7 @@ class GVert:
         
         self.zip_over_gedge = None      # which gedge to zip over (which gets updated...)
         self.zip_t          = 0         # where do we attach?
+        self.zip_igv        = 0
         self.zip_snap_end   = False     # do we snap to endpoint of zip_over_gedge?
         
         self.doing_update = False
@@ -355,6 +356,23 @@ class GVert:
         if gedge == self.gedge3: return (3,0)
         assert False, "GEdge is not connected"
     
+    def get_back_cornerinds_of(self, gedge):
+        if gedge == self.gedge0: return (2,3)
+        if gedge == self.gedge1: return (3,0)
+        if gedge == self.gedge2: return (0,1)
+        if gedge == self.gedge3: return (1,2)
+        assert False, "GEdge is not connected"
+    
+    def get_side_cornerinds_of(self, gedge, side):
+        '''
+        return cornerinds on side that go toward gedge
+        '''
+        if gedge == self.gedge0: return (3,0) if side>0 else (2,1)
+        if gedge == self.gedge1: return (0,1) if side>0 else (3,2)
+        if gedge == self.gedge2: return (1,2) if side>0 else (0,3)
+        if gedge == self.gedge3: return (2,3) if side>0 else (1,0)
+        assert False, "GEdge is not connected"
+    
     def toggle_corner(self):
         if (self.is_endtoend() or self.is_ljunction()):
             if self.is_ljunction():
@@ -609,6 +627,9 @@ class GEdge:
             i += 1
         return min_t,min_d
     
+    def get_igvert_from_t(self, t, next=False):
+        return int((float(len(self.cache_igverts)-1)*t + (1 if next else 0))/2)*2
+    
     def update_zip(self, debug=False):
         '''
         recomputes interval gverts along gedge---zipped version
@@ -620,8 +641,11 @@ class GEdge:
         
         t0 = self.gvert0.zip_t
         t3 = self.gvert3.zip_t
-        i0 = int(float(l-1)*t0/2)*2
-        i3 = int((float(l-1)*t3+1)/2)*2
+        i0 = self.zip_to_gedge.get_igvert_from_t(t0)
+        i3 = self.zip_to_gedge.get_igvert_from_t(t3, next=True)
+        
+        self.gvert0.zip_igv = i0
+        self.gvert3.zip_igv = i3
         
         dprint('zippered indices: %i (%f) %i (%f)  / %i' % (i0,t0,i3,t3,l))
         
@@ -996,7 +1020,9 @@ class PolyStrips(object):
                     d10 = v10 / l10
                     
                     for i,info in enumerate(lstrs):
-                        pt0,pt1 = info[0][0], info[1][0]
+                        pt0,pr0 = info[0]
+                        pt1,pr1 = info[1]
+                        
                         vpt01 = pt1-pt0
                         lpt01 = vpt01.length
                         dir_pt01 = vpt01.normalized()
@@ -1192,73 +1218,205 @@ class PolyStrips(object):
         gv3.update_gedges()
     
     def create_mesh(self):
-        
         mx = self.obj.matrix_world
         imx = mx.inverted()
         
         verts = []
         quads = []
-        dgvcorners = {}
-        dgvindex = {}
         
-        def create_vert(verts, imx, v):
-            i = len(verts)
-            verts += [imx*v]
-            return i
+        igv_corner_vind = {}    # maps (igv,corner) to idx into verts
+        ige_side_lvind  = {}    # maps (ige,side) to list of vert indices
         
-        def create_quad(quads, iv0,iv1,iv2,iv3):
-            quads += [(iv0,iv1,iv2,iv3)]
+        gv_idx = {gv:i for i,gv in enumerate(self.gverts)}
+        ge_idx = {ge:i for i,ge in enumerate(self.gedges)}
         
-        for i,gv in enumerate(self.gverts):
-            if gv.is_unconnected(): continue
-            dgvindex[gv] = i
-            p0,p1,p2,p3 = gv.get_corners()
-            dgvcorners[(i,0)] = create_vert(verts,imx,p0)
-            dgvcorners[(i,1)] = create_vert(verts,imx,p1)
-            dgvcorners[(i,2)] = create_vert(verts,imx,p2)
-            dgvcorners[(i,3)] = create_vert(verts,imx,p3)
-            create_quad(quads, dgvcorners[(i,3)], dgvcorners[(i,2)], dgvcorners[(i,1)], dgvcorners[(i,0)])
+        def create_quad(iv0,iv1,iv2,iv3):
+            quads.append((iv0,iv1,iv2,iv3))
         
-        for ge in self.gedges:
-            p0,p1,p2,p3 = ge.gvert0.snap_pos, ge.gvert1.snap_pos, ge.gvert2.snap_pos, ge.gvert3.snap_pos
-            l = len(ge.cache_igverts)
+        def insert_vert(v):
+            verts.append(imx*v)
+            return len(verts)-1
+        
+        def create_vert(gv):
+            i_gv = gv_idx[gv]
+            if (i_gv,0) in igv_corner_vind: return
             
-            i0 = dgvindex[ge.gvert0]
-            i3 = dgvindex[ge.gvert3]
-            i00,i01 = ge.gvert0.get_cornerinds_of(ge)
-            i32,i33 = ge.gvert3.get_cornerinds_of(ge)
+            liv = [insert_vert(p) for p in gv.get_corners()]
             
-            c0 = dgvcorners[(i0,i00)]
-            c1 = dgvcorners[(i0,i01)]
-            c2 = dgvcorners[(i3,i32)]
-            c3 = dgvcorners[(i3,i33)]
-            
-            if l == 0:
-                create_quad(quads, c0, c1, c2, c3)
-                continue
-            
-            cc0 = c0
-            cc1 = c1
-            
-            for i,gvert in enumerate(ge.cache_igverts):
-                if i%2 == 0: continue
-                if i == 1: continue
+            if gv.zip_over_gedge:
+                zip_ge   = gv.zip_over_gedge
+                zip_dir  = zip_ge.zip_dir
+                zip_side = zip_ge.zip_side
+                zip_to   = zip_ge.zip_to_gedge
+                zip_0    = (gv==zip_ge.gvert0)
                 
-                if i == l-2:
-                    cc2 = c2
-                    cc3 = c3
+                zip_v = (-1 if zip_0 else 1) * zip_dir * zip_side
+                
+                side_lvind = ige_side_lvind[(ge_idx[zip_to], zip_side)]
+                ci0,ci1    = gv.get_side_cornerinds_of(zip_ge, zip_v)
+                
+                zip_igv = 1+int(gv.zip_igv/2)
+                
+                dprint('gv.zip_igv = %i, %i' % (gv.zip_igv,zip_igv))
+                dprint(side_lvind)
+                
+                if (zip_0 and zip_dir>0) or (not zip_0 and zip_dir<0): ci0,ci1 = ci1,ci0
+                
+                liv[ci0] = side_lvind[zip_igv]
+                liv[ci1] = side_lvind[zip_igv-1]
+            
+            igv_corner_vind[(i_gv,0)] = liv[0]
+            igv_corner_vind[(i_gv,1)] = liv[1]
+            igv_corner_vind[(i_gv,2)] = liv[2]
+            igv_corner_vind[(i_gv,3)] = liv[3]
+            
+            create_quad(liv[3],liv[2],liv[1],liv[0])
+        
+        
+        done = set()
+        defering = set(self.gedges)
+        while defering:
+            working = defering
+            defering = set()
+            
+            for ge in working:
+                if any(gv.zip_over_gedge and gv.zip_over_gedge.zip_to_gedge not in done for gv in [ge.gvert0,ge.gvert3]):
+                    defering |= {ge}
+                    continue
+                
+                create_vert(ge.gvert0)
+                create_vert(ge.gvert3)
+                
+                i_ge = ge_idx[ge]
+                l = len(ge.cache_igverts)
+                
+                if not ge.zip_to_gedge:
+                    i0 = gv_idx[ge.gvert0]
+                    i3 = gv_idx[ge.gvert3]
+                    i00,i01 = ge.gvert0.get_cornerinds_of(ge)
+                    i02,i03 = ge.gvert0.get_back_cornerinds_of(ge)
+                    i32,i33 = ge.gvert3.get_cornerinds_of(ge)
+                    i30,i31 = ge.gvert3.get_back_cornerinds_of(ge)
+                    
+                    c0 = igv_corner_vind[(i0,i00)]
+                    c1 = igv_corner_vind[(i0,i01)]
+                    c2 = igv_corner_vind[(i3,i32)]
+                    c3 = igv_corner_vind[(i3,i33)]
+                    
+                    ige_side_lvind[(i_ge, 1)] = [igv_corner_vind[(i0,i03)]]
+                    ige_side_lvind[(i_ge,-1)] = [igv_corner_vind[(i0,i02)]]
+                    
+                    if l == 0:
+                        create_quad(c0,c1,c2,c3)
+                        ige_side_lvind[(i_ge, 1)] += [c0,c3]
+                        ige_side_lvind[(i_ge,-1)] += [c1,c2]
+                    else:
+                        cc0,cc1 = c0,c1
+                        for i,gvert in enumerate(ge.cache_igverts):
+                            if i%2 == 0: continue
+                            
+                            if i == 1: continue
+                            
+                            ige_side_lvind[(i_ge, 1)] += [cc0]
+                            ige_side_lvind[(i_ge,-1)] += [cc1]
+                            
+                            if i == l-2:
+                                cc2 = c2
+                                cc3 = c3
+                            else:
+                                p2 = gvert.position-gvert.tangent_y*gvert.radius
+                                p3 = gvert.position+gvert.tangent_y*gvert.radius
+                                p2 = mx * self.obj.closest_point_on_mesh(imx*p2)[0]
+                                p3 = mx * self.obj.closest_point_on_mesh(imx*p3)[0]
+                                cc2 = insert_vert(p2)
+                                cc3 = insert_vert(p3)
+                            
+                            create_quad(cc0, cc1, cc2, cc3)
+                            
+                            cc0 = cc3
+                            cc1 = cc2
+                        ige_side_lvind[(i_ge, 1)] += [cc0]
+                        ige_side_lvind[(i_ge,-1)] += [cc1]
+                    
+                    ige_side_lvind[(i_ge, 1)] += [igv_corner_vind[(i3,i30)]]
+                    ige_side_lvind[(i_ge,-1)] += [igv_corner_vind[(i3,i31)]]
+                    
                 else:
-                    p2 = gvert.position-gvert.tangent_y*gvert.radius
-                    p3 = gvert.position+gvert.tangent_y*gvert.radius
-                    p2 = mx * self.obj.closest_point_on_mesh(imx*p2)[0]
-                    p3 = mx * self.obj.closest_point_on_mesh(imx*p3)[0]
-                    cc2 = create_vert(verts,imx, p2)
-                    cc3 = create_vert(verts,imx, p3)
+                    if False:
+                        i0 = gv_idx[ge.gvert0]
+                        i3 = gv_idx[ge.gvert3]
+                        i00,i01 = ge.gvert0.get_cornerinds_of(ge)
+                        i32,i33 = ge.gvert3.get_cornerinds_of(ge)
+                        c0 = igv_corner_vind[(i0,i00)]
+                        c1 = igv_corner_vind[(i0,i01)]
+                        c2 = igv_corner_vind[(i3,i32)]
+                        c3 = igv_corner_vind[(i3,i33)]
+                        
+                        zipi = [ige_iigv_vind[(zi_ge,i_gv,ge.zip_side)] for i_gv in range(len())]
+                        if ge.zip_side > 0:
+                            
+                            if ge.zip_dir > 0:
+                                pass
+                            else:
+                                pass
+                        else:
+                            if ge.zip_dir > 0:
+                                pass
+                            else:
+                                pass
+                        
+                        if l == 0:
+                            create_quad(c0,c1,c2,c3)
+                            ige_iigv_vind[(i_ge,0, 1)] = c0
+                            ige_iigv_vind[(i_ge,0,-1)] = c1
+                            ige_iigv_vind[(i_ge,1,-1)] = c2
+                            ige_iigv_vind[(i_ge,1, 1)] = c3
+                        else:
+                            cc0,cc1 = c0,c1
+                            i_gv = 0
+                            for i,gvert in enumerate(ge.cache_igverts):
+                                if i%2 == 0: continue
+                                
+                                ige_iigv_vind[(i_ge,i_gv, 1)] = cc0
+                                ige_iigv_vind[(i_ge,i_gv,-1)] = cc1
+                                i_gv += 1
+                                
+                                if i == 1: continue
+                                
+                                if i == l-2:
+                                    cc2 = c2
+                                    cc3 = c3
+                                else:
+                                    p2 = gvert.position-gvert.tangent_y*gvert.radius
+                                    p3 = gvert.position+gvert.tangent_y*gvert.radius
+                                    p2 = mx * self.obj.closest_point_on_mesh(imx*p2)[0]
+                                    p3 = mx * self.obj.closest_point_on_mesh(imx*p3)[0]
+                                    cc2 = create_vert(p2)
+                                    cc3 = create_vert(p3)
+                                
+                                create_quad(cc0, cc1, cc2, cc3)
+                                
+                                cc0 = cc3
+                                cc1 = cc2
+                            ige_iigv_vind[(i_ge,i_gv, 1)] = cc0
+                            ige_iigv_vind[(i_ge,i_gv,-1)] = cc1
                 
-                create_quad(quads, cc0, cc1, cc2, cc3)
-                
-                cc0 = cc3
-                cc1 = cc2
+                # do it
+                done |= {ge}
+        
+        # remove unused verts and remap quads
+        vind_used = [False for v in verts]
+        for q in quads:
+            for vind in q:
+                vind_used[vind] = True
+        i_new = 0
+        map_vinds = {}
+        for i_vind,used in enumerate(vind_used):
+            if used:
+                map_vinds[i_vind] = i_new
+                i_new += 1
+        verts = [v for u,v in zip(vind_used,verts) if u]
+        quads = [tuple(map_vinds[vind] for vind in q) for q in quads]
         
         return (verts,quads)
     
