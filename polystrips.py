@@ -218,6 +218,10 @@ class GVert:
     def update(self, do_edges=True):
         if self.doing_update: return
         
+        if self.zip_over_gedge and do_edges:
+            self.zip_over_gedge.update()
+            return
+        
         pr = profiler.start()
         
         mx = self.obj.matrix_world
@@ -244,46 +248,71 @@ class GVert:
         self.snap_tanx = (Vector((0.2,0.1,0.5)) if not self.gedge0 else self.gedge0.get_derivative_at(self)).normalized()
         self.snap_tany = self.snap_norm.cross(self.snap_tanx).normalized()
         
-        # NOTE! DO NOT UPDATE NORMAL, TANGENT_X, AND TANGENT_Y
-        
-        
-        #         ge2         #
-        #          |          #
-        #      2 --+-- 3      #
-        #      |       |      #
-        # ge1--+   +Y  +--ge3 #
-        #      |   X   |      #
-        #      1---+---0      #
-        #          |          #
-        #         ge0         #
-        
-        def get_corner(self,dmx,dmy, igv0,r0, igv1,r1):
-            if not igv0 and not igv1:
-                return self.snap_pos + self.snap_tanx*self.radius*dmx + self.snap_tany*self.radius*dmy
-            if igv0 and not igv1:
-                return igv0.position + igv0.tangent_y*r0
-            if igv1 and not igv0:
-                return igv1.position - igv1.tangent_y*r1
-            return (igv0.position+igv0.tangent_y*r0 + igv1.position-igv1.tangent_y*r1)/2
-        
-        igv0 = None if not self.gedge0 else self.gedge0.get_igvert_at(self)
-        igv1 = None if not self.gedge1 else self.gedge1.get_igvert_at(self)
-        igv2 = None if not self.gedge2 else self.gedge2.get_igvert_at(self)
-        igv3 = None if not self.gedge3 else self.gedge3.get_igvert_at(self)
-        
-        r0 = 0 if not igv0 else (igv0.radius*(1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1))
-        r1 = 0 if not igv1 else (igv1.radius*(1 if igv1.tangent_x.dot(self.snap_tany)<0 else -1))
-        r2 = 0 if not igv2 else (igv2.radius*(1 if igv2.tangent_x.dot(self.snap_tanx)<0 else -1))
-        r3 = 0 if not igv3 else (igv3.radius*(1 if igv3.tangent_x.dot(self.snap_tany)>0 else -1))
-        
-        self.corner0 = get_corner(self, 1, 1, igv0,r0, igv3,r3)
-        self.corner1 = get_corner(self, 1,-1, igv1,r1, igv0,r0)
-        self.corner2 = get_corner(self,-1,-1, igv2,r2, igv1,r1)
-        self.corner3 = get_corner(self,-1, 1, igv3,r3, igv2,r2)
+        if not self.zip_over_gedge:
+            # NOTE! DO NOT UPDATE NORMAL, TANGENT_X, AND TANGENT_Y
+            
+            
+            #         ge2         #
+            #          |          #
+            #      2 --+-- 3      #
+            #      |       |      #
+            # ge1--+   +Y  +--ge3 #
+            #      |   X   |      #
+            #      1---+---0      #
+            #          |          #
+            #         ge0         #
+            
+            def get_corner(self,dmx,dmy, igv0,r0, igv1,r1):
+                if not igv0 and not igv1:
+                    return self.snap_pos + self.snap_tanx*self.radius*dmx + self.snap_tany*self.radius*dmy
+                if igv0 and not igv1:
+                    return igv0.position + igv0.tangent_y*r0
+                if igv1 and not igv0:
+                    return igv1.position - igv1.tangent_y*r1
+                return (igv0.position+igv0.tangent_y*r0 + igv1.position-igv1.tangent_y*r1)/2
+            
+            igv0 = None if not self.gedge0 else self.gedge0.get_igvert_at(self)
+            igv1 = None if not self.gedge1 else self.gedge1.get_igvert_at(self)
+            igv2 = None if not self.gedge2 else self.gedge2.get_igvert_at(self)
+            igv3 = None if not self.gedge3 else self.gedge3.get_igvert_at(self)
+            
+            r0 = 0 if not igv0 else (igv0.radius*(1 if igv0.tangent_x.dot(self.snap_tanx)>0 else -1))
+            r1 = 0 if not igv1 else (igv1.radius*(1 if igv1.tangent_x.dot(self.snap_tany)<0 else -1))
+            r2 = 0 if not igv2 else (igv2.radius*(1 if igv2.tangent_x.dot(self.snap_tanx)<0 else -1))
+            r3 = 0 if not igv3 else (igv3.radius*(1 if igv3.tangent_x.dot(self.snap_tany)>0 else -1))
+            
+            self.corner0 = get_corner(self, 1, 1, igv0,r0, igv3,r3)
+            self.corner1 = get_corner(self, 1,-1, igv1,r1, igv0,r0)
+            self.corner2 = get_corner(self,-1,-1, igv2,r2, igv1,r1)
+            self.corner3 = get_corner(self,-1, 1, igv3,r3, igv2,r2)
         
         self.snap_corners()
         
         pr.done()
+    
+    def update_corners_zip(self, p0, p1, p2, p3):
+        if self.zip_over_gedge == self.gedge0:
+            self.corner0 = p0
+            self.corner1 = p1
+            self.corner2 = p2
+            self.corner3 = p3
+        elif self.zip_over_gedge == self.gedge1:
+            self.corner1 = p0
+            self.corner2 = p1
+            self.corner3 = p2
+            self.corner0 = p3
+        elif self.zip_over_gedge == self.gedge2:
+            self.corner2 = p0
+            self.corner3 = p1
+            self.corner0 = p2
+            self.corner1 = p3
+        elif self.zip_over_gedge == self.gedge3:
+            self.corner3 = p0
+            self.corner0 = p1
+            self.corner1 = p2
+            self.corner2 = p3
+        else:
+            assert False
     
     def update_visibility(self, r3d, update_gedges=False):
         self.visible = contour_utilities.ray_cast_visible([self.snap_pos], self.obj, r3d)[0]
@@ -310,6 +339,13 @@ class GVert:
         if gedge == self.gedge1: return (self.corner1, self.corner2)
         if gedge == self.gedge2: return (self.corner2, self.corner3)
         if gedge == self.gedge3: return (self.corner3, self.corner0)
+        assert False, "GEdge is not connected"
+    
+    def get_back_corners_of(self, gedge):
+        if gedge == self.gedge0: return (self.corner2, self.corner3)
+        if gedge == self.gedge1: return (self.corner3, self.corner0)
+        if gedge == self.gedge2: return (self.corner0, self.corner1)
+        if gedge == self.gedge3: return (self.corner1, self.corner2)
         assert False, "GEdge is not connected"
     
     def get_cornerinds_of(self, gedge):
@@ -579,40 +615,41 @@ class GEdge:
         extend off of igverts of self.zip_to_gedge
         '''
         
-        l = len(self.zip_to_gedge.cache_igverts)
+        zip_igverts = self.zip_to_gedge.cache_igverts
+        l = len(zip_igverts)
         
         t0 = self.gvert0.zip_t
         t3 = self.gvert3.zip_t
         i0 = int(float(l-1)*t0/2)*2
         i3 = int((float(l-1)*t3+1)/2)*2
         
+        dprint('zippered indices: %i (%f) %i (%f)  / %i' % (i0,t0,i3,t3,l))
+        
         if i0 == i3:
             dprint('i0 == i3')
             self.cache_igverts = []
             
-            ic = 0
-            loigv = []
-            
         else:
-            if i3 > i0:
+            if i0 < i3:
                 ic = (i3-i0)+1
-                if i3>len(self.zip_to_gedge.cache_igverts):
+                if i3>len(zip_igverts):
                     dprint('%i %i %i' % (i0,i3,ic))
-                loigv = [self.zip_to_gedge.cache_igverts[i0+_i] for _i in range(ic)]
+                loigv = [zip_igverts[i0+_i] for _i in range(ic)]
             elif i3 < i0:
                 ic = (i0-i3)+1
-                if i0>len(self.zip_to_gedge.cache_igverts):
+                if i0>len(zip_igverts):
                     dprint('%i %i %i' % (i3,i0,ic))
-                loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
+                loigv = [zip_igverts[i3+_i] for _i in range(ic)]
                 loigv.reverse()
             
             side = self.zip_side
             zdir = self.zip_dir
             
-            r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(max(1,ic))
-            l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
+            r0,r3   = self.gvert0.radius,self.gvert3.radius
+            rm      = (r3-r0)/float(ic+2)
+            l_radii = [r0+rm*(_i+1)        for _i,oigv in enumerate(loigv)]
             l_pos   = [oigv.position+oigv.tangent_y*side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
-            l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
+            l_norms = [oigv.normal         for _i,oigv in enumerate(loigv)]
             l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
             l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
             
@@ -625,11 +662,53 @@ class GEdge:
             self.gvert1.position = (self.cache_igverts[0].position+self.cache_igverts[-1].position)/2
             self.gvert2.position = (self.cache_igverts[0].position+self.cache_igverts[-1].position)/2
             self.gvert3.position = self.cache_igverts[-1].position
+            
+            def get_corners(ind, radius):
+                if ind == -1:
+                    p0,p1 = self.zip_to_gedge.gvert0.get_back_corners_of(self.zip_to_gedge)
+                    if side<0:  p0,p1 = p0,p0+(p0-p1).normalized()*(radius*2)
+                    else:       p0,p1 = p1,p1+(p1-p0).normalized()*(radius*2)
+                    return (p1,p0)
+                if ind == len(zip_igverts):
+                    p0,p1 = self.zip_to_gedge.gvert3.get_back_corners_of(self.zip_to_gedge)
+                    if side>0:  p0,p1 = p0,p0+(p0-p1).normalized()*(radius*2)
+                    else:       p0,p1 = p1,p1+(p1-p0).normalized()*(radius*2)
+                    return (p1,p0)
+                
+                igv = zip_igverts[ind]
+                p0 = igv.position + igv.tangent_y*side*(igv.radius+radius*2)
+                p1 = igv.position + igv.tangent_y*side*(igv.radius)
+                return (p0,p1)
+            
+            if i0 < i3:
+                p0,p1 = get_corners(i0+1,l_radii[1])
+                p3,p2 = get_corners(i0-1,r0)
+                if side < 0: p0,p1,p2,p3 = p1,p0,p3,p2
+                self.gvert0.update_corners_zip(p0,p1,p2,p3)
+                
+                p0,p1 = get_corners(i3-1,l_radii[-2])
+                p3,p2 = get_corners(i3+1,r3)
+                if side > 0: p0,p1,p2,p3 = p1,p0,p3,p2
+                self.gvert3.update_corners_zip(p0,p1,p2,p3)
+            else:
+                p0,p1 = get_corners(i0-1,l_radii[1])
+                p3,p2 = get_corners(i0+1,r0)
+                if side > 0: p0,p1,p2,p3 = p1,p0,p3,p2
+                self.gvert0.update_corners_zip(p0,p1,p2,p3)
+                
+                p0,p1 = get_corners(i3+1,l_radii[-2])
+                p3,p2 = get_corners(i3-1,r3)
+                if side < 0: p0,p1,p2,p3 = p1,p0,p3,p2
+                self.gvert3.update_corners_zip(p0,p1,p2,p3)
+                
         
         self.gvert0.update(do_edges=False)
         self.gvert1.update(do_edges=False)
         self.gvert2.update(do_edges=False)
         self.gvert3.update(do_edges=False)
+        
+        for ge in self.gvert0.get_gedges_notnone()+self.gvert3.get_gedges_notnone():
+            if ge != self: ge.update(debug=debug)
     
     def update_nozip(self, debug=False):
         p0,p1,p2,p3 = self.get_positions()
@@ -814,6 +893,8 @@ class PolyStrips(object):
             ge.update_visibility(r3d)
     
     def split_gedge_at_t(self, gedge, t):
+        if gedge.zip_to_gedge or gedge.zip_attached: return
+        
         p0,p1,p2,p3 = gedge.get_positions()
         r0,r1,r2,r3 = gedge.get_radii()
         cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
@@ -984,6 +1065,9 @@ class PolyStrips(object):
             if is_joined: return
             
             # check if stroke crosses any gedges
+            if gedge.zip_to_gedge: continue         # do not split zippered gedges!
+            if gedge.zip_attached: continue         # do not split zippered gedges!
+            
             crosses = find_stroke_crossing(gedge, stroke)
             if not crosses: continue
             
