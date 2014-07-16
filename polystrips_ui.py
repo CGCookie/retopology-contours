@@ -658,13 +658,15 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 if new_gedge:
                     self.polystrips.gedges += [new_gedge]
                     self.polystrips.gverts += [new_gedge.gvert0, new_gedge.gvert3]
-            
-            if eventd['press'] == 'CTRL +M':
+                    self.sel_gedge = new_gedge
+                    
+            if eventd['press'] == 'CTRL+M':
                 new_gedge = self.sel_gedge.spawn_zip_child(side = -1)
                 if new_gedge:
                     self.polystrips.gedges += [new_gedge]
                     self.polystrips.gverts += [new_gedge.gvert0, new_gedge.gvert3]
-            
+                    self.sel_gedge = new_gedge
+                    
             
             if eventd['press'] == 'Z':
                 if self.sel_gedge.zip_to_gedge:

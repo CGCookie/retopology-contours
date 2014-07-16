@@ -664,7 +664,7 @@ class GEdge:
                 ic = (i0-i3)+1
                 if i0>len(self.cache_igverts):
                     dprint('%i %i %i' % (i3,i0,ic))
-                loigv = [self.zip_to_gedge.cache_igverts[i3+_i] for _i in range(ic)]
+                loigv = [self.cache_igverts[i3+_i] for _i in range(ic)]
                 loigv.reverse()
             
             #side = self.zip_side  side is now input variable
@@ -672,12 +672,16 @@ class GEdge:
             
             r0,rm = self.gvert0.radius,(self.gvert3.radius-self.gvert0.radius)/float(max(1,ic))
             l_radii = [r0+rm*_i       for _i,oigv in enumerate(loigv)]
-            l_pos   = [oigv.position+oigv.tangent_y*side*(oigv.radius+l_radii[_i]) for _i,oigv in enumerate(loigv)]
+            
+            l_pos   = [oigv.position+oigv.tangent_y*side*(2*l_radii[_i]) for _i,oigv in enumerate(loigv)]
             l_norms = [oigv.normal    for _i,oigv in enumerate(loigv)]
             l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
             l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
             
+            
+            
             [(fit_t0,fit_t3,fit_p0,fit_p1,fit_p2,fit_p3)] = cubic_bezier_fit_points(l_pos, r0/10, depth=0, t0=0, t3=1, allow_split=True)
+            
             new_gedge.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
             new_gedge.snap_igverts()
             
