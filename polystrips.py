@@ -687,19 +687,18 @@ class GEdge:
             l_tanx  = [oigv.tangent_x*zdir for _i,oigv in enumerate(loigv)]
             l_tany  = [oigv.tangent_y*zdir for _i,oigv in enumerate(loigv)]
             
-            
-            
-            [(fit_t0,fit_t3,fit_p0,fit_p1,fit_p2,fit_p3)] = cubic_bezier_fit_points(l_pos, r0/10, depth=0, t0=0, t3=1, allow_split=True)
-            
             new_gedge.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
             new_gedge.snap_igverts()
-            
+            fit_pos = [ge.position for ge in new_gedge.cache_igverts]
+            [(fit_t0,fit_t3,fit_p0,fit_p1,fit_p2,fit_p3)] = cubic_bezier_fit_points(fit_pos, r0/10, depth=0, t0=0, t3=1, allow_split=True)
             assert len(new_gedge.cache_igverts)>=2, 'not enough! %i (%f) %i (%f) %i' % (i0,t0,i3,t3,ic)
             
             new_gedge.gvert0.position = fit_p0
             new_gedge.gvert1.position = fit_p1
             new_gedge.gvert2.position = fit_p2
             new_gedge.gvert3.position = fit_p3
+            new_gedge.force_count = True
+            new_gedge.n_quads = int((len(fit_pos)-1)/2 + 1)
             new_gedge.update()
             
             new_gedge.gvert0.update(do_edges=False)
@@ -966,7 +965,7 @@ class PolyStrips(object):
         '''
         
         assert depth < 10
-        if not sgedges: sgedges = set()
+        #if not sgedges: sgedges = set()
         
         spc = '  '*depth + '- '
         
