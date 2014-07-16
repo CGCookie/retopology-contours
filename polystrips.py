@@ -545,8 +545,9 @@ class GEdge:
             step = 20* self.n_quads
         else:
             step = 100
-        s_t_map = polystrips_utilities.cubic_bezier_t_of_s(p0, p1, p2, p3, steps = step )
-        # get bezier length
+            
+        s_t_map = polystrips_utilities.cubic_bezier_t_of_s_dynamic(p0, p1, p2, p3, initial_step = step )
+        
         #l = self.get_length()  <-this is more accurate, but we need consistency
         l = max(s_t_map)
         if self.force_count and self.n_quads:
@@ -554,7 +555,7 @@ class GEdge:
             #number of segments
             c = 2 * (self.n_quads - 1)
             # compute difference for smoothly interpolating radii perpendicular to GEdge
-            s = (r3-r0) / float(c+1)  #(c-1?) c+1 verts inexed 0 to c.  at cth vert f(n) = r0 + s*n f(0) = r0 f(c) = r3  = ro + c *s
+            s = (r3-r0) / float(c+1)  #(c-1?) c+1 verts inexed 0 to c.  f(n) = r0 + s * n ;f(0) = r0 f(c) = r3  = ro + c * s
             
             #method 1, leave end quads with R0 and R3 preserved
             #average width of GEdges internal quads
@@ -564,7 +565,7 @@ class GEdge:
             
             #method 2
             L = c * r0 +  s*(c+1)*c/2  #integer run sum
-            os = L -l
+            os = L - l
             d_os = os/c
             
             # compute interval lengths, ts, blend weights
