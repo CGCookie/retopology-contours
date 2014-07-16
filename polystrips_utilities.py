@@ -55,9 +55,8 @@ def blender_bezier_to_even_points(b_ob, dist):
             new_verts = contour_utilities.space_evenly_on_path(total_verts, [(0,1),(1,2)], n, 0)
         paths.append(new_verts)
         
-        
     return(paths)
-            
+             
 def quadratic_bezier_weights(t):
     t0,t1 = t,(1-t)
     b0 = t1*t1
@@ -94,8 +93,6 @@ def cubic_bezier_decasteljau_subdivide(p0,p1,p2,p3):
     q0,q1,q2 = (p0+p1)/2, (p1+p2)/2, (p2+p3)/2
     r0,r1    = (q0+q1)/2, (q1+q2)/2
     s        = (r0+r1)/2
-    l0 = cubic_bezier_length(p0,q0,r0,s)
-    l1 = cubic_bezier_length(s,r1,q2,p3)
     return [(p0,q0,r0,s),(s,r1,q2,p3)]
 
 def cubic_bezier_length(p0, p1, p2, p3, threshold=0.05):
@@ -144,6 +141,110 @@ def cubic_bezier_find_closest_t_approx(p0, p1, p2, p3, p, max_depth=8, steps=10)
                 min_t,min_d = t,d
         t0,t1 = max(t0,min_t-td),min(t1,min_t+td)
     return (min_t,min_d)
+
+def cubic_bezier_find_closest_t_approx_distance(p0,p1,p2,p3, dist, threshold=0.1):
+    def find_t(p0,p1,p2,p3,d,t0,t1,threshold):
+        if d <= 0: return (0,0)
+        l03 = (p0-p3).length
+        l0123 = (p0-p1).length + (p1-p2).length + (p2-p3).length
+        if l03/l0123 > (1-threshold):
+            # close enough to approx as line
+            if l03 < d:
+                return (l03, t1-t0)
+            return (d, (t1-t0)*(d/l03))
+        t05 = (t0+t1)/2
+        subd = cubic_bezier_decasteljau_subdivide(p0,p1,p2,p3)
+        dret0,tret0 = find_t(subd[0][0], subd[0][1], subd[0][2], subd[0][3], d, t0, t05, threshold)
+        dret1,tret1 = find_t(subd[1][0], subd[1][1], subd[1][2], subd[1][3], d-dret0, t05, t1, threshold)
+        return (dret1, tret0+tret1)
+    dret,tret = find_t(p0,p1,p2,p3,dist,0,1,threshold)
+    return tret
+    
+def cubic_bezier_t_of_s(p0,p1,p2,p3, steps = 100):
+    '''
+    returns a dictionary mapping of arclen values ot t values
+    approximated at steps along the curve.  Dumber method than
+    the decastelejue subdivision.
+    '''
+    s_t_map = {}
+    s_t_map[0] = 0
+    vi0 = p0
+    cumul_length = 0      
+    for i in range(1,steps+1):
+        t = i/steps
+        weights = cubic_bezier_weights(i/steps)
+        vi1 = cubic_bezier_blend_weights(p0, p1, p2, p3, weights)    
+        cumul_length += (vi1 - vi0).length
+        s_t_map[cumul_length] = t
+        vi0 = vi1
+        
+    return s_t_map
+
+def cubic_bezier_t_of_s_dynamic(p0,p1,p2,p3, initial_step = 50):
+    '''
+    returns a dictionary mapping of arclen values ot t values
+    approximated at steps along the curve.  Dumber method than
+    the decastelejue subdivision.
+    '''
+    s_t_map = {}
+    s_t_map[0] = 0
+    
+    pi0 = p0
+    cumul_length = 0
+    
+    iters = 0
+    dt = 1/initial_step      
+    t = dt
+    while t < 1  and iters < 1000:
+        iters += 1
+        
+        weights = cubic_bezier_weights(t)
+        pi1 = cubic_bezier_blend_weights(p0, p1, p2, p3, weights)    
+        cumul_length += (pi1 - pi0).length
+        
+        
+        v_num = (pi1 - pi0).length/dt
+        v_cls = cubic_bezier_derivative(p0, p1, p2, p3, t).length
+        s_t_map[cumul_length] = t
+             
+        pi0 = pi1
+        dt *= v_cls/v_num
+        t += dt
+        
+        if iters == 1000:
+            print('maxed iters')
+    
+    #take care of the last point
+    weights = cubic_bezier_weights(1)
+    pi1 = cubic_bezier_blend_weights(p0, p1, p2, p3, weights)    
+    cumul_length += (pi1 - pi0).length
+    s_t_map[cumul_length] = 1 
+            
+    print('initial dt %f, final dt %f' % (1/initial_step, dt))
+    return s_t_map
+
+
+def closest_t_of_s(s_t_map, s):
+    '''
+    '''
+    d0 = 0
+    t = 1  #in case we don't find a d > s
+    for i,d in enumerate(s_t_map):
+        if d >= s:
+            if i == 0:
+                return 0
+            t1 = s_t_map[d]
+            t0 = s_t_map[d0]
+            t = t0 + (t1-t0) * (s - d0)/(d-d0)
+            return t
+        else:
+            d0 = d
+        
+    return t
+         
+        
+    
+
 
 def cubic_bezier_fit_value(l_v, l_t):
     def compute_error(v0,v1,v2,v3,l_v,l_t):
