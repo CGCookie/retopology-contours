@@ -495,7 +495,10 @@ class GEdge:
         self.zip_side = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.position-gedge.gvert0.position)>0 else -1
         self.zip_dir  = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.snap_tany)>0 else -1
         
-        t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25)
+        t0,_ = gedge.get_closest_point(self.gvert0.position)
+        t3,_ = gedge.get_closest_point(self.gvert3.position)
+        
+        #t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25)
         self.gvert0.zip_over_gedge = self
         self.gvert0.zip_t          = t0
         self.gvert3.zip_over_gedge = self
