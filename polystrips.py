@@ -491,12 +491,18 @@ class GEdge:
         self.zip_to_gedge = gedge
         gedge.zip_attached += [self]
         
-        # which side are we on and which way are we going?
-        self.zip_side = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.position-gedge.gvert0.position)>0 else -1
-        self.zip_dir  = 1 if gedge.gvert0.snap_tany.dot(self.gvert0.snap_tany)>0 else -1
-        
         t0,_ = gedge.get_closest_point(self.gvert0.position)
         t3,_ = gedge.get_closest_point(self.gvert3.position)
+        
+        pos = gedge.get_position_at_t(t0)
+        der = gedge.get_derivative_at_t(t0)
+        nor = gedge.gvert0.snap_norm
+        tny = nor.cross(der)
+        
+        
+        # which side are we on and which way are we going?
+        self.zip_side = 1 if tny.dot(self.gvert0.position-pos)>0 else -1
+        self.zip_dir  = 1 if tny.dot(self.gvert0.snap_tany)>0 else -1
         
         #t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25)
         self.gvert0.zip_over_gedge = self
@@ -560,6 +566,14 @@ class GEdge:
         if self.gvert3 == gv:
             return cubic_bezier_derivative(p3,p2,p1,p0,0)
         assert False, "gv is not an endpoint"
+    
+    def get_position_at_t(self, t):
+        p0,p1,p2,p3 = self.get_positions()
+        return cubic_bezier_blend_t(p0,p1,p2,p3,t)
+    
+    def get_derivative_at_t(self, t):
+        p0,p1,p2,p3 = self.get_positions()
+        return cubic_bezier_derivative(p0,p1,p2,p3,t)
     
     def get_inner_gvert_at(self, gv):
         if self.gvert0 == gv: return self.gvert1
