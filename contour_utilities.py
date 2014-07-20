@@ -29,13 +29,118 @@ import random
 from itertools import chain,combinations
 
 from collections import deque
-
 from bpy_extras import view3d_utils
 from mathutils import Vector, Matrix, Quaternion
 from mathutils.geometry import intersect_line_plane, intersect_point_line, distance_point_to_plane, intersect_line_line_2d, intersect_line_line
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 
 
+navigation_events = {'Rotate View', 'Move View', 'Zoom View', 
+                     'View Pan', 'View Orbit', 'Rotate View', 
+                     'View Persp/Ortho', 'View Numpad', 'NDOF Orbit View', 
+                     'NDOF Pan View', 'View Selected', 'Center View to Cursor'}
+
+
+def contour_keymap_generate():
+    km_dict = {}
+    
+    def add_to_dict(key,value, safety = True):
+        
+        if safety:
+            for k in km_dict.keys():
+                if value in km_dict[k]:
+                    print('already part of keymap dictionary %s  %s' % (key, value))
+                    return
+                
+        if key in km_dict:
+            val = km_dict[key]
+            
+            if value not in val:
+                val.add(value)
+            else:
+                return
+        else:
+            km_dict[key] = set([value])
+        
+    
+    def kmi_details(kmi):
+        kmi_ctrl    = 'CTRL+'  if kmi.ctrl  else ''
+        kmi_shift   = 'SHIFT+' if kmi.shift else ''
+        kmi_alt     = 'ALT+'   if kmi.alt   else ''
+        kmi_ftype   = kmi_ctrl + kmi_shift + kmi_alt + kmi.type
+        
+        return kmi_ftype
+    
+    C = bpy.context
+    wm = C.window_manager
+    
+    keycon = wm.keyconfigs.active
+    sel = C.user_preferences.inputs.select_mouse
+    act = 'LEFT' if sel == 'RIGHT' else 'RIGHT'
+    
+    sel += 'MOUSE'
+    act += 'MOUSE'
+    print('selection %s, action %s' % (sel, act))
+    
+    add_to_dict('action', act)
+    add_to_dict('select', sel)
+    
+    #grab, scale, rotate
+    for kmi in keycon.keymaps['Transform Modal Map'].keymap_items:
+        if kmi.propvalue == 'RESIZE':
+            if kmi.any: print('keymaps with any not supported!')
+            add_to_dict('scale', kmi_details(kmi))
+        if kmi.propvalue == 'ROTATE':
+            add_to_dict('rotate', kmi_details(kmi))
+        if kmi.propvalue == 'TRANSLATE':
+            add_to_dict('translate', kmi_details(kmi))
+    
+    #protected non dynamic keys
+    add_to_dict('up count', 'CTRL+NUMPAD_PLUS')
+    add_to_dict('up count', 'CTRL+WHEELUPMOUSE')       
+    add_to_dict('dn count', 'CTRL+NUMPAD_MINUS')
+    add_to_dict('dn count', 'CTRL+WHEELDOWNMOUSE')
+    add_to_dict('bridge', 'B')
+    add_to_dict('new', 'N')
+    add_to_dict('align', 'SHIFT+A')
+    add_to_dict('align', 'CTRL+A')
+    add_to_dict('align', 'ALT+A')
+    add_to_dict('shift', 'LEFT_ARROW')
+    add_to_dict('shift', 'RIGHT_ARROW')
+    
+    
+    #shift  there are too many of tehse, including ALT+WHEELUPMOUSE
+    #for kmi in keycon.keymaps['Frames'].keymap_items:
+    #    if kmi.idname == 'screen.frame_offset':
+    #        add_to_dict('shift', kmi_details(kmi))
+            
+    #mode switch
+    for kmi in keycon.keymaps['Object Non-modal'].keymap_items:
+        if kmi.idname == 'object.mode_set' and kmi.properties.mode == 'EDIT':
+            add_to_dict('mode', kmi_details(kmi))
+            
+    #undo
+    for kmi in keycon.keymaps['Screen'].keymap_items:
+        if kmi.idname == 'ed.undo':
+            add_to_dict('undo', kmi_details(kmi))
+    #delete
+    for kmi in keycon.keymaps['Object Mode'].keymap_items:
+        if kmi.idname == 'object.delete':
+            add_to_dict('delete', kmi_details(kmi))
+    
+    #snap cursor selected
+    for kmi in keycon.keymaps['3D View'].keymap_items:
+        if kmi.idname == 'wm.call_menu' and kmi.properties.name == 'VIEW3D_MT_snap':
+            add_to_dict('snap cursor', kmi_details(kmi))
+            
+    #navigation keys last, to avoid conflicts eg, Ctl + Wheel
+    #center view on cursor is included in nav
+    for kmi in keycon.keymaps['3D View'].keymap_items:
+        if kmi.name in navigation_events:
+                
+            add_to_dict('navigate', kmi_details(kmi))
+                
+    return km_dict 
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
     self._handle = bpy.types.SpaceView3D.draw_handler_add(self.menu.draw, (self, context), 'WINDOW', 'POST_PIXEL')

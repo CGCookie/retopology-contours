@@ -68,6 +68,7 @@ from bpy.types import Operator, AddonPreferences
 # Create a class that contains all location information for addons
 AL = general_utilities.AddonLocator()
 
+from contours_ui import CGCOOKIE_OT_contours_rf
 #a place to store stokes for later
 global contour_cache 
 contour_cache = {}
@@ -604,7 +605,7 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
             col = box.column()
             col.label(text='No 2nd Object!')
         col = box.column()
-        col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
+        col.operator("cgcookie.contours_rf", icon='MESH_UVSPHERE')
         
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
         
@@ -1965,7 +1966,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             
             #the active object will be the target
             target = context.object
-            
             is_valid = is_object_valid(target)
             has_tmp = 'ContourTMP' in bpy.data.objects and bpy.data.objects['ContourTMP'].data
             
@@ -3038,7 +3038,7 @@ def register():
     bpy.utils.register_class(ContourToolsAddonPreferences)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_panel)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_cache_clear)
-    bpy.utils.register_class(CGCOOKIE_OT_retopo_contour)
+    bpy.utils.register_class(CGCOOKIE_OT_contours_rf)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_poly_sketch)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_menu)
 
@@ -3056,7 +3056,7 @@ def register():
 #unregistration
 def unregister():
     clear_mesh_cache()
-    bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour)
+    bpy.utils.unregister_class(CGCOOKIE_OT_contours_rf)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_panel)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_menu)
