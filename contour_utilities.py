@@ -139,7 +139,11 @@ def contour_keymap_generate():
         if kmi.name in navigation_events:
                 
             add_to_dict('navigate', kmi_details(kmi))
-                
+    
+    #bug, WHEELOUTMOUSE and WHEELINMOUSE used in 3dview keymaap
+    add_to_dict('navigate', 'WHEELDOWNMOUSE')
+    add_to_dict('navigate', 'WHEELUPMOUSE')
+    print(km_dict['navigate'])            
     return km_dict 
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:

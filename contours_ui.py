@@ -150,22 +150,161 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
     
     def draw_callback(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        
+        r3d = context.space_data.region_3d
         region = context.region
         font_id = 0
         # draw some text
         blf.position(font_id, region.width/2, region.height/2, 0)
         blf.size(font_id, 20, 72)
         blf.draw(font_id, "Hello Word " + self.footer)
+        
+        if context.space_data.use_occlude_geometry:
+            new_matrix = [v for l in r3d.view_matrix for v in l]
+            if new_matrix != self.last_matrix:
+                for path in self.cut_paths:
+                    path.update_visibility(context, self.original_form)
+                    for cut_line in path.cuts:
+                        cut_line.update_visibility(context, self.original_form)
+                        
+            self.post_update = False
+            self.last_matrix = new_matrix
+            
+            
+        for i, c_cut in enumerate(self.cut_lines):
+            if self.widget_interaction and self.drag_target == c_cut:
+                interact = True
+            else:
+                interact = False
+            
+            c_cut.draw(context, settings)
     
+            if c_cut.verts_simple != [] and settings.show_cut_indices:
+                loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, c_cut.verts_simple[0])
+                blf.position(0, loc[0], loc[1], 0)
+                blf.draw(0, str(i))
     
+        if self.cut_line_widget and settings.draw_widget:
+            self.cut_line_widget.draw(context)
+        
+        if len(self.draw_cache):
+            contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1,.5,1,.8), 2, "GL_LINE_SMOOTH")
+        
+        if len(self.cut_paths):
+            for path in self.cut_paths:
+                path.draw(context, path = True, nodes = settings.show_nodes, rings = True, follows = True, backbone = settings.show_backbone    )
+            
+        if len(self.snap_circle):
+            contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
+        
     def create_mesh(self, context):
         print('create it')
     
     
     ###########################
     # tool functions
+    def click_new_cut(self,context, settings, x,y):
+
+        s_color = contour_utilities.bgl_col(settings.stroke_rgb, 1)
+        h_color = contour_utilities.bgl_col(settings.handle_rgb,1)
+        g_color = contour_utilities.bgl_col(settings.actv_rgb,1)
+        v_color = contour_utilities.bgl_col(settings.vert_rgb,1)
+
+        new_cut = ContourCutLine(x, y,
+                                stroke_color = s_color,
+                                handle_color = h_color,
+                                geom_color = g_color,
+                                vert_color = v_color)
+        
+        
+        for path in self.cut_paths:
+            for cut in path.cuts:
+                cut.deselect(settings)
+                
+        new_cut.do_select(settings)
+        self.cut_lines.append(new_cut)
+        
+        return new_cut
     
+    def release_place_cut(self,context,settings, x, y):
+        self.sel_loop.tail.x = x
+        self.sel_loop.tail.y = y
+        
+        width = Vector((self.sel_loop.head.x, self.sel_loop.head.y)) - Vector((x,y))
+        
+        #prevent small errant strokes
+        if width.length < 20: #TODO: Setting for minimum pixel width
+            self.cut_lines.remove(self.sel_loop)
+            self.sel_loop = None
+            print('Placed cut is too short')
+            return
+        
+        #hit the mesh for the first time
+        hit = self.sel_loop.hit_object(context, self.original_form, method = 'VIEW')
+        
+        if not hit:
+            self.cut_lines.remove(self.sel_loop)
+            self.sel_loop = None
+            print('Placed cut did not hit the mesh')
+            return
+        
+        self.sel_loop.cut_object(context, self.original_form, self.bme)
+        self.sel_loop.simplify_cross(self.segments)
+        self.sel_loop.update_com()
+        self.sel_loop.update_screen_coords(context)
+        self.sel_loop.head = None
+        self.sel_loop.tail = None
+        self.sel_loop.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        
+        if not len(self.sel_loop.verts) or not len(self.sel_loop.verts_simple):
+            self.sel_loop = None
+            print('cut failure')  #TODO, header text message.
+            return
+    
+        
+        if settings.debug > 1:
+            print('release_place_cut')
+            print('len(self.cut_paths) = %d' % len(self.cut_paths))
+            print('self.force_new = ' + str(self.force_new))
+        
+        if self.cut_paths != [] and not self.force_new:
+            for path in self.cut_paths:
+                if path.insert_new_cut(context, self.original_form, self.bme, self.sel_loop, search = settings.search_factor):
+                    #the cut belongs to the series now
+                    path.connect_cuts_to_make_mesh(self.original_form)
+                    path.update_visibility(context, self.original_form)
+                    path.seg_lock = True
+                    path.do_select(settings)
+                    path.unhighlight(settings)
+                    self.selected_path = path
+                    self.cut_lines.remove(self.sel_loop)
+                    for other_path in self.cut_paths:
+                        if other_path != self.selected_path:
+                            other_path.deselect(settings)
+                    # no need to search for more paths
+                    return
+        
+        #create a blank segment
+        path = ContourCutSeries(context, [],
+                        cull_factor = settings.cull_factor, 
+                        smooth_factor = settings.smooth_factor,
+                        feature_factor = settings.feature_factor)
+        
+        path.insert_new_cut(context, self.original_form, self.bme, self.sel_loop, search = settings.search_factor)
+        path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
+        path.segments = 1
+        path.ring_segments = len(self.sel_loop.verts_simple)
+        path.connect_cuts_to_make_mesh(self.original_form)
+        path.update_visibility(context, self.original_form)
+        
+        for other_path in self.cut_paths:
+            other_path.deselect(settings)
+        
+        self.cut_paths.append(path)
+        self.selected_path = path
+        path.do_select(settings)
+        
+        self.cut_lines.remove(self.sel_loop)
+        self.force_new = False
     def ready_tool(self, eventd, tool_fn):
         rgn   = eventd['context'].region
         r3d   = eventd['context'].space_data.region_3d
@@ -306,16 +445,28 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         events_nav = self.keymap['navigate']
         handle_nav = False
         handle_nav |= eventd['ftype'] in events_nav
-        handle_nav |= eventd['type'] == 'MOUSEMOVE' and self.is_navigating
+        handle_nav |= self.is_navigating
         
+        
+ 
         if handle_nav:
-            self.post_update = True
-            self.is_navigating = True
-            self.footer = 'NAV'
-            return 'nav' if eventd['value']=='PRESS' else self.mode_last
+            if eventd['type'] == 'TIMER':
+                return 'nav'
+            
+            if eventd['value']=='PRESS':
+                self.is_navigating = True  #for the first time
+                return 'nav' 
+            
+            elif eventd['type'] == 'MOUSEMOVE':
+                self.is_navigating = True #maintain it?
+                return 'nav'
+            
+            elif eventd['release'] in events_nav:
+                self.is_navigating = False
+                return ''
         
-        self.is_navigating = False
-        return ''
+            else:
+                return ''
         
     
     def modal_loop(self, eventd): 
@@ -323,7 +474,6 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         
         #############################################
         # general navigation
-        
         nmode = self.modal_nav(eventd)
         if nmode:
             self.mode_last = 'main loop'
@@ -349,9 +499,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             return 'main guide'
      
         if eventd['type'] == 'MOUSEMOVE':  #mouse movement/hovering widget
-            print('hover')
-        
-        
+            x,y = eventd['mouse']
         
         if eventd['press'] in self.keymap['select']: # selection
             x,y = eventd['mouse']
@@ -363,7 +511,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             self.footer = 'Cutting'
             x,y = eventd['mouse']
             p = eventd['pressure']
-                
+            self.sel_loop = self.click_new_cut(eventd['context'], self.settings, x,y)    
             return 'cutting'
         
         if eventd['press'] in self.keymap['new']:
@@ -488,12 +636,14 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
             p = eventd['pressure']
-            print((x,y))            
+            self.sel_loop.tail.x = x
+            self.sel_loop.tail.y = y      
             return ''
         
         if eventd['release'] in self.keymap['action']:
             print('new cut made')
-            
+            x,y = eventd['mouse']
+            self.release_place_cut(eventd['context'], self.settings, x, y)
             return 'main loop'
         
     def modal_sketching(self, eventd):
@@ -505,7 +655,6 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
 
             (lx, ly) = stroke_point[0]
             lp = stroke_point[1]
-            
             self.sketch_curpos = (x,y)
             self.sketch_pressure = p
             
@@ -630,7 +779,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
         eventd = self.get_event_details(context, event)
-        
+        if eventd['type'] != 'TIMER':
+            print((eventd['type'], eventd['value']))
+            
         if self.footer_last != self.footer:
             context.area.header_text_set('Contours: %s' % self.footer)
             self.footer_last = self.footer
@@ -650,7 +801,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         nmode = FSM[self.mode](eventd)
         self.mode_pos = eventd['mouse']
         
-        self.is_navigating = (nmode == 'nav')
+        #self.is_navigating = (nmode == 'nav')
         if nmode == 'nav': return {'PASS_THROUGH'}
         
         if nmode in {'finish','cancel'}:
@@ -744,9 +895,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                 tmp_ob= self.tmp_obj_and_triangulate(context, self.bme, ngons, ob.matrix_world)
                 
         if tmp_ob:
-            self.orignal_form = tmp_ob
+            self.original_form = tmp_ob
         else:
-            self.orignal_form = ob
+            self.original_form = ob
         
         self.tmp_ob = tmp_ob
         
@@ -776,9 +927,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                 tmp_ob = self.tmp_obj_and_triangulate(context, self.bme, ngons, ob.matrix_world)
         
         if tmp_ob:
-            self.orignal_form = tmp_ob
+            self.original_form = tmp_ob
         else:
-            self.orignal_form = ob
+            self.original_form = ob
         
         self.tmp_ob = tmp_ob
         
@@ -838,7 +989,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.is_navigating = False
         self.force_new = False
         self.post_update = True
-        
+        self.last_matrix = None
         
         self.mode_pos      = (0,0)
         self.cur_pos       = (0,0)
@@ -852,11 +1003,14 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.footer = ''
         self.footer_last = ''
         
-        self.last_matrix = None
+        
         
         self._timer = context.window_manager.event_timer_add(0.1, context.window)
         
         self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
+        self.segments = settings.vertex_count
+        self.guide_cuts = settings.cut_count
+        
         
         if context.mode == 'OBJECT':
             #self.bme, self.dest_bme, self.dest_ob, self.original_form etc are all defined inside
@@ -871,8 +1025,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.edges = []
         self.faces = []
         
-        self.cuts = []
-        self.cut_paths = []    
+        self.cut_lines = []
+        self.cut_paths = []
+        self.draw_cache = []
        
         if settings.use_x_ray:
             self.orig_x_ray = self.destination_ob.show_x_ray
