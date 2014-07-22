@@ -562,7 +562,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if eventd['press'] == 'P':                                                  # grease pencil => strokes
             for gpl in self.obj.grease_pencil.layers: gpl.hide = True
             for stroke in self.strokes_original:
-                self.polystrips.insert_gedge_from_stroke(stroke)
+                self.polystrips.insert_gedge_from_stroke(stroke, True)
             self.polystrips.remove_unconnected_gverts()
             self.polystrips.update_visibility(eventd['r3d'])
             return ''
@@ -808,7 +808,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             dprint('')
             dprint('')
             dprint('inserting stroke')
-            self.polystrips.insert_gedge_from_stroke(stroke)
+            self.polystrips.insert_gedge_from_stroke(stroke, False)
             self.polystrips.remove_unconnected_gverts()
             self.polystrips.update_visibility(eventd['r3d'])
             return 'main'

@@ -499,12 +499,10 @@ class GEdge:
         nor = gedge.gvert0.snap_norm
         tny = nor.cross(der)
         
-        
         # which side are we on and which way are we going?
         self.zip_side = 1 if tny.dot(self.gvert0.position-pos)>0 else -1
         self.zip_dir  = 1 if tny.dot(self.gvert0.snap_tany)>0 else -1
         
-        #t0,t3 = (0.25,0.75) if self.zip_dir==1 else (0.75,0.25)
         self.gvert0.zip_over_gedge = self
         self.gvert0.zip_t          = t0
         self.gvert3.zip_over_gedge = self
@@ -964,7 +962,7 @@ class PolyStrips(object):
         
         return (ge0,ge1)
     
-    def insert_gedge_from_stroke(self, stroke, sgv0=None, sgv3=None, depth=0):
+    def insert_gedge_from_stroke(self, stroke, only_ends, sgv0=None, sgv3=None, depth=0):
         '''
         stroke: list of tuples (3d location, radius)
         yikes....pressure and radius need to be reconciled!
@@ -1006,13 +1004,28 @@ class PolyStrips(object):
         #        pt1,pr1 = info1
         
         
-        def threshold_distance_stroke_point(stroke, point, threshold_radius):
+        def threshold_distance_stroke_point(stroke, point, radius, only_ends):
+            if only_ends:
+                # check first end
+                i0,i1 = threshold_distance_stroke_point(stroke, point, radius, False)
+                if i0 == -1 and i1 != -1:
+                    return (i0,i1)
+                # check second end
+                rstroke = list(stroke)
+                rstroke.reverse()
+                i0,i1 = threshold_distance_stroke_point(rstroke, point, radius, False)
+                if i0 == -1 and i1 != -1:
+                    i0,i1 = (len(stroke)-1)-i1,-1
+                    return (i0,i1)
+                # endpoints not close enough
+                return (-1,-1)
+            
             min_i0,min_i1 = -1,-1
             was_close = False
             for i,info in enumerate(stroke):
                 pt,pr = info
                 d = (pt-point).length
-                is_close = (d < threshold_radius)
+                is_close = (d < (pr+radius)) #(d < threshold_radius)
                 if i == 0: was_close = is_close
                 if not was_close and is_close: min_i0 = i
                 if was_close and not is_close:
@@ -1068,6 +1081,7 @@ class PolyStrips(object):
                         return (i, (t+tc)/tot, dist_pt0)
                     t += l10
                 return None
+            
             lstrs = list(zip(stroke[:-1],stroke[1:]))
             odds = [gv for i,gv in enumerate(gedge.cache_igverts) if i%2==1]
             
@@ -1076,43 +1090,31 @@ class PolyStrips(object):
             
             return sorted([x for x in [cross0,cross1] if x], key=lambda x: x[0])
         
-        # check for gedge splitting
         for i_gedge,gedge in enumerate(self.gedges):
-            p0,p1,p2,p3 = gedge.get_positions()
+            # check if we're close to either endpoint of gedge
+            for i_gv,gv in [(0,gedge.gvert0),(3,gedge.gvert3)]:
+                is_joined = False
+                min_i0,min_i1 = threshold_distance_stroke_point(stroke, gv.position, gv.radius, only_ends)
+                if min_i0 != -1 and gv.count_gedges() < 4:
+                    dprint(spc+'Joining gedge[%i].gvert%i; Joining stroke at 0-%i' % (i_gedge,i_gv,min_i0))
+                    self.insert_gedge_from_stroke(stroke[:min_i0], only_ends, sgv0=sgv0, sgv3=gv, depth=depth+1)
+                    is_joined = True
+                if min_i1 != -1 and gv.count_gedges() < 4:
+                    dprint(spc+'Joining gedge[%i].gvert%i; Joining stroke at %i-%i' % (i_gedge,i_gv,min_i1,len(stroke)-1))
+                    self.insert_gedge_from_stroke(stroke[min_i1:], only_ends, sgv0=gv, sgv3=sgv3, depth=depth+1)
+                    is_joined = True
+                if is_joined: return
             
-            # check if we're close to either endpoint
-            is_joined = False
+            if only_ends:          continue         # do not split gedges when caller wants only ends
             
-            min_i0,min_i1 = threshold_distance_stroke_point(stroke, p0, threshold_junctiondist)
-            
-            if min_i0 != -1 and gedge.gvert0.count_gedges() < 4:
-                dprint(spc+'Joining gedge[%i].gvert0; Joining stroke at 0-%i' % (i_gedge,min_i0))
-                self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert0, depth=depth+1)
-                is_joined = True
-            if min_i1 != -1 and gedge.gvert0.count_gedges() < 4:
-                dprint(spc+'Joining gedge[%i].gvert0; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
-                self.insert_gedge_from_stroke(stroke[min_i1:], sgv0=gedge.gvert0, sgv3=sgv3, depth=depth+1)
-                is_joined = True
-            if is_joined: return
-            
-            min_i0,min_i1 = threshold_distance_stroke_point(stroke, p3, threshold_junctiondist)
-            
-            if min_i0 != -1 and gedge.gvert3.count_gedges() < 4:
-                dprint(spc+'Joining gedge[%i].gvert3; Joining stroke at 0-%i' % (i_gedge,min_i0))
-                self.insert_gedge_from_stroke(stroke[:min_i0], sgv0=sgv0, sgv3=gedge.gvert3, depth=depth+1)
-                is_joined = True
-            if min_i1 != -1 and gedge.gvert3.count_gedges() < 4:
-                dprint(spc+'Joining gedge[%i].gvert3; Joining stroke at %i-%i' % (i_gedge,min_i1,len(stroke)-1))
-                self.insert_gedge_from_stroke(stroke[min_i1:], sgv0=gedge.gvert3, sgv3=sgv3, depth=depth+1)
-                is_joined = True
-            if is_joined: return
-            
-            # check if stroke crosses any gedges
             if gedge.zip_to_gedge: continue         # do not split zippered gedges!
             if gedge.zip_attached: continue         # do not split zippered gedges!
             
+            # check if stroke crosses any gedges
             crosses = find_stroke_crossing(gedge, stroke)
             if not crosses: continue
+            
+            p0,p1,p2,p3 = gedge.get_positions()
             
             num_crosses = len(crosses)
             t = sum(_t for _i,_t,_d in crosses) / num_crosses
@@ -1124,14 +1126,14 @@ class PolyStrips(object):
             rm = (r0+r3)/2
             
             gv_split = self.create_gvert(cb0[3], radius=rm)
-            gv0_0 = gedge.gvert0
-            gv0_1 = self.create_gvert(cb0[1], radius=rm)
-            gv0_2 = self.create_gvert(cb0[2], radius=rm)
-            gv0_3 = gv_split
-            gv1_0 = gv_split
-            gv1_1 = self.create_gvert(cb1[1], radius=rm)
-            gv1_2 = self.create_gvert(cb1[2], radius=rm)
-            gv1_3 = gedge.gvert3
+            gv0_0    = gedge.gvert0
+            gv0_1    = self.create_gvert(cb0[1], radius=rm)
+            gv0_2    = self.create_gvert(cb0[2], radius=rm)
+            gv0_3    = gv_split
+            gv1_0    = gv_split
+            gv1_1    = self.create_gvert(cb1[1], radius=rm)
+            gv1_2    = self.create_gvert(cb1[2], radius=rm)
+            gv1_3    = gedge.gvert3
             
             self.disconnect_gedge(gedge)
             ge0 = self.create_gedge(gv0_0,gv0_1,gv0_2,gv0_3)
@@ -1155,16 +1157,16 @@ class PolyStrips(object):
                 if crosses[0][2] > 0:
                     # started stroke inside
                     if sgv0: dprint(spc+'Warning: sgv0 is not None!!')
-                    self.insert_gedge_from_stroke(stroke[i0+1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
+                    self.insert_gedge_from_stroke(stroke[i0+1:], only_ends, sgv0=gv_split, sgv3=sgv3, depth=depth+1)
                 else:
                     # started stroke outside
                     if sgv3: dprint(spc+'Warning: sgv3 is not None!!')
-                    self.insert_gedge_from_stroke(stroke[:i0+0], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
+                    self.insert_gedge_from_stroke(stroke[:i0+0], only_ends, sgv0=sgv0, sgv3=gv_split, depth=depth+1)
                 return
             
             i1 = crosses[1][0]+1
-            self.insert_gedge_from_stroke(stroke[:i0], sgv0=sgv0, sgv3=gv_split, depth=depth+1)
-            self.insert_gedge_from_stroke(stroke[i1:], sgv0=gv_split, sgv3=sgv3, depth=depth+1)
+            self.insert_gedge_from_stroke(stroke[:i0], only_ends, sgv0=sgv0, sgv3=gv_split, depth=depth+1)
+            self.insert_gedge_from_stroke(stroke[i1:], only_ends, sgv0=gv_split, sgv3=sgv3, depth=depth+1)
             return
             
         
@@ -1290,14 +1292,14 @@ class PolyStrips(object):
             create_quad(liv[3],liv[2],liv[1],liv[0])
         
         
-        done = set()
-        defering = set(self.gedges)
+        done = set()                    # set of gedges that have been created
+        defering = set(self.gedges)     # set of gedges that still need to be created
         while defering:
-            working = defering
-            defering = set()
+            working,defering = defering,set()
             
             for ge in working:
                 if any(gv.zip_over_gedge and gv.zip_over_gedge.zip_to_gedge not in done for gv in [ge.gvert0,ge.gvert3]):
+                    # defer gedge for now, because it is not ready to be created, yet
                     defering |= {ge}
                     continue
                 
@@ -1307,35 +1309,29 @@ class PolyStrips(object):
                 i_ge = ge_idx[ge]
                 l = len(ge.cache_igverts)
                 
+                i0 = gv_idx[ge.gvert0]
+                i3 = gv_idx[ge.gvert3]
+                i00,i01 = ge.gvert0.get_cornerinds_of(ge)           #  inside index of gvert0
+                i02,i03 = ge.gvert0.get_back_cornerinds_of(ge)      # outside index of gvert0
+                i32,i33 = ge.gvert3.get_cornerinds_of(ge)           #  inside index of gvert3
+                i30,i31 = ge.gvert3.get_back_cornerinds_of(ge)      # outside index of gvert3
+                
+                c0,c3 = igv_corner_vind[(i0,i00)], igv_corner_vind[(i3,i33)]
+                c1,c2 = igv_corner_vind[(i0,i01)], igv_corner_vind[(i3,i32)]
+                
+                ige_side_lvind[(i_ge, 1)] = [igv_corner_vind[(i0,i03)], c0]
+                ige_side_lvind[(i_ge,-1)] = [igv_corner_vind[(i0,i02)], c1]
+                
                 if not ge.zip_to_gedge:
-                    i0 = gv_idx[ge.gvert0]
-                    i3 = gv_idx[ge.gvert3]
-                    i00,i01 = ge.gvert0.get_cornerinds_of(ge)
-                    i02,i03 = ge.gvert0.get_back_cornerinds_of(ge)
-                    i32,i33 = ge.gvert3.get_cornerinds_of(ge)
-                    i30,i31 = ge.gvert3.get_back_cornerinds_of(ge)
-                    
-                    c0 = igv_corner_vind[(i0,i00)]
-                    c1 = igv_corner_vind[(i0,i01)]
-                    c2 = igv_corner_vind[(i3,i32)]
-                    c3 = igv_corner_vind[(i3,i33)]
-                    
-                    ige_side_lvind[(i_ge, 1)] = [igv_corner_vind[(i0,i03)]]
-                    ige_side_lvind[(i_ge,-1)] = [igv_corner_vind[(i0,i02)]]
-                    
+                    # creating non-zipped gedge
                     if l == 0:
+                        # no segments
                         create_quad(c0,c1,c2,c3)
-                        ige_side_lvind[(i_ge, 1)] += [c0,c3]
-                        ige_side_lvind[(i_ge,-1)] += [c1,c2]
                     else:
                         cc0,cc1 = c0,c1
                         for i,gvert in enumerate(ge.cache_igverts):
-                            if i%2 == 0: continue
-                            
-                            if i == 1: continue
-                            
-                            ige_side_lvind[(i_ge, 1)] += [cc0]
-                            ige_side_lvind[(i_ge,-1)] += [cc1]
+                            if i%2 == 0: continue                       # even == quad centers
+                            if i == 1:   continue                       # ignore first (generate quad with i-2 and i)
                             
                             if i == l-2:
                                 cc2 = c2
@@ -1349,76 +1345,63 @@ class PolyStrips(object):
                                 cc3 = insert_vert(p3)
                             
                             create_quad(cc0, cc1, cc2, cc3)
+                            if i < l-2:
+                                ige_side_lvind[(i_ge, 1)] += [cc3]
+                                ige_side_lvind[(i_ge,-1)] += [cc2]
                             
-                            cc0 = cc3
-                            cc1 = cc2
-                        ige_side_lvind[(i_ge, 1)] += [cc0]
-                        ige_side_lvind[(i_ge,-1)] += [cc1]
-                    
-                    ige_side_lvind[(i_ge, 1)] += [igv_corner_vind[(i3,i30)]]
-                    ige_side_lvind[(i_ge,-1)] += [igv_corner_vind[(i3,i31)]]
+                            cc0,cc1 = cc3,cc2
                     
                 else:
-                    if False:
-                        i0 = gv_idx[ge.gvert0]
-                        i3 = gv_idx[ge.gvert3]
-                        i00,i01 = ge.gvert0.get_cornerinds_of(ge)
-                        i32,i33 = ge.gvert3.get_cornerinds_of(ge)
-                        c0 = igv_corner_vind[(i0,i00)]
-                        c1 = igv_corner_vind[(i0,i01)]
-                        c2 = igv_corner_vind[(i3,i32)]
-                        c3 = igv_corner_vind[(i3,i33)]
+                    # creating zippered gedge
+                    i_zge  = ge_idx[ge.zip_to_gedge]
+                    lzvind = ige_side_lvind[(i_zge,ge.zip_side)]
+                    i_zgv0 = 1+int(ge.gvert0.zip_igv/2)
+                    i_zgv3 = 1+int(ge.gvert3.zip_igv/2)
+                    
+                    if i_zgv0 < i_zgv3:
+                        lzvind = lzvind[i_zgv0:i_zgv3+1]
+                    else:
+                        lzvind = lzvind[i_zgv3:i_zgv0+1]
+                        lzvind.reverse()
+                    
+                    dprint('lzvind (%i) = %s' % (len(lzvind),str(lzvind)))
+                    dprint('l = %i' % l)
+                    
+                    lzvind = lzvind[1:-1]
+                    cc0,cc1 = c0,c1
+                    for i,gvert in enumerate(ge.cache_igverts):
+                        if i%2 == 0: continue
+                        if i == 1:   continue
+                        i_z = int((i-3)/2)
                         
-                        zipi = [ige_iigv_vind[(zi_ge,i_gv,ge.zip_side)] for i_gv in range(len())]
-                        if ge.zip_side > 0:
-                            
-                            if ge.zip_dir > 0:
-                                pass
-                            else:
-                                pass
+                        if i == l-2:
+                            cc2,cc3 = c2,c3
                         else:
-                            if ge.zip_dir > 0:
-                                pass
+                            if ge.zip_side*ge.zip_dir == 1:
+                                p3 = gvert.position+gvert.tangent_y*gvert.radius
+                                p3 = mx * self.obj.closest_point_on_mesh(imx*p3)[0]
+                                cc3 = insert_vert(p3)
+                                cc2 = lzvind[i_z]
                             else:
-                                pass
+                                p2 = gvert.position-gvert.tangent_y*gvert.radius
+                                p2 = mx * self.obj.closest_point_on_mesh(imx*p2)[0]
+                                cc2 = insert_vert(p2)
+                                cc3 = lzvind[i_z]
                         
-                        if l == 0:
-                            create_quad(c0,c1,c2,c3)
-                            ige_iigv_vind[(i_ge,0, 1)] = c0
-                            ige_iigv_vind[(i_ge,0,-1)] = c1
-                            ige_iigv_vind[(i_ge,1,-1)] = c2
-                            ige_iigv_vind[(i_ge,1, 1)] = c3
-                        else:
-                            cc0,cc1 = c0,c1
-                            i_gv = 0
-                            for i,gvert in enumerate(ge.cache_igverts):
-                                if i%2 == 0: continue
-                                
-                                ige_iigv_vind[(i_ge,i_gv, 1)] = cc0
-                                ige_iigv_vind[(i_ge,i_gv,-1)] = cc1
-                                i_gv += 1
-                                
-                                if i == 1: continue
-                                
-                                if i == l-2:
-                                    cc2 = c2
-                                    cc3 = c3
-                                else:
-                                    p2 = gvert.position-gvert.tangent_y*gvert.radius
-                                    p3 = gvert.position+gvert.tangent_y*gvert.radius
-                                    p2 = mx * self.obj.closest_point_on_mesh(imx*p2)[0]
-                                    p3 = mx * self.obj.closest_point_on_mesh(imx*p3)[0]
-                                    cc2 = create_vert(p2)
-                                    cc3 = create_vert(p3)
-                                
-                                create_quad(cc0, cc1, cc2, cc3)
-                                
-                                cc0 = cc3
-                                cc1 = cc2
-                            ige_iigv_vind[(i_ge,i_gv, 1)] = cc0
-                            ige_iigv_vind[(i_ge,i_gv,-1)] = cc1
+                        dprint('new quad: %i %i %i %i' % (cc0,cc1,cc2,cc3))
+                        create_quad(cc0, cc1, cc2, cc3)
+                        if i < l-2:
+                            ige_side_lvind[(i_ge, 1)] += [cc3]
+                            ige_side_lvind[(i_ge,-1)] += [cc2]
+                        
+                        cc0,cc1 = cc3,cc2
+                    
                 
-                # do it
+                
+                ige_side_lvind[(i_ge, 1)] += [c3, igv_corner_vind[(i3,i30)]]
+                ige_side_lvind[(i_ge,-1)] += [c2, igv_corner_vind[(i3,i31)]]
+                
+                # mark gedge as done
                 done |= {ge}
         
         # remove unused verts and remap quads
