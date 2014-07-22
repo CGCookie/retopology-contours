@@ -117,10 +117,107 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             'pressure': 1 if not hasattr(event, 'pressure') else event.pressure
             }
     
-    
     def draw_callback(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
+        region,r3d = context.region,context.space_data.region_3d
+        
+        new_matrix = [v for l in r3d.view_matrix for v in l]
+        if self.post_update or self.last_matrix != new_matrix:
+            for gv in self.polystrips.gverts:
+                gv.update_visibility(r3d)
+            for ge in self.polystrips.gedges:
+                ge.update_visibility(r3d)
+            if self.sel_gedge:
+                for gv in [self.sel_gedge.gvert1, self.sel_gedge.gvert2]:
+                    gv.update_visibility(r3d)
+            if self.sel_gvert:
+                for gv in self.sel_gvert.get_inner_gverts():
+                    gv.update_visibility(r3d)
+            self.post_update = False
+            self.last_matrix = new_matrix
+        
+        if settings.debug < 3:
+            self.draw_callback_themed(context)
+        else:
+            self.draw_callback_debug(context)
+    
+    def draw_callback_themed(self, context):
+        settings = context.user_preferences.addons[AL.FolderName].preferences
+        region,r3d = context.region,context.space_data.region_3d
+        
+        theme_number = 2
+        
+        color_inactive  = (0,0,0)
+        color_selection = [(  5,196,255),(255,206, 82),(255,183,  0)][theme_number]
+        color_active    = [(156,236,255),(255,240,189),(255,217,120)][theme_number]     # not used at the moment
+        
+        for i_ge,gedge in enumerate(self.polystrips.gedges):
+            if gedge == self.sel_gedge:
+                color_border = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
+                color_fill   = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 0.20)
+            else:
+                color_border = (color_inactive[0]/255.0, color_inactive[1]/255.0, color_inactive[2]/255.0, 1.00)
+                color_fill   = (0.5, 0.5, 0.5, 0.2)
+            
+            for c0,c1,c2,c3 in gedge.iter_segments(only_visible=True):
+                contour_utilities.draw_polyline_from_3dpoints(context, [c0,c1,c2,c3,c0], color_border, 2, "GL_LINE_SMOOTH")
+                contour_utilities.draw_quads_from_3dpoints(context, [c0,c1,c2,c3], color_fill)
+        
+        for i_gv,gv in enumerate(self.polystrips.gverts):
+            if not gv.is_visible(): continue
+            p0,p1,p2,p3 = gv.get_corners()
+            
+            if gv.is_unconnected() and gv != self.sel_gvert: continue
+            
+            is_selected = False
+            is_selected |= gv == self.sel_gvert
+            is_selected |= self.sel_gedge!=None and (self.sel_gedge.gvert0 == gv or self.sel_gedge.gvert1 == gv)
+            is_selected |= self.sel_gedge!=None and (self.sel_gedge.gvert2 == gv or self.sel_gedge.gvert3 == gv)
+            if is_selected:
+                color_border = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
+                color_fill   = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 0.20)
+            else:
+                color_border = (color_inactive[0]/255.0, color_inactive[1]/255.0, color_inactive[2]/255.0, 1.00)
+                color_fill   = (0.5, 0.5, 0.5, 0.2)
+            
+            p3d = [p0,p1,p2,p3,p0]
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, color_border, 2, "GL_LINE_SMOOTH")
+            contour_utilities.draw_quads_from_3dpoints(context, [p0,p1,p2,p3], color_fill)
+        
+        p3d = [gvert.position for gvert in self.polystrips.gverts if not gvert.is_unconnected() and gvert.is_visible()]
+        color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
+        contour_utilities.draw_3d_points(context, p3d, color, 4)
+        
+        if self.sel_gvert:
+            gv = self.sel_gvert
+            p0 = gv.position
+            p3d = [ge.get_inner_gvert_at(gv).position for ge in gv.get_gedges_notnone()]
+            color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
+            contour_utilities.draw_3d_points(context, [p0] + p3d, color, 8)
+            for p1 in p3d:
+                contour_utilities.draw_polyline_from_3dpoints(context, [p0,p1], color, 2, "GL_LINE_SMOOTH")
+        
+        if self.sel_gedge:
+            ge = self.sel_gedge
+            p3d = [gv.position for gv in ge.gverts()]
+            color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
+            contour_utilities.draw_3d_points(context, p3d, color, 8)
+            contour_utilities.draw_polyline_from_3dpoints(context, [p3d[0], p3d[1]], color, 2, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_3dpoints(context, [p3d[2], p3d[3]], color, 2, "GL_LINE_SMOOTH")
+        
+        if self.mode == 'sketch':
+            contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1][0]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_points(context, [co[0] for co in self.sketch], (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
+            
+            info = str(round(self.sketch_pressure,3))
+            ''' draw text '''
+            txt_width, txt_height = blf.dimensions(0, info)
+            d = self.sketch_brush.pxl_rad
+            blf.position(0, self.sketch_curpos[0] - txt_width/2, self.sketch_curpos[1] + d + txt_height, 0)
+            blf.draw(0, info)
+    
+    def draw_callback_debug(self, context):
+        settings = context.user_preferences.addons[AL.FolderName].preferences
         region = context.region
         r3d = context.space_data.region_3d
         
@@ -132,6 +229,8 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         draw_gedge_bezier       = False
         draw_gedge_index        = False
         draw_gedge_igverts      = False
+        
+        cols = [(1,.5,.5,.8),(.5,1,.5,.8),(.5,.5,1,.8),(1,1,.5,.8)]
         
         color_selected          = (.5,1,.5,.8)
         
@@ -152,21 +251,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         tb = tf*2 if tf < 0.5 else 2-(tf*2)
         tb1 = 1-tb
         sel_fn = lambda c: tuple(cv*tb+cs*tb1 for cv,cs in zip(c,color_selected))
-        
-        new_matrix = [v for l in r3d.view_matrix for v in l]
-        if self.post_update or self.last_matrix != new_matrix:
-            for gv in self.polystrips.gverts:
-                gv.update_visibility(r3d)
-            for ge in self.polystrips.gedges:
-                ge.update_visibility(r3d)
-            if self.sel_gedge:
-                for gv in [self.sel_gedge.gvert1, self.sel_gedge.gvert2]:
-                    gv.update_visibility(r3d)
-            if self.sel_gvert:
-                for gv in self.sel_gvert.get_inner_gverts():
-                    gv.update_visibility(r3d)
-            self.post_update = False
-            self.last_matrix = new_matrix
         
         if draw_original_strokes:
             for stroke in self.strokes_original:
