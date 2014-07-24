@@ -1405,7 +1405,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         if rings:
             if len(self.cuts):
                 for cut in self.cuts:
-                    cut.draw(context, settings, three_dimensional = True, interacting = False)
+                    cut.draw(context, settings)
                     
             if self.existing_head:
                 self.existing_head.draw(context, settings, three_dimensional = True, interacting = False)
@@ -3117,7 +3117,7 @@ class ContourCutLine(object):
         else:
             self.verts_simple_visible = [True] * len(self.verts_simple)
     
-    def draw(self,context, settings, three_dimensional = True, interacting = False):
+    def draw(self,context, settings):
         '''
         setings are the addon preferences for contour tools
         '''
@@ -3125,8 +3125,7 @@ class ContourCutLine(object):
         debug = settings.debug
         #settings = context.user_preferences.addons[AL.FolderName].preferences
         
-        #this should be moved to only happen if the view changes :-/  I'ts only
-        #a few hundred calcs even with a lot of lines. Waste not want not.
+        #this should be moved to only happen if the view changes
         if self.head and self.head.world_position:
             self.head.screen_from_world(context)
         if self.tail and self.tail.world_position:
@@ -3166,40 +3165,21 @@ class ContourCutLine(object):
 
                     
         
-        #draw connecting line
+        #draw connecting line and two end points
         if self.head:
             points = [(self.head.x,self.head.y),(self.tail.x,self.tail.y)]
-            
             contour_utilities.draw_polyline_from_points(context, points, self.stroke_color, settings.stroke_thick, "GL_LINE_STIPPLE")
-        
-            #draw the two handles
             contour_utilities.draw_points(context, points, self.head.color, settings.handle_size)
         
-        #draw the current plane point and the handle to change plane orientation
-        #if self.plane_pt and settings.draw_widget:
-            #point1 = location_3d_to_region_2d(context.region, context.space_data.region_3d, self.plane_pt)
-            #point2 = (self.plane_tan.x, self.plane_tan.y)
-
-            #contour_utilities.draw_polyline_from_points(context, [point1,point2], (0,.2,1,1), settings.stroke_thick, "GL_LINE_STIPPLE")
-            #contour_utilities.draw_points(context, [point2], self.plane_tan.color, settings.handle_size)
-            #contour_utilities.draw_points(context, [point1], self.head.color, settings.handle_size)
-        
         #draw the raw contour vertices
-        if (self.verts and self.verts_simple == []) or (debug > 0 and settings.show_verts):
-            
-            if three_dimensional:
-                
-                contour_utilities.draw_3d_points(context, self.verts, self.vert_color, settings.raw_vert_size)
+        if (self.verts and self.verts_simple == []) or (debug > 0 and settings.show_verts):    
+            contour_utilities.draw_3d_points(context, self.verts, self.vert_color, settings.raw_vert_size)
 
-        
-        
-        
-        
         if False not in self.verts_simple_visible:
                 contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
                 contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
                 
-                if self.edges != [] and 0 in self.edges[-1]:
+                if self.edges != [] and 0 in self.edges[-1]: #close the loop
                     contour_utilities.draw_polyline_from_3dpoints(context, 
                                                                   [self.verts_simple[-1],self.verts_simple[0]], 
                                                                   self.geom_color,  
@@ -4324,19 +4304,19 @@ class CutLineManipulatorWidget(object):
 class ContourStatePreserver(object):
     def __init__(self, operator):
         self.mode = operator.mode
-        self.modal_state = operator.modal_state  #should always be waiting?
         
-        if operator.selected_path:
-            self.selected_path = operator.cut_paths.index(operator.selected_path)
+        
+        if operator.sel_path:
+            self.sel_path = operator.cut_paths.index(operator.sel_path)
 
         else:
-            self.selected_path = None
+            self.sel_path = None
             
-        if operator.selected and operator.selected_path and operator.selected in operator.selected_path.cuts:
-            self.selected_loop = operator.selected_path.cuts.index(operator.selected)
+        if operator.sel_loop and operator.sel_path and operator.sel_loop in operator.sel_path.cuts:
+            self.sel_loop = operator.sel_path.cuts.index(operator.sel_loop)
 
         else:
-            self.selected_loop = None
+            self.sel_loop = None
         
         #consider adding nsegments, nlopos etc....but why?
         
@@ -4345,13 +4325,13 @@ class ContourStatePreserver(object):
         operator.mode = self.mode
         operator.modal_state = self.modal_state
         
-        if self.selected_path != None:  #because it can be a 0 integer
-            operator.selected_path = operator.cut_paths[self.selected_path]
+        if self.sel_path != None:  #because it can be a 0 integer
+            operator.sel_path = operator.cut_paths[self.sel_path]
         else:
-            operator.selected_path = None
+            operator.sel_path = None
         
-        if self.selected_loop != None and self.selected_path != None:
-            operator.selected = operator.cut_paths[self.selected_path].cuts[self.selected_loop]
+        if self.sel_loop != None and self.sel_path != None:
+            operator.sel_loop = operator.cut_paths[self.sel_path].cuts[self.sel_loop]
         else:
-            operator.selected = None
+            operator.sel_loop = None
         

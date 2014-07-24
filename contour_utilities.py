@@ -105,8 +105,10 @@ def contour_keymap_generate():
     add_to_dict('align', 'SHIFT+A')
     add_to_dict('align', 'CTRL+A')
     add_to_dict('align', 'ALT+A')
-    add_to_dict('shift', 'LEFT_ARROW')
-    add_to_dict('shift', 'RIGHT_ARROW')
+    add_to_dict('up shift', 'LEFT_ARROW')
+    add_to_dict('dn shift', 'RIGHT_ARROW')
+    add_to_dict('smooth','CTRL+S')
+    add_to_dict('view cursor', 'C')
     
     
     #shift  there are too many of tehse, including ALT+WHEELUPMOUSE
@@ -132,7 +134,7 @@ def contour_keymap_generate():
     for kmi in keycon.keymaps['3D View'].keymap_items:
         if kmi.idname == 'wm.call_menu' and kmi.properties.name == 'VIEW3D_MT_snap':
             add_to_dict('snap cursor', kmi_details(kmi))
-            
+    
     #navigation keys last, to avoid conflicts eg, Ctl + Wheel
     #center view on cursor is included in nav
     for kmi in keycon.keymaps['3D View'].keymap_items:

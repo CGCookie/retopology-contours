@@ -360,7 +360,17 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max = 100,
             )
     
-    
+    smooth_methods = [
+    ('ENDPOINT', "Endpoints", "", 0),
+    ('CENTER_MASS', "Center of Mass", "", 1),
+    ('PATH_NORMAL', "Path Normal", "", 2),
+    ]
+    smooth_method = EnumProperty(
+            name = "Smooth Method",
+            items = smooth_methods,
+            description = "Affects how a segment will orient loops",
+            default='ENDPOINT',
+            )
     cyclic = BoolProperty(
             name = "Cyclic",
             description = "Make contour loops cyclic",
@@ -373,7 +383,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     recover_clip = IntProperty(
             name = "Recover Clip",
-            description = "Number of cuts to leave out, usually set to 0 or 1",
+            description = "Number of steps to leave off of undo cache, usually set to 0 or 1",
             default=1,
             min = 0,
             max = 10,
@@ -466,7 +476,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
         
         row = layout.row()
         row.prop(self, "use_x_ray", "Enable X-Ray at Mesh Creation")
-        
+        row.prop(self,"smooth_method")
 
         # Visualization Settings
         box = layout.box().column(align=False)
@@ -1847,10 +1857,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             self.cut_paths = cut_data
             op_state.push_state(self)
             
-            
-                    
-
-  
     def invoke(self, context, event):
         #HINT you are in contours code
         #TODO Settings harmon CODE REVIEW
