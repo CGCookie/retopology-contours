@@ -1769,7 +1769,7 @@ class ExistingVertList(object):
                         blf.position(0, loc[0], loc[1], 0)
                         blf.draw(0, str(i))    
                       
-class PolySkecthLine(object):
+class PolySketchLine(object):
     
     def __init__(self, context, raw_points,
                  cull_factor = 3,
