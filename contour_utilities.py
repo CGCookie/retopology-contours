@@ -109,6 +109,7 @@ def contour_keymap_generate():
     add_to_dict('dn shift', 'RIGHT_ARROW')
     add_to_dict('smooth','CTRL+S')
     add_to_dict('view cursor', 'C')
+    add_to_dict('undo', 'CTRL+Z')
     
     
     #shift  there are too many of tehse, including ALT+WHEELUPMOUSE

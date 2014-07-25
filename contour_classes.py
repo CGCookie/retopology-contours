@@ -4303,8 +4303,8 @@ class CutLineManipulatorWidget(object):
             
 class ContourStatePreserver(object):
     def __init__(self, operator):
-        self.mode = operator.mode
         
+        self.mode = operator.mode
         
         if operator.sel_path:
             self.sel_path = operator.cut_paths.index(operator.sel_path)
@@ -4323,7 +4323,6 @@ class ContourStatePreserver(object):
     def push_state(self, operator):
         
         operator.mode = self.mode
-        operator.modal_state = self.modal_state
         
         if self.sel_path != None:  #because it can be a 0 integer
             operator.sel_path = operator.cut_paths[self.sel_path]
