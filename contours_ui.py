@@ -403,7 +403,17 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         context.area.header_text_set(text = message)  
         return
     
-    
+    def check_message(self,context):
+        
+
+        now = time.time()
+        if now - self.msg_start_time > self.msg_duration:
+            self.kill_timer(context)
+            
+            if self.mode == 'mail guide':
+                context.area.header_text_set(text = self.guide_msg)
+            else:
+                context.area.header_text_set(text = self.loop_msg)
 ####UNDO/Operator Data management####
         
     def create_undo_snapshot(self, action):
@@ -784,7 +794,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
     
     def mode_set_guide(self,context):
         
-        self.mode = 'GUIDE'
+        self.mode = 'main guide'
         self.sel_loop = None  #WHY?
         if self.sel_path:
             self.sel_path.highlight(self.settings)
@@ -1135,7 +1145,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
             if eventd['press'] in self.keymap['align']:
                 self.loop_align(eventd['context'], eventd)
-                self.temporary_message_start(eventd['context'], 'Align Loop: %s' % act)
+                self.temporary_message_start(eventd['context'], 'Align Loop')
                 return ''
             
             if eventd['press'] in self.keymap['up shift']:
@@ -1347,9 +1357,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         #if eventd['type'] != 'TIMER':
             #print((eventd['type'], eventd['value']))
             
-        if self.footer_last != self.footer:
-            context.area.header_text_set('Contours: %s' % self.footer)
-            self.footer_last = self.footer
+        if event.type == 'TIMER':
+            self.check_message(context)
+            return {'RUNNING_MODAL'}
         
         FSM = {}
         FSM['main loop']    = self.modal_loop
@@ -1362,6 +1372,8 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.cur_pos = eventd['mouse']
         nmode = FSM[self.mode](eventd)
         self.mode_pos = eventd['mouse']
+        
+        
         
         #self.is_navigating = (nmode == 'nav')
         if nmode == 'nav': return {'PASS_THROUGH'}
@@ -1478,7 +1490,6 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.msg_start_time = time.time()
         self.msg_duration = .75
         
-        context.area.header_text_set('Contours')
         
         # switch to modal
         self._handle = bpy.types.SpaceView3D.draw_handler_add(self.draw_callback, (context, ), 'WINDOW', 'POST_PIXEL')
