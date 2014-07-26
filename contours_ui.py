@@ -292,7 +292,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         #This is where all the magic happens
         print('pushing data into bmesh')
         for path in self.cut_paths:
-            path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
+            path.push_data_into_bmesh(context, self.dest_ob, self.dest_bme, self.original_form, self.dest_me)
         
         if back_to_edit:
             print('updating edit mesh')
@@ -305,11 +305,11 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         
             #remember we created a new object
             print('link destination object')
-            context.scene.objects.link(self.destination_ob)
+            context.scene.objects.link(self.dest_ob)
             
             print('select and make active')
-            self.destination_ob.select = True
-            context.scene.objects.active = self.destination_ob
+            self.dest_ob.select = True
+            context.scene.objects.active = self.dest_ob
             
             if context.space_data.local_view:
                 view_loc = context.space_data.region_3d.view_location.copy()
@@ -322,15 +322,8 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                 context.space_data.region_3d.view_rotation = view_rot
                 context.space_data.region_3d.view_distance = view_dist
                 context.space_data.region_3d.update()
-        
-        print('wrap up')
-        context.area.header_text_set()
-        contour_utilities.callback_cleanup(self,context)
-        if self._timer:
-            context.window_manager.event_timer_remove(self._timer)
-        
-        print('finished mesh!')
-        return {'FINISHED'}
+    
+        return
     
 ####User Interface and Feedback functions####
     
@@ -363,11 +356,6 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         settings = context.user_preferences.addons[AL.FolderName].preferences
         r3d = context.space_data.region_3d
         region = context.region
-        font_id = 0
-        # draw some text
-        blf.position(font_id, region.width/2, region.height/2, 0)
-        blf.size(font_id, 20, 72)
-        blf.draw(font_id, "Hello Word " + self.footer)
         
         if context.space_data.use_occlude_geometry:
             new_matrix = [v for l in r3d.view_matrix for v in l]
@@ -1078,7 +1066,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         # accept / cancel hard coded
         
         if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:
-            self.create_mesh(eventd['context'])
+            self.finish_mesh(eventd['context'])
             eventd['context'].area.header_text_set()
             return 'finish'
         
@@ -1194,7 +1182,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         # accept / cancel
          
         if eventd['press'] in {'RET', 'NUMPAD_ENTER'}:
-            self.create_mesh(eventd['context'])
+            self.finish_mesh(eventd['context'])
             eventd['context'].area.header_text_set()
             return 'finish'
          
@@ -1450,8 +1438,8 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.draw_cache = []
        
         if settings.use_x_ray:
-            self.orig_x_ray = self.destination_ob.show_x_ray
-            self.destination_ob.show_x_ray = True     
+            self.orig_x_ray = self.dest_ob.show_x_ray
+            self.dest_ob.show_x_ray = True     
             
         #potential item for snapping in 
         self.snap = []
