@@ -1285,8 +1285,23 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
             p = eventd['pressure']
-            self.sel_loop.tail.x = x
-            self.sel_loop.tail.y = y      
+            
+            if eventd['ftype'] == 'CTRL+MOUSEMOVE':
+                
+                r = Vector(((x - self.sel_loop.head.x, y - self.sel_loop.head.y))).length
+                ang = math.atan2(y - self.sel_loop.head.y, x - self.sel_loop.head.x)
+                
+                deg5 = math.pi * 5 / 180
+                
+                snap_ang = int(ang/deg5) *deg5
+                
+                self.sel_loop.tail.x  = self.sel_loop.head.x + math.cos(snap_ang) * r
+                self.sel_loop.tail.y  = self.sel_loop.head.y + math.sin(snap_ang) * r
+                
+                eventd['context'].area.header_text_set(str(5 * int(ang/deg5)))
+            else:
+                self.sel_loop.tail.x = x
+                self.sel_loop.tail.y = y      
             return ''
         
         if eventd['release'] in {'LEFTMOUSE'}: #LMB hard code for cut
