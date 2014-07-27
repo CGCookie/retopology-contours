@@ -1158,13 +1158,13 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
             if eventd['press'] in self.keymap['up count']:
                 n = len(self.sel_loop.verts_simple)
-                self.loop_nverts_change(self, eventd['context'], eventd, n+1)
+                self.loop_nverts_change(eventd['context'], eventd, n+1)
                 #message handled within op
                 return ''
             
             if eventd['press'] in self.keymap['dn count']:
                 n = len(self.sel_loop.verts_simple)
-                self.loop_nverts_change(self, eventd['context'], eventd, n-1)
+                self.loop_nverts_change(eventd['context'], eventd, n-1)
                 #message handled within op
                 return ''
             
