@@ -110,6 +110,7 @@ def contour_keymap_generate():
     add_to_dict('smooth','CTRL+S')
     add_to_dict('view cursor', 'C')
     add_to_dict('undo', 'CTRL+Z')
+    add_to_dict('mode', 'TAB')
     
     
     #shift  there are too many of tehse, including ALT+WHEELUPMOUSE
@@ -117,10 +118,10 @@ def contour_keymap_generate():
     #    if kmi.idname == 'screen.frame_offset':
     #        add_to_dict('shift', kmi_details(kmi))
             
-    #mode switch
-    for kmi in keycon.keymaps['Object Non-modal'].keymap_items:
-        if kmi.idname == 'object.mode_set' and kmi.properties.mode == 'EDIT':
-            add_to_dict('mode', kmi_details(kmi))
+    #mode switch  #TODO, where is it in 3DS max?
+    #for kmi in keycon.keymaps['Object Non-modal'].keymap_items:
+    #    if kmi.idname == 'object.mode_set' and kmi.properties.mode == 'EDIT':
+    #        add_to_dict('mode', kmi_details(kmi))
             
     #undo
     for kmi in keycon.keymaps['Screen'].keymap_items:
@@ -146,7 +147,10 @@ def contour_keymap_generate():
     #bug, WHEELOUTMOUSE and WHEELINMOUSE used in 3dview keymaap
     add_to_dict('navigate', 'WHEELDOWNMOUSE')
     add_to_dict('navigate', 'WHEELUPMOUSE')
-    print(km_dict['navigate'])            
+    
+    print(('scale', km_dict['scale']))
+    print('rotate', km_dict['rotate'])  
+    print('translate', km_dict['translate'])        
     return km_dict 
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
