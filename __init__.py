@@ -656,7 +656,7 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
 
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
 
-        layout.operator("cgcookie.retop_contour")
+        layout.operator("cgcookie.contours_rf")
         if cgc_contour.show_experimental:
             layout.operator("cgcookie.retopo_poly_sketch")
 

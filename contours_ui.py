@@ -875,20 +875,24 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         
         if self.hover_target and self.hover_target != self.sel_loop:
                         
-                self.sel_loop = self.hover_target    
-                if not eventd['shift']:
-                    for path in self.cut_paths:
-                        for cut in path.cuts:
-                            cut.deselect(self.settings)  
-                        if self.sel_loop in path.cuts and path != self.sel_path:
-                                path.do_select(self.settings)
-                                path.unhighlight(self.settings) #TODO, don't highlight in loop mode
-                                self.sel_path = path
-                        else:
-                            path.deselect(self.settings)
-                              
-                #select the ring
-                self.hover_target.do_select(self.settings)
+            self.sel_loop = self.hover_target    
+            if not eventd['shift']:
+                for path in self.cut_paths:
+                    for cut in path.cuts:
+                        cut.deselect(self.settings)  
+                    if self.sel_loop in path.cuts and path != self.sel_path:
+                            path.do_select(self.settings)
+                            path.unhighlight(self.settings) #TODO, don't highlight in loop mode
+                            self.sel_path = path
+                    else:
+                        path.deselect(self.settings)
+                          
+            #select the ring
+            self.hover_target.do_select(self.settings)
+            
+            return True
+        else:
+            return False
                                         
     def loop_shift(self,context,eventd, shift = 0.05, up = True, undo = True):    
         if undo:
@@ -1109,8 +1113,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             return ''
         
         if eventd['press'] in self.keymap['select']: # selection
-            self.loop_select(eventd['context'], eventd)
-            return ''
+            ret = self.loop_select(eventd['context'], eventd)
+            if ret:
+                return ''
         
    
         if eventd['press'] == 'LEFTMOUSE':   # cutting and widget hard coded to LMB
