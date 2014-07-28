@@ -163,6 +163,24 @@ def callback_cleanup(self, context):
     #else:
         #context.region.callback_remove(self._handle)
     #return None
+def angle_snap(cx, cy, mx, my, c_ang):
+    '''
+    gives the location of mx, my constrained to
+    c_ang interval around centery point cx, cy
+    
+    for simplicity, c_ang is in degrees
+    '''
+    
+    r = Vector((mx-cx,my-cy)).length
+    ang = math.atan2(my-cy, mx-cx)
+    c_rad = math.pi * c_ang / 180
+    snap_deg = int(round(ang/c_rad)) * c_ang
+    snap_rad = int(round(ang/c_rad)) *c_rad
+                
+    x  = cx + math.cos(snap_rad) * r
+    y = cy + math.sin(snap_rad) * r
+    
+    return x,y, snap_deg
 
 def bgl_col(rgb, alpha):
     '''

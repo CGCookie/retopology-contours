@@ -1288,26 +1288,30 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
             if eventd['ftype'] == 'CTRL+MOUSEMOVE':
                 
-                r = Vector(((x - self.sel_loop.head.x, y - self.sel_loop.head.y))).length
-                ang = math.atan2(y - self.sel_loop.head.y, x - self.sel_loop.head.x)
+                cx, cy = self.sel_loop.head.x, self.sel_loop.head.y
+                c_angle  = self.settings.constraint_angle  #this may be radians
+                snap_x, snap_y, snap_deg = contour_utilities.angle_snap(cx, cy, x, y, c_angle)
+               
+                self.sel_loop.tail.x  = snap_x
+                self.sel_loop.tail.y  = snap_y
                 
-                deg5 = math.pi * 5 / 180
-                
-                snap_ang = int(ang/deg5) *deg5
-                
-                self.sel_loop.tail.x  = self.sel_loop.head.x + math.cos(snap_ang) * r
-                self.sel_loop.tail.y  = self.sel_loop.head.y + math.sin(snap_ang) * r
-                
-                eventd['context'].area.header_text_set(str(5 * int(ang/deg5)))
+                eventd['context'].area.header_text_set(str(snap_deg))
             else:
                 self.sel_loop.tail.x = x
                 self.sel_loop.tail.y = y      
             return ''
         
-        if eventd['release'] in {'LEFTMOUSE'}: #LMB hard code for cut
-            print('new cut made')
+        if eventd['release'] in {'LEFTMOUSE', 'CTRL+LEFTMOUSE'}: #LMB hard code for cut
             x,y = eventd['mouse']
-            self.release_place_cut(eventd['context'], self.settings, x, y)
+            if eventd['ftype'] == 'CTRL+LEFTMOUSE':
+                cx, cy = self.sel_loop.head.x, self.sel_loop.head.y
+                c_angle  = self.settings.constraint_angle  #this may be radians
+                snap_x, snap_y, snap_deg = contour_utilities.angle_snap(cx, cy, x, y, c_angle)
+            
+                self.release_place_cut(eventd['context'], self.settings, snap_x, snap_y)
+            else:
+                self.release_place_cut(eventd['context'], self.settings, x, y)
+            
             return 'main loop'
         
     def modal_sketching(self, eventd):

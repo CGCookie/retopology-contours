@@ -451,6 +451,14 @@ class ContourToolsAddonPreferences(AddonPreferences):
             min=5,
             max=100,
             )
+    
+    constraint_angle = IntProperty(
+            name="Cut Constraint Angle",
+            default=5,
+            min=5,
+            max=45,
+            step = 5,
+            )
     sketch_color1 = FloatVectorProperty(name="sketch Color", description="Vert Color", min=0, max=1, default=(1,1,0), subtype="COLOR")
     sketch_color2 = FloatVectorProperty(name="sketch Color", description="Edge Color", min=0, max=1, default=(0,1,.1), subtype="COLOR")
     sketch_color3 = FloatVectorProperty(name="sketch Color", description="Tip Color", min=0, max=1, default=(0,.5,1), subtype="COLOR")
@@ -563,6 +571,9 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row.prop(self, "sketch_color4", text="Color 4")
             row.prop(self, "sketch_color5", text="Color 5")
         
+            row = box.row()
+            row.prop(self, "constraint_angle", text="Constraint Angle")
+            
         # Debug Settings
         box = layout.box().column(align=False)
         row = box.row()
