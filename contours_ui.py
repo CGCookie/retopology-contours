@@ -1242,7 +1242,8 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                 for path in self.cut_paths:
                     if path != self.hover_target:
                         path.deselect(self.settings) 
-            return ''
+                
+                return ''
          
         if eventd['press'] in {'LEFTMOUSE'}: #LMB hard code for sketching
             self.footer = 'sketching'
