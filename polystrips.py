@@ -1432,7 +1432,7 @@ class PolyStrips(object):
         
 
 
-def sel_bmfaces_to_poly_strips(bme, face_inds):
+def sel_bmfaces_to_poly_strips(obj, bme, face_inds):
     '''
     bme = bmesh
     faces = list of face indices
@@ -1451,6 +1451,8 @@ def sel_bmfaces_to_poly_strips(bme, face_inds):
     
     #valence
     valences = {}
+    face_GVert_map = {}
+    
     ends = set()
     junctions = set()
     for i in face_inds:
@@ -1478,6 +1480,12 @@ def sel_bmfaces_to_poly_strips(bme, face_inds):
     poly_strips = []
     used = set()
     
+    def face_to_gvert(face_ind):
+        bmface = bme.faces[face_ind]
+        mx = obj.matrix_world
+        vert_coords = [mx * v.co for v in bmface.verts]
+        ed_coords = [(mx * ed.verts[0], mx * ed.verts[1]) for ed in bmface.edges]
+        
     def walk_step(face):
         '''
         must be 2 valent face for this to work
