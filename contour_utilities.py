@@ -50,18 +50,19 @@ def contour_keymap_generate():
             for k in km_dict.keys():
                 if value in km_dict[k]:
                     print('already part of keymap dictionary %s  %s' % (key, value))
-                    return
+                    return False
                 
         if key in km_dict:
             val = km_dict[key]
             
             if value not in val:
                 val.add(value)
+                return True
             else:
-                return
+                return False
         else:
             km_dict[key] = set([value])
-        
+            return True
     
     def kmi_details(kmi):
         kmi_ctrl    = 'CTRL+'  if kmi.ctrl  else ''
@@ -142,13 +143,14 @@ def contour_keymap_generate():
     for kmi in keycon.keymaps['3D View'].keymap_items:
         if kmi.name in navigation_events:
                 
-            add_to_dict('navigate', kmi_details(kmi))
+            if not add_to_dict('navigate', kmi_details(kmi)):
+                print(kmi.name)
     
     #bug, WHEELOUTMOUSE and WHEELINMOUSE used in 3dview keymaap
     add_to_dict('navigate', 'WHEELDOWNMOUSE')
     add_to_dict('navigate', 'WHEELUPMOUSE')
     
-    print(('scale', km_dict['scale']))
+    print('scale', km_dict['scale'])
     print('rotate', km_dict['rotate'])  
     print('translate', km_dict['translate'])        
     return km_dict 
