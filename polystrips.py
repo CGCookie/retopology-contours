@@ -1432,4 +1432,114 @@ class PolyStrips(object):
         
 
 
+def sel_bmfaces_to_poly_strips(bme, face_inds):
+    '''
+    bme = bmesh
+    faces = list of face indices
+    
+    '''
+    LJunctions = {(True, True, False, False),
+                 (False, True, True, False),
+                 (True, False, False, True),
+                 (False, False, True, True)}
+    
+    #check that they are all quads
+    not_quads = [len(bme.faces[i].verts) != 4 for i in face_inds]
+    if any(not_quads):
+        print('need to all be quads')
+        return
+    
+    #valence
+    valences = {}
+    ends = set()
+    junctions = set()
+    for i in face_inds:
+        valence = 0
+        adj_faces = [False, False, False, False]
+        bm_face = bme.faces[i]
+        for n, ed in enumerate(bm_face.edges):
+            for link_face in ed.link_faces:
+                if link_face.index in face_inds and link_face.index != i:
+                    valence += 1
+                    adj_faces[n] = True
+                    
+        valences[i] = valence
+        #print((i,adj_faces))
+        if valence == 1:
+            ends.add(i)
+        elif tuple(adj_faces) in LJunctions:
+            junctions.add(i)
+        elif sum(adj_faces) > 2:
+            junctions.add(i)  
+    
+    print((ends, junctions))
 
+    #with junctions and endpoints identified....let's walk around
+    poly_strips = []
+    used = set()
+    
+    def walk_step(face):
+        '''
+        must be 2 valent face for this to work
+        '''
+        for ed in face.edges:
+            for link_face in ed.link_faces:
+                if link_face.index in face_inds and link_face.index != face.index and link_face.index not in used:
+                    return link_face
+
+    for i in list(junctions):
+        used.add(i)
+        bm_face = bme.faces[i]
+        for j in range(valences[i]):
+            p_strip = [bm_face.index]
+            walk_again = True
+            last_face = bm_face
+            iters = 0
+            while walk_again and iters < 100:
+                iters += 1
+                next_face = walk_step(last_face)
+                if next_face:
+                    n = next_face.index
+                    p_strip += [next_face.index]
+                    if n in ends:
+                        ends.remove(n)
+                        walk_again = False
+                    elif n in junctions:
+                        walk_again = False
+                    else:
+                        used.add(n)
+                        last_face = next_face
+                else:
+                    walk_again = False
+                        
+            if len(p_strip) > 1:
+                poly_strips.append(p_strip)
+
+    for i in list(ends):
+        bm_face = bme.faces[i]
+        p_strip = [bm_face.index]
+        used.add(i)
+        walk_again = True
+        last_face = bm_face
+        iters = 0
+        while walk_again and iters < 100:
+            iters += 1
+            next_face = walk_step(last_face)
+            if next_face:
+                n = next_face.index
+                p_strip += [next_face.index]
+                if n in ends:
+                    ends.remove(n)
+                    walk_again = False
+                elif n in junctions:
+                    walk_again = False
+                else:
+                    used.add(n)
+                    last_face = next_face
+            else:
+                walk_again = False
+                    
+        poly_strips.append(p_strip)
+        
+    for strip in poly_strips:
+        print(strip)   
