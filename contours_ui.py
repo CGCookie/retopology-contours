@@ -790,12 +790,11 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                 self.cut_line_widget = None
     
     
-####Non Interactive/Non Data Operators####
-    
+####Non Interactive/Non Data Operators###
     def mode_set_guide(self,context):
         
         self.mode = 'main guide'
-        self.sel_loop = None  #WHY?
+        self.sel_loop = None  #because loop may not exist after path level operations like changing n_rings
         if self.sel_path:
             self.sel_path.highlight(self.settings)
                     
@@ -805,6 +804,14 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
         context.area.header_text_set(text = self.guide_msg)    
     
+    def mode_set_loop(self):
+        for path in self.paths:
+            for cut in path.cuts:
+                cut.deselect(self.settings)
+        if self.sel_path and len(self.sel_path.cuts):
+            self.sel_loop = self.sel_path.cuts[-1]
+            self.sel_path.cuts[-1].do_select(self.settings)
+        
     #### Segment Operators####
     
     def segment_shift(self,context, up = True, s = 0.05):
@@ -1202,6 +1209,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
          
          
         if eventd['press'] in self.keymap['mode']:
+            
+            self.mode_set_loop()
+
             return 'main loop'
          
         if eventd['press'] in self.keymap['new']:
