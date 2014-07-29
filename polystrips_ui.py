@@ -160,14 +160,14 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 color_fill   = (0.5, 0.5, 0.5, 0.2)
             
             for c0,c1,c2,c3 in gedge.iter_segments(only_visible=True):
-                contour_utilities.draw_polyline_from_3dpoints(context, [c0,c1,c2,c3,c0], color_border, 2, "GL_LINE_SMOOTH")
                 contour_utilities.draw_quads_from_3dpoints(context, [c0,c1,c2,c3], color_fill)
+                contour_utilities.draw_polyline_from_3dpoints(context, [c0,c1,c2,c3,c0], color_border, 2, "GL_LINE_SMOOTH")
         
         for i_gv,gv in enumerate(self.polystrips.gverts):
             if not gv.is_visible(): continue
             p0,p1,p2,p3 = gv.get_corners()
             
-            if gv.is_unconnected() and gv != self.sel_gvert: continue
+            if gv.is_unconnected(): continue
             
             is_selected = False
             is_selected |= gv == self.sel_gvert
@@ -181,29 +181,40 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 color_fill   = (0.5, 0.5, 0.5, 0.2)
             
             p3d = [p0,p1,p2,p3,p0]
-            contour_utilities.draw_polyline_from_3dpoints(context, p3d, color_border, 2, "GL_LINE_SMOOTH")
             contour_utilities.draw_quads_from_3dpoints(context, [p0,p1,p2,p3], color_fill)
+            contour_utilities.draw_polyline_from_3dpoints(context, p3d, color_border, 2, "GL_LINE_SMOOTH")
         
         p3d = [gvert.position for gvert in self.polystrips.gverts if not gvert.is_unconnected() and gvert.is_visible()]
-        color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
+        color = (color_inactive[0]/255.0, color_inactive[1]/255.0, color_inactive[2]/255.0, 1.00)
         contour_utilities.draw_3d_points(context, p3d, color, 4)
         
         if self.sel_gvert:
+            color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
             gv = self.sel_gvert
             p0 = gv.position
-            p3d = [ge.get_inner_gvert_at(gv).position for ge in gv.get_gedges_notnone()]
-            color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
-            contour_utilities.draw_3d_points(context, [p0] + p3d, color, 8)
-            for p1 in p3d:
+            if gv.is_inner():
+                p1 = gv.gedge_inner.get_outer_gvert_at(gv).position
+                contour_utilities.draw_3d_points(context, [p0], color, 8)
                 contour_utilities.draw_polyline_from_3dpoints(context, [p0,p1], color, 2, "GL_LINE_SMOOTH")
+            else:
+                p3d = [ge.get_inner_gvert_at(gv).position for ge in gv.get_gedges_notnone()]
+                contour_utilities.draw_3d_points(context, [p0] + p3d, color, 8)
+                for p1 in p3d:
+                    contour_utilities.draw_polyline_from_3dpoints(context, [p0,p1], color, 2, "GL_LINE_SMOOTH")
         
         if self.sel_gedge:
+            color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
             ge = self.sel_gedge
             p3d = [gv.position for gv in ge.gverts()]
-            color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
             contour_utilities.draw_3d_points(context, p3d, color, 8)
             contour_utilities.draw_polyline_from_3dpoints(context, [p3d[0], p3d[1]], color, 2, "GL_LINE_SMOOTH")
             contour_utilities.draw_polyline_from_3dpoints(context, [p3d[2], p3d[3]], color, 2, "GL_LINE_SMOOTH")
+        
+        if self.act_gvert:
+            color = (color_active[0]/255.0, color_active[1]/255.0, color_active[2]/255.0, 1.00)
+            gv = self.act_gvert
+            p0 = gv.position
+            contour_utilities.draw_3d_points(context, [p0], color, 8)
         
         if self.mode == 'sketch':
             contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1][0]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
@@ -405,7 +416,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if self.sel_gvert:
             loc   = self.sel_gvert.position
             cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
-        elif self.sel_gvert:
+        elif self.sel_gedge:
             loc   = (self.sel_gedge.gvert0.position + self.sel_gedge.gvert3.position) / 2.0
             cx,cy = location_3d_to_region_2d(rgn, r3d, loc)
         else:
@@ -644,6 +655,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             return ''
         
         if eventd['press'] == 'P':                                                  # grease pencil => strokes
+            # TODO: only convert gpencil strokes that are visible and prevent duplicate conversion
             for gpl in self.obj.grease_pencil.layers: gpl.hide = True
             for stroke in self.strokes_original:
                 self.polystrips.insert_gedge_from_stroke(stroke, True)
@@ -677,7 +689,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             x,y = eventd['mouse']
             pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
             if not pts:
-                self.sel_gvert,self.sel_gedge = None,None
+                self.sel_gvert,self.sel_gedge,self.act_gvert = None,None,None
                 return ''
             pt = pts[0]
             
@@ -691,6 +703,7 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     lcpts = [ge.get_inner_gvert_at(sgv) for ge in lge if ge and not ge.zip_to_gedge] + [sgv]
                 else:
                     lcpts = []
+                
                 for cpt in lcpts:
                     if not cpt.is_picked(pt): continue
                     self.sel_gvert = cpt
@@ -1123,8 +1136,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                                         event.mouse_region_x, event.mouse_region_y, 
                                         settings.quad_prev_radius, 
                                         self.obj)
-        self.sel_gedge = None
-        self.sel_gvert = None
+        
+        self.sel_gedge = None                           # selected gedge
+        self.sel_gvert = None                           # selected gvert
+        self.act_gvert = None                           # active gvert (operated upon)
         
         self.polystrips = PolyStrips(context, self.obj)
         

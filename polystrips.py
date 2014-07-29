@@ -87,6 +87,7 @@ class GVert:
     def has_1(self): return not (self.gedge1 is None)
     def has_2(self): return not (self.gedge2 is None)
     def has_3(self): return not (self.gedge3 is None)
+    def is_inner(self): return not (self.gedge_inner is None)
     
     def count_gedges(self):   return len(self.get_gedges_notnone())
     
@@ -577,6 +578,11 @@ class GEdge:
         if self.gvert0 == gv: return self.gvert1
         if self.gvert3 == gv: return self.gvert2
         assert False, "gv is not an endpoint"
+    
+    def get_outer_gvert_at(self, gv):
+        if self.gvert1 == gv: return self.gvert0
+        if self.gvert2 == gv: return self.gvert3
+        assert False, "gv is not an inner gvert"
     
     def get_inner_gverts(self):
         return [self.gvert1, self.gvert2]
