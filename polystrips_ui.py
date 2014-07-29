@@ -743,6 +743,21 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gedge.gvert3.update_gedges()
                 return ''
             
+            if eventd['press']in {'CTRL+NUMPAD_PLUS', 'UP_ARROW'}:
+                print('increase quads')
+                self.sel_gedge.n_quads += 1
+                self.sel_gedge.force_count = True
+                self.sel_gedge.update()
+                return ''
+            
+            if eventd['press'] in {'CTRL+NUMPAD_MINUS', 'DOWN_ARROW'}:
+                print('decrease quads')
+                if self.sel_gedge.n_quads > 4:
+                    self.sel_gedge.n_quads -= 1
+                    self.sel_gedge.force_count = True
+                    self.sel_gedge.update()
+                return ''
+            
             if eventd['press'] == 'Z':
                 if self.sel_gedge.zip_to_gedge:
                     self.sel_gedge.unzip()
