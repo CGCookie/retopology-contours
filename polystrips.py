@@ -35,6 +35,7 @@ import itertools
 from polystrips_utilities import *
 from polystrips_draw import *
 from general_utilities import iter_running_sum, dprint, get_object_length_scale, profiler
+import polystrips_utilities
 
 #Make the addon name and location accessible
 AL = general_utilities.AddonLocator()
@@ -470,6 +471,9 @@ class GEdge:
         self.gvert2 = gvert2
         self.gvert3 = gvert3
         
+        self.force_count = False
+        self.n_quads = None
+        
         self.zip_to_gedge   = None
         self.zip_side       = 1
         self.zip_dir        = 1
@@ -626,11 +630,11 @@ class GEdge:
             self.gvert3.radius
             )
     
-    def get_length(self):
+    def get_length(self, precision = 64):
         p0,p1,p2,p3 = self.get_positions()
         mx = self.obj.matrix_world
         imx = mx.inverted()
-        p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/64.0) for t in range(65)]
+        p3d = [cubic_bezier_blend_t(p0,p1,p2,p3,t/precision) for t in range(precision+1)]
         p3d = [mx*self.obj.closest_point_on_mesh(imx * p)[0] for p in p3d]
         return sum((p1-p0).length for p0,p1 in zip(p3d[:-1],p3d[1:]))
         #return cubic_bezier_length(p0,p1,p2,p3)
@@ -760,46 +764,86 @@ class GEdge:
         r0,r1,r2,r3 = self.get_radii()
         n0,n1,n2,n3 = self.get_normals()
         
-        # get bezier length
-        l = self.get_length()
+        #get s_t_map
+        if self.n_quads:
+            step = 20* self.n_quads
+        else:
+            step = 100
+            
+        s_t_map = polystrips_utilities.cubic_bezier_t_of_s_dynamic(p0, p1, p2, p3, initial_step = step )
         
-        # find "optimal" count for subdividing spline
-        cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
-        c = 0
-        for ctest in range(max(4,cmin-2),cmax+2):
-            s = (r3-r0) / (ctest-1)
-            tot = r0*(ctest+1) + s*(ctest+1)*ctest/2
-            if tot > l:
-                break
-            if ctest % 2 == 1:
-                c = ctest
-        if c <= 1:
-            self.cache_igverts = []
-            return
+        #l = self.get_length()  <-this is more accurate, but we need consistency
+        l = max(s_t_map)
+        if self.force_count and self.n_quads:
+
+            #number of segments
+            c = 2 * (self.n_quads - 1)
+            # compute difference for smoothly interpolating radii perpendicular to GEdge
+            s = (r3-r0) / float(c+1)  #(c-1?) c+1 verts inexed 0 to c.  f(n) = r0 + s * n ;f(0) = r0 f(c) = r3  = ro + c * s
+            
+            #method 1, leave end quads with R0 and R3 preserved
+            #average width of GEdges internal quads
+            #davg = (l - r0 - r3)/(2 * (self.n_quads - 2)) #what if davg is negative?
+            # compute interval lengths, ts, blend weights leaving end quads radius same
+            #l_widths = [0] + [r0] + [davg for i in range(1,c-1)] + [r3]
+            
+            #method 2
+            L = c * r0 +  s*(c+1)*c/2  #integer run sum
+            os = L - l
+            d_os = os/c
+            
+            # compute interval lengths, ts, blend weights
+            l_widths = [0] + [r0 + s*i - d_os for i in range(c)]
+
+            #l_ts = [float(i)/float(c) for i in range(c+1)]  #pure time distribution
+            #l_ts1 = [dist/l for w,dist in iter_running_sum(l_widths)]  #assume constant velocity on curve
+            l_ts = [polystrips_utilities.closest_t_of_s(s_t_map, dist) for w,dist in iter_running_sum(l_widths)]  #pure lenght distribution
+
+            l_weights = [cubic_bezier_weights(t) for t in l_ts]
         
-        # compute difference for smoothly interpolating radii
-        s = (r3-r0) / float(c-1)
-        
-        # compute how much space is left over (to be added to each interval)
-        tot = r0*(c+1) + s*(c+1)*c/2
-        o = l - tot
-        oc = o / (c+1)
-        
-        # compute interval lengths, ts, blend weights
-        l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
-        l_ts = [p/l for w,p in iter_running_sum(l_widths)]
-        l_weights = [cubic_bezier_weights(t) for t in l_ts]
+        else:
+            # find "optimal" count for subdividing spline
+            cmin,cmax = int(math.floor(l/max(r0,r3))),int(math.floor(l/min(r0,r3)))
+            
+            c = 0
+            for ctest in range(max(4,cmin-2),cmax+2):
+                s = (r3-r0) / (ctest-1)
+                tot = r0*(ctest+1) + s*(ctest+1)*ctest/2
+                if tot > l:
+                    break
+                if ctest % 2 == 1:
+                    c = ctest
+            if c <= 1:
+                self.cache_igverts = []
+                return
+    
+            # compute difference for smoothly interpolating radii
+            s = (r3-r0) / float(c-1)
+            
+            # compute how much space is left over (to be added to each interval)
+            tot = r0*(c+1) + s*(c+1)*c/2
+            o = l - tot
+            oc = o / (c+1)
+            
+            # compute interval lengths, ts, blend weights
+            l_widths = [0] + [r0+oc+i*s for i in range(c+1)]
+            l_ts = [p/l for w,p in iter_running_sum(l_widths)]
+            l_weights = [cubic_bezier_weights(t) for t in l_ts]
         
         # compute interval pos, rad, norm, tangent x, tangent y
         l_pos   = [cubic_bezier_blend_weights(p0,p1,p2,p3,weights) for weights in l_weights]
-        l_radii = l_widths
+        l_radii = [r0 + i*s for i in range(c+2)]
+        
+        #Verify smooth radius interpolation
+        #print('R0 %f, R3 %f, r0 %f, r3 %f ' % (r0,r3,l_radii[0],l_radii[-1]))
         l_norms = [cubic_bezier_blend_weights(n0,n1,n2,n3,weights).normalized() for weights in l_weights]
         l_tanx  = [cubic_bezier_derivative(p0,p1,p2,p3,t).normalized() for t in l_ts]
         l_tany  = [t.cross(n).normalized() for t,n in zip(l_tanx,l_norms)]
         
         # create igverts!
         self.cache_igverts = [GVert(self.obj,self.length_scale,p,r,n,tx,ty) for p,r,n,tx,ty in zip(l_pos,l_radii,l_norms,l_tanx,l_tany)]
-        
+        if not self.force_count:
+            self.n_quads = int((len(self.cache_igverts)+1)/2)
         self.snap_igverts()
         
         self.gvert0.update(do_edges=False)
@@ -1357,6 +1401,11 @@ class PolyStrips(object):
                             
                             cc0,cc1 = cc3,cc2
                     
+                
+                #elif i == len(ge.cache_igverts) - 1 and ge.force_count:
+                    #print('did the funky math')
+                    #p2, p3 = ge.gvert3.get_corners_of(ge)
+                    #cc2, cc3 = verts.index(imx * p2), verts.index(imx * p3)
                 else:
                     # creating zippered gedge
                     i_zge  = ge_idx[ge.zip_to_gedge]
