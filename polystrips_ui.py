@@ -651,7 +651,13 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             self.polystrips.update_visibility(eventd['r3d'])
             return ''
         
-        
+        if eventd['press'] == 'M':
+            if 'EDIT' in eventd['context'].mode:
+                self.geom_to_p_srips(eventd['context'])
+            
+            return ''
+            
+            
         if eventd['press'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:                      # start sketching
             self.footer = 'Sketching'
             x,y = eventd['mouse']
@@ -805,7 +811,6 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 self.sel_gvert.toggle_corner()
                 self.sel_gvert.update_visibility(eventd['r3d'], update_gedges=True)
                 return ''
-            
             
             if eventd['press'] == 'CTRL+S':
                 self.ready_tool(eventd, self.scale_tool_gvert)
@@ -1071,6 +1076,17 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         #for stroke in strokes:
         #    self.polystrips.insert_gedge_from_stroke(stroke)
     
+    def geom_to_p_srips(self,context):
+        if 'EDIT' in context.mode and self.existing_bme:
+            sel_faces = [f.index for f in self.existing_bme.faces if f.select]
+        
+            if not len(sel_faces): return
+            
+            new_gverts, new_gedges = sel_bmfaces_to_poly_strips(self.existing_ob, self.existing_bme, sel_faces, self.obj)    
+            self.polystrips.gedges += new_gedges
+            self.polystrips.gverts += new_gverts
+            
+            
     def kill_timer(self, context):
         if not self._timer: return
         context.window_manager.event_timer_remove(self._timer)
@@ -1103,7 +1119,19 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
         
-        self.obj = context.object
+        if context.mode == 'OBJECT':
+            self.obj = context.object
+            self.existing_ob = None
+            self.existing_bme = None
+            
+        elif 'EDIT' in context.mode:
+            self.obj = [ob for ob in context.selected_objects if ob != context.object][0]
+            self.existing_ob = context.object
+            e_mesh = self.existing_ob.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
+            e_bme = bmesh.new()
+            e_bme.from_mesh(e_mesh)
+            self.existing_bme = e_bme
+            
         self.scale = self.obj.scale[0]
         self.length_scale = get_object_length_scale(self.obj)
         

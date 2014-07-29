@@ -1432,12 +1432,17 @@ class PolyStrips(object):
         
 
 
-def sel_bmfaces_to_poly_strips(obj, bme, face_inds):
+def sel_bmfaces_to_poly_strips(strip_obj, bme, face_inds, retopo_obj):
     '''
     bme = bmesh
     faces = list of face indices
     
     '''
+    mx = strip_obj.matrix_world
+    imx = mx.inverted()
+    gedges = []
+    gverts = []
+    
     LJunctions = {(True, True, False, False),
                  (False, True, True, False),
                  (True, False, False, True),
@@ -1478,51 +1483,145 @@ def sel_bmfaces_to_poly_strips(obj, bme, face_inds):
 
     #with junctions and endpoints identified....let's walk around
     poly_strips = []
+    gverts = []
+    gedges = []
+    
     used = set()
+    length_scale = 1/40 * retopo_obj.dimensions.length
     
     def face_to_gvert(face_ind):
+        '''
+        we need to check that tangents are right
+        '''
         bmface = bme.faces[face_ind]
-        mx = obj.matrix_world
         vert_coords = [mx * v.co for v in bmface.verts]
-        ed_coords = [(mx * ed.verts[0], mx * ed.verts[1]) for ed in bmface.edges]
+        ed_coords = [(mx * ed.verts[0].co, mx * ed.verts[1].co) for ed in bmface.edges]
+        no = imx.transposed() * bmface.normal
+        loc = mx * bmface.calc_center_median()
         
+        no.normalize()
+        rad = .5 * ed_coords[0][0] + .5 * ed_coords[0][1] - loc
+        tangent_x = rad.normalized()
+        tangent_y = no.cross(tangent_x)
+        tangent_y.normalize()
+        
+        gvert = GVert(retopo_obj, length_scale, loc, rad.length, no, tangent_x, tangent_y)
+        return gvert
+    
     def walk_step(face):
         '''
-        must be 2 valent face for this to work
+        will return first face it comes across
+        
+        return link_face, index of edge in link_face, index of edge in face
         '''
-        for ed in face.edges:
+        for i, ed in enumerate(face.edges):
             for link_face in ed.link_faces:
                 if link_face.index in face_inds and link_face.index != face.index and link_face.index not in used:
-                    return link_face
+                    for j, l_ed in enumerate(link_face.edges):
+                        if l_ed == ed:
+                            break
+                    return link_face, j, i
+                
+        return False, None, None
 
+    
     for i in list(junctions):
         used.add(i)
         bm_face = bme.faces[i]
+        if i not in face_GVert_map:
+            gvert = face_to_gvert(i)
+            gverts += [gvert]
+        else:
+            gvert = face_GVert_map[i]
+        
+        face_GVert_map[i] = gvert
         for j in range(valences[i]):
             p_strip = [bm_face.index]
             walk_again = True
             last_face = bm_face
             iters = 0
             while walk_again and iters < 100:
+                
+                next_face, gvert_next_ind, gvert_prev_ind = walk_step(last_face)
+                if iters == 0:
+                    gvert0_ind = gvert_prev_ind
                 iters += 1
-                next_face = walk_step(last_face)
                 if next_face:
                     n = next_face.index
                     p_strip += [next_face.index]
                     if n in ends:
+                        gvert3 = face_to_gvert(n)
+                        gverts += [gvert3]
+                        face_GVert_map[n] = gvert3
                         ends.remove(n)
                         walk_again = False
+                    
                     elif n in junctions:
+                        if n in face_GVert_map:
+                            gvert3 = face_GVert_map[n]
+                        else:
+                            gvert3 = face_to_gvert(n)
+                            gverts += [gvert3]
+                            face_GVert_map[n] = gvert3 
                         walk_again = False
                     else:
                         used.add(n)
                         last_face = next_face
                 else:
+                    print('never get here')
                     walk_again = False
                         
-            if len(p_strip) > 1:
+            if len(p_strip) > 3:
                 poly_strips.append(p_strip)
-
+                
+                fit_pos = [mx * bme.faces[l].calc_center_bounds() for l in p_strip]
+                r0 = gvert.radius
+                [(fit_t0,fit_t3,fit_p0,fit_p1,fit_p2,fit_p3)] = cubic_bezier_fit_points(fit_pos, r0/10, depth=0, t0=0, t3=1, allow_split=True)
+                
+                
+                gvert1 = gvert.clone()
+                gvert2 = gvert3.clone()
+                gvert1.position = fit_p1
+                gvert2.position = fit_p2
+                new_gedge = GEdge(retopo_obj, length_scale, gvert, gvert1, gvert2, gvert3)
+                
+                print('the gedge connects to the two gverts as follows')
+                print(gvert0_ind, gvert_next_ind)
+                
+                '''
+                gvert3.disconnect_gedge(new_gedge)
+                if gvert_next_ind == 0:
+                    gvert3.gedge0 = new_gedge
+                elif gvert_next_ind == 1:
+                    gvert3.gedge1 = new_gedge
+                elif gvert_next_ind == 2:
+                    gvert3.gedge2 = new_gedge
+                elif gvert_next_ind == 3:
+                    gvert3.gedge3 = new_gedge
+                
+                gvert.disconnect_gedge(new_gedge)
+                if gvert0_ind == 0:
+                    gvert.gedge0 = new_gedge
+                elif gvert0_ind == 1:
+                    gvert.gedge1 = new_gedge
+                elif gvert0_ind == 2:
+                    gvert.gedge2 = new_gedge
+                elif gvert0_ind == 3:
+                    gvert.gedge3 = new_gedge    
+                '''   
+                new_gedge.update()
+                new_gedge.gvert0.update(do_edges=False)
+                new_gedge.gvert1.update(do_edges=False)
+                new_gedge.gvert2.update(do_edges=False)
+                new_gedge.gvert3.update(do_edges=False)
+                
+                gedges += [new_gedge]
+                
+    for strip in poly_strips:
+        print(strip)
+                    
+    return gverts, gedges
+    '''
     for i in list(ends):
         bm_face = bme.faces[i]
         p_strip = [bm_face.index]
@@ -1548,6 +1647,6 @@ def sel_bmfaces_to_poly_strips(obj, bme, face_inds):
                 walk_again = False
                     
         poly_strips.append(p_strip)
-        
-    for strip in poly_strips:
-        print(strip)   
+    '''
+                    
+   
