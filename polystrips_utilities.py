@@ -220,7 +220,7 @@ def cubic_bezier_t_of_s_dynamic(p0,p1,p2,p3, initial_step = 50):
     cumul_length += (pi1 - pi0).length
     s_t_map[cumul_length] = 1 
             
-    print('initial dt %f, final dt %f' % (1/initial_step, dt))
+    dprint('initial dt %f, final dt %f' % (1/initial_step, dt))
     return s_t_map
 
 

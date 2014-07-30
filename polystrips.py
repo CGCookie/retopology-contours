@@ -490,6 +490,8 @@ class GEdge:
         gvert2.connect_gedge_inner(self)
         gvert3.connect_gedge(self)
     
+    def is_zippered(self): return (self.zip_to_gedge != None)
+    
     def zip_to(self, gedge):
         assert not self.zip_to_gedge
         

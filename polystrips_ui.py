@@ -205,10 +205,14 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if self.sel_gedge:
             color = (color_selection[0]/255.0, color_selection[1]/255.0, color_selection[2]/255.0, 1.00)
             ge = self.sel_gedge
-            p3d = [gv.position for gv in ge.gverts()]
-            contour_utilities.draw_3d_points(context, p3d, color, 8)
-            contour_utilities.draw_polyline_from_3dpoints(context, [p3d[0], p3d[1]], color, 2, "GL_LINE_SMOOTH")
-            contour_utilities.draw_polyline_from_3dpoints(context, [p3d[2], p3d[3]], color, 2, "GL_LINE_SMOOTH")
+            if self.sel_gedge.is_zippered():
+                p3d = [ge.gvert0.position, ge.gvert3.position]
+                contour_utilities.draw_3d_points(context, p3d, color, 8)
+            else:
+                p3d = [gv.position for gv in ge.gverts()]
+                contour_utilities.draw_3d_points(context, p3d, color, 8)
+                contour_utilities.draw_polyline_from_3dpoints(context, [p3d[0], p3d[1]], color, 2, "GL_LINE_SMOOTH")
+                contour_utilities.draw_polyline_from_3dpoints(context, [p3d[2], p3d[3]], color, 2, "GL_LINE_SMOOTH")
         
         if self.act_gvert:
             color = (color_active[0]/255.0, color_active[1]/255.0, color_active[2]/255.0, 1.00)
@@ -528,6 +532,25 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 gv.position += (self.tool_x*dx + self.tool_y*dy)*self.length_scale / 1000
                 gv.update()
     
+    def grab_tool_gedge(self, command, eventd):
+        if command == 'init':
+            self.footer = 'Translating GEdge positions'
+            sge = self.sel_gedge
+            lgv = [sge.gvert0, sge.gvert3]
+            lgv += [ge.get_inner_gvert_at(gv) for gv in lgv for ge in gv.get_gedges_notnone()]
+            self.tool_data = [(gv,Vector(gv.position)) for gv in lgv]
+        elif command == 'commit':
+            pass
+        elif command == 'undo':
+            for gv,p in self.tool_data:
+                gv.position = p
+                gv.update()
+        else:
+            dx,dy = command
+            for gv,up in self.tool_data:
+                gv.position += (self.tool_x*dx + self.tool_y*dy)*self.length_scale / 1000
+                gv.update()
+    
     def rotate_tool_gvert_neighbors(self, command, eventd):
         if command == 'init':
             self.footer = 'Rotating GVerts'
@@ -788,6 +811,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                     self.sel_gedge.zip_to(ge)
                     return ''
                 return ''
+            
+            if eventd['press'] == 'G':
+                self.ready_tool(eventd, self.grab_tool_gedge)
+                return 'grab tool'
             
             if eventd['press'] == 'A':
                 self.sel_gvert = self.sel_gedge.gvert0
