@@ -71,26 +71,10 @@ def rad_press_mix(r, p, map = 3):
         p = .7 * (2.25*p-1)/((2.25*p-1)**2 +1)**.5 + .55
     
     return r*p
-    
-class CGCOOKIE_OT_polystrips(bpy.types.Operator):
-    bl_idname = "cgcookie.polystrips"
-    bl_label  = "PolyStrips"
-    
-    @classmethod
-    def poll(cls,context):
-        if context.mode not in {'EDIT_MESH','OBJECT'}:
-            return False
-        
-        if context.active_object:
-            if context.mode == 'EDIT_MESH':
-                if len(context.selected_objects) > 1:
-                    return True
-                else:
-                    return False
-            else:
-                return context.object.type == 'MESH'
-        else:
-            return False
+
+class PolystripsUI:
+    def __init__(self):
+        pass
     
     def get_event_details(self, context, event):
         event_ctrl    = 'CTRL+'  if event.ctrl  else ''
@@ -1090,13 +1074,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         if nmode == 'nav': return {'PASS_THROUGH'}
         
         if nmode in {'finish','cancel'}:
-            contour_utilities.callback_cleanup(self, context)
             self.kill_timer(context)
             return {'FINISHED'} if nmode == 'finish' else {'CANCELLED'}
         
         if nmode: self.mode = nmode
-        
-        
         
         return {'RUNNING_MODAL'}
     
@@ -1209,7 +1190,4 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         
         context.area.header_text_set('PolyStrips')
         
-        # switch to modal
-        self._handle = bpy.types.SpaceView3D.draw_handler_add(self.draw_callback, (context, ), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}

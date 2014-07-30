@@ -65,7 +65,7 @@ from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
 
-from polystrips_ui import CGCOOKIE_OT_polystrips
+import polystrips_blender
 
 
 # Create a class that contains all location information for addons
@@ -607,7 +607,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
     '''Retopologize Forms with Contour Strokes'''
     bl_category = "Retopology"
-    bl_label = "Contour Retopolgy"
+    bl_label = "Contour Retopology"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
@@ -629,7 +629,6 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
             col.label(text='No 2nd Object!')
         col = box.column()
         col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
-        col.operator("cgcookie.polystrips", icon="MESH_UVSPHERE")
         
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
         
@@ -2953,7 +2952,7 @@ def register():
     bpy.utils.register_class(CGCOOKIE_OT_retopo_poly_sketch)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_menu)
     
-    bpy.utils.register_class(CGCOOKIE_OT_polystrips)
+    polystrips_blender.register()
     
     # Create the addon hotkeys
     kc = bpy.context.window_manager.keyconfigs.addon
@@ -2969,7 +2968,8 @@ def register():
 #unregistration
 def unregister():
     clear_mesh_cache()
-    bpy.utils.unregister_class(CGCOOKIE_OT_polystrips)
+    
+    polystrips_blender.unregister()
     
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
