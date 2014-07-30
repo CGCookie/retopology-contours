@@ -230,6 +230,21 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
             d = self.sketch_brush.pxl_rad
             blf.position(0, self.sketch_curpos[0] - txt_width/2, self.sketch_curpos[1] + d + txt_height, 0)
             blf.draw(0, info)
+        
+        if self.mode in {'scale tool','rotate tool'}:
+            contour_utilities.draw_polyline_from_points(context, [self.action_center, self.mode_pos], (0,0,0,0.5), 1, "GL_LINE_STIPPLE")
+        
+        bgl.glLineWidth(1)
+        
+        if self.mode != 'brush scale tool':
+            ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.cur_pos, self.obj, settings)
+            hit_p3d,hit_norm,hit_idx = hit
+            if hit_idx != -1:
+                mx = self.obj.matrix_world
+                hit_p3d = mx * hit_p3d
+                draw_circle(context, hit_p3d, hit_norm.normalized(), self.stroke_radius_pressure, (1,1,1,.5))
+        
+        self.sketch_brush.draw(context)
     
     def draw_callback_debug(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
