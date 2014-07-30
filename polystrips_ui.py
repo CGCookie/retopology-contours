@@ -813,8 +813,10 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
                 return ''
             
             if eventd['press'] == 'G':
-                self.ready_tool(eventd, self.grab_tool_gedge)
-                return 'grab tool'
+                if not self.sel_gedge.is_zippered():
+                    self.ready_tool(eventd, self.grab_tool_gedge)
+                    return 'grab tool'
+                return ''
             
             if eventd['press'] == 'A':
                 self.sel_gvert = self.sel_gedge.gvert0
