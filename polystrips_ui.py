@@ -243,8 +243,11 @@ class PolystripsUI:
         
         bgl.glLineWidth(1)
         
-        if self.mode != 'brush scale tool':
-            # draw the brushed oriented to surface
+        if self.mode == 'brush scale tool':
+            # scaling brush size
+            self.sketch_brush.draw(context, color=(1,1,1,.5), linewidth=1, color_size=(1,1,1,1))
+        else:
+            # draw the brush oriented to surface
             ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.cur_pos, self.obj, settings)
             hit_p3d,hit_norm,hit_idx = hit
             if hit_idx != -1:
@@ -259,8 +262,6 @@ class PolystripsUI:
                     hit_p3d = mx * hit_p3d
                     draw_circle(context, hit_p3d, hit_norm.normalized(), self.stroke_radius_pressure, (1,1,1,.5))
         
-        if self.mode == 'brush scale tool':
-            self.sketch_brush.draw(context, color=(1,1,1,.5), linewidth=1, color_size=(.8,.8,.8,.5))
     
     def draw_callback_debug(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
