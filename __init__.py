@@ -65,8 +65,7 @@ from mathutils.geometry import intersect_line_plane, intersect_point_line
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
 
-import polystrips_blender
-from polystrips_ui import PolystripsToolsAddonPreferences, CGCOOKIE_OT_retopo_polystrips_panel
+import polystrips_blender, polystrips_ui
 
 
 # Create a class that contains all location information for addons
