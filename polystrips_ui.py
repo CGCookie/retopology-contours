@@ -55,51 +55,69 @@ global contour_cache
 global contour_mesh_cache
 
 
-#TODO...find a home for this!
-def rad_press_mix(r, p, map = 3):
-    
-    if map == 0:
-        p = max(0.25,p)
-        
-    elif map == 1:
-        p = 0.25 + .75 * p
-        
-    elif map == 2:
-        p = max(0.05,p)
-    
-    elif map == 3:
-        p = .7 * (2.25*p-1)/((2.25*p-1)**2 +1)**.5 + .55
-    
-    return r*p
-
 class PolystripsUI:
-    def __init__(self):
-        pass
+    def __init__(self, context, event):
+        settings = context.user_preferences.addons[AL.FolderName].preferences
+        
+        self.mode = 'main'
+        self.mode_pos      = (0,0)
+        self.cur_pos       = (0,0)
+        self.mode_radius   = 0
+        self.action_center = (0,0)
+        self.action_radius = 0
+        self.is_navigating = False
+        self.sketch_curpos = (0,0)
+        self.sketch_pressure = 1
+        self.sketch = []
+        
+        self.post_update = True
+        
+        self.footer = ''
+        self.footer_last = ''
+        
+        self.last_matrix = None
+        
+        self._timer = context.window_manager.event_timer_add(0.1, context.window)
+        
+        self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
+        
+        self.obj = context.object
+        self.scale = self.obj.scale[0]
+        self.length_scale = get_object_length_scale(self.obj)
+        
+        self.me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
+        self.me.update()
+        self.bme = bmesh.new()
+        self.bme.from_mesh(self.me)
+        
+        #world stroke radius
+        self.stroke_radius = 0.01 * self.length_scale
+        self.stroke_radius_pressure = 0.01 * self.length_scale
+        #screen_stroke_radius
+        self.screen_stroke_radius = 20 #TODO, hood to settings
+        
+        self.sketch_brush = SketchBrush(context, 
+                                        settings, 
+                                        event.mouse_region_x, event.mouse_region_y, 
+                                        settings.quad_prev_radius, 
+                                        self.obj)
+        
+        self.sel_gedge = None                           # selected gedge
+        self.sel_gvert = None                           # selected gvert
+        self.act_gvert = None                           # active gvert (operated upon)
+        
+        self.polystrips = PolyStrips(context, self.obj)
+        
+        if self.obj.grease_pencil:
+            self.create_polystrips_from_greasepencil()
+        elif 'BezierCurve' in bpy.data.objects:
+            self.create_polystrips_from_bezier(bpy.data.objects['BezierCurve'])
+        
+        context.area.header_text_set('PolyStrips')
     
-    def get_event_details(self, context, event):
-        event_ctrl    = 'CTRL+'  if event.ctrl  else ''
-        event_shift   = 'SHIFT+' if event.shift else ''
-        event_alt     = 'ALT+'   if event.alt   else ''
-        event_ftype   = event_ctrl + event_shift + event_alt + event.type
-        
-        
-        return {
-            'context':  context,
-            'region':   context.region,
-            'r3d':      context.space_data.region_3d,
-            
-            'ctrl':     event.ctrl,
-            'shift':    event.shift,
-            'alt':      event.alt,
-            'value':    event.value,
-            'type':     event.type,
-            'ftype':    event_ftype,
-            'press':    event_ftype if event.value=='PRESS'   else None,
-            'release':  event_ftype if event.value=='RELEASE' else None,
-            
-            'mouse':    (float(event.mouse_region_x), float(event.mouse_region_y)),
-            'pressure': 1 if not hasattr(event, 'pressure') else event.pressure
-            }
+    
+    ################################
+    # draw functions
     
     def draw_callback(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences
@@ -181,7 +199,7 @@ class PolystripsUI:
                 contour_utilities.draw_3d_points(context, [p0], color, 8)
                 contour_utilities.draw_polyline_from_3dpoints(context, [p0,p1], color, 2, "GL_LINE_SMOOTH")
             else:
-                p3d = [ge.get_inner_gvert_at(gv).position for ge in gv.get_gedges_notnone()]
+                p3d = [ge.get_inner_gvert_at(gv).position for ge in gv.get_gedges_notnone() if not ge.is_zippered()]
                 contour_utilities.draw_3d_points(context, [p0] + p3d, color, 8)
                 for p1 in p3d:
                     contour_utilities.draw_polyline_from_3dpoints(context, [p0,p1], color, 2, "GL_LINE_SMOOTH")
@@ -385,6 +403,9 @@ class PolystripsUI:
         self.sketch_brush.draw(context)
     
     
+    ############################
+    # function to convert polystrips => mesh
+    
     def create_mesh(self, context):
         verts,quads = self.polystrips.create_mesh()
         bm = bmesh.new()
@@ -567,7 +588,7 @@ class PolystripsUI:
             for gv,up in self.tool_data:
                 gv.position = p+q*(up-p)
                 gv.update()
-                
+    
     def scale_brush_pixel_radius(self,command, eventd):
         if command == 'init':
             self.footer = 'Scale Brush Pixel Size'
@@ -584,9 +605,10 @@ class PolystripsUI:
         else:
             x,y = command
             self.sketch_brush.brush_pix_size_interact(x, y, precise = eventd['shift'])
-           
+    
+    
     ##############################
-    # modal functions
+    # modal state functions
     
     def modal_nav(self, eventd):
         events_numpad = {
@@ -628,7 +650,6 @@ class PolystripsUI:
         
         self.is_navigating = False
         return ''
-        
     
     def modal_main(self, eventd):
         self.footer = ''
@@ -689,20 +710,18 @@ class PolystripsUI:
         if eventd['press'] in {'LEFTMOUSE','SHIFT+LEFTMOUSE'}:                      # start sketching
             self.footer = 'Sketching'
             x,y = eventd['mouse']
-            p = eventd['pressure']
+            p   = eventd['pressure']
+            r   = eventd['mradius']
             
-            
-            r = rad_press_mix(self.stroke_radius, p)
-            #print('pressure raw: %f, radius: %f, pressure_radius %f' % (p,self.stroke_radius, r))
             self.sketch_curpos = (x,y)
+            
             if eventd['shift'] and self.sel_gvert:
+                # continue sketching from selected gvert position
                 gvx,gvy = location_3d_to_region_2d(eventd['region'], eventd['r3d'], self.sel_gvert.position)
                 self.sketch = [((gvx,gvy),self.sel_gvert.radius), ((x,y),r)]
-                
             else:
                 self.sketch = [((x,y),r)]
-
-                
+            
             self.sel_gvert = None
             self.sel_gedge = None
             return 'sketch'
@@ -905,22 +924,22 @@ class PolystripsUI:
                 
         return ''
     
-    
     def modal_sketching(self, eventd):
         #my_str = eventd['type'] + ' ' + str(round(eventd['pressure'],2)) + ' ' + str(round(self.stroke_radius_pressure,2))
         #print(my_str)
         if eventd['type'] == 'MOUSEMOVE':
             x,y = eventd['mouse']
             p = eventd['pressure']
+            r = eventd['mradius']
+            
             stroke_point = self.sketch[-1]
-
+            
             (lx, ly) = stroke_point[0]
             lr = stroke_point[1]
             self.sketch_curpos = (x,y)
             self.sketch_pressure = p
 
             ss0,ss1 = self.stroke_smoothing,1-self.stroke_smoothing
-            r = rad_press_mix(self.stroke_radius, self.sketch_pressure)
             #smooth radii
             self.stroke_radius_pressure = lr*ss0 + r*ss1
             
@@ -955,6 +974,9 @@ class PolystripsUI:
         
         return ''
     
+    
+    ##############################
+    # modal tool functions
     
     def modal_scale_tool(self, eventd):
         cx,cy = self.action_center
@@ -1045,8 +1067,11 @@ class PolystripsUI:
             return ''
         
         return ''
-        
-        
+    
+    
+    ###########################
+    # main modal function (FSM)
+    
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
@@ -1081,6 +1106,9 @@ class PolystripsUI:
         
         return {'RUNNING_MODAL'}
     
+    
+    ###########################################################
+    # functions to convert beziers and gpencils to polystrips
     
     def create_polystrips_from_bezier(self, ob_bezier):
         data  = ob_bezier.data
@@ -1124,70 +1152,50 @@ class PolystripsUI:
         #for stroke in strokes:
         #    self.polystrips.insert_gedge_from_stroke(stroke)
     
+    
+    ##########################
+    # general functions
+    
     def kill_timer(self, context):
         if not self._timer: return
         context.window_manager.event_timer_remove(self._timer)
         self._timer = None
     
-    def invoke(self, context, event):
-        settings = context.user_preferences.addons[AL.FolderName].preferences
-        #return {'CANCELLED'}
-        #return {'RUNNING_MODAL'}
+    def get_event_details(self, context, event):
+        '''
+        Construct an event dict that is *slightly* more convenient than
+        stringing together a bunch of logical conditions
+        '''
         
-        self.mode = 'main'
-        self.mode_pos      = (0,0)
-        self.cur_pos       = (0,0)
-        self.mode_radius   = 0
-        self.action_center = (0,0)
-        self.action_radius = 0
-        self.is_navigating = False
-        self.sketch_curpos = (0,0)
-        self.sketch_pressure = 1
-        self.sketch = []
+        event_ctrl    = 'CTRL+'  if event.ctrl  else ''
+        event_shift   = 'SHIFT+' if event.shift else ''
+        event_alt     = 'ALT+'   if event.alt   else ''
+        event_ftype   = event_ctrl + event_shift + event_alt + event.type
         
-        self.post_update = True
+        event_pressure = 1 if not hasattr(event, 'pressure') else event.pressure
         
-        self.footer = ''
-        self.footer_last = ''
+        def pressure_to_radius(r, p, map = 3):
+            if   map == 0:  p = max(0.25,p)
+            elif map == 1:  p = 0.25 + .75 * p
+            elif map == 2:  p = max(0.05,p)
+            elif map == 3:  p = .7 * (2.25*p-1)/((2.25*p-1)**2 +1)**.5 + .55
+            return r*p
         
-        self.last_matrix = None
-        
-        self._timer = context.window_manager.event_timer_add(0.1, context.window)
-        
-        self.stroke_smoothing = 0.5          # 0: no smoothing. 1: no change
-        
-        self.obj = context.object
-        self.scale = self.obj.scale[0]
-        self.length_scale = get_object_length_scale(self.obj)
-        
-        self.me = self.obj.to_mesh(scene=context.scene, apply_modifiers=True, settings='PREVIEW')
-        self.me.update()
-        self.bme = bmesh.new()
-        self.bme.from_mesh(self.me)
-        
-        #world stroke radius
-        self.stroke_radius = 0.01 * self.length_scale
-        self.stroke_radius_pressure = 0.01 * self.length_scale
-        #screen_stroke_radius
-        self.screen_stroke_radius = 20 #TODO, hood to settings
-        
-        self.sketch_brush = SketchBrush(context, 
-                                        settings, 
-                                        event.mouse_region_x, event.mouse_region_y, 
-                                        settings.quad_prev_radius, 
-                                        self.obj)
-        
-        self.sel_gedge = None                           # selected gedge
-        self.sel_gvert = None                           # selected gvert
-        self.act_gvert = None                           # active gvert (operated upon)
-        
-        self.polystrips = PolyStrips(context, self.obj)
-        
-        if self.obj.grease_pencil:
-            self.create_polystrips_from_greasepencil()
-        elif 'BezierCurve' in bpy.data.objects:
-            self.create_polystrips_from_bezier(bpy.data.objects['BezierCurve'])
-        
-        context.area.header_text_set('PolyStrips')
-        
-        return {'RUNNING_MODAL'}
+        return {
+            'context':  context,
+            'region':   context.region,
+            'r3d':      context.space_data.region_3d,
+            
+            'ctrl':     event.ctrl,
+            'shift':    event.shift,
+            'alt':      event.alt,
+            'value':    event.value,
+            'type':     event.type,
+            'ftype':    event_ftype,
+            'press':    event_ftype if event.value=='PRESS'   else None,
+            'release':  event_ftype if event.value=='RELEASE' else None,
+            
+            'mouse':    (float(event.mouse_region_x), float(event.mouse_region_y)),
+            'pressure': event_pressure,
+            'mradius':  pressure_to_radius(self.stroke_radius, event_pressure),
+            }

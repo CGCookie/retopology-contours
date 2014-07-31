@@ -58,6 +58,25 @@ from polystrips_ui import PolystripsUI
 AL = general_utilities.AddonLocator()
 
 
+class PolystripsToolsAddonPreferences(AddonPreferences):
+    bl_idname = __name__
+    
+    theme = IntProperty(
+        name='Theme',
+        description='Color theme to use',
+        default=2,
+        min=0,
+        max=2
+        )
+    
+    def draw(self, context):
+        layout = self.layout
+        
+        row = layout.row(align=True)
+        row.prop(self, "theme")
+
+
+
 class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
     '''Retopologize Forms with polygon strips'''
     bl_category = "Retopology"
@@ -80,7 +99,7 @@ class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
             col.label(text='No 2nd Object!')
         col = box.column()
         col.operator("cgcookie.polystrips", icon="MESH_UVSPHERE")
-        
+
 
 class CGCOOKIE_OT_polystrips(bpy.types.Operator):
     bl_idname = "cgcookie.polystrips"
@@ -112,19 +131,20 @@ class CGCOOKIE_OT_polystrips(bpy.types.Operator):
         return ret
     
     def invoke(self, context, event):
-        self.ui = PolystripsUI()
-        ret = self.ui.invoke(context, event)
-        if 'RUNNING_MODAL' in ret:
-            # switch to modal
-            self._handle = bpy.types.SpaceView3D.draw_handler_add(self.draw_callback, (context, ), 'WINDOW', 'POST_PIXEL')
-            context.window_manager.modal_handler_add(self)
-        return ret
+        self.ui = PolystripsUI(context, event)
+        
+        # switch to modal
+        self._handle = bpy.types.SpaceView3D.draw_handler_add(self.draw_callback, (context, ), 'WINDOW', 'POST_PIXEL')
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
 
 
 def register():
+    bpy.utils.register_class(PolystripsToolsAddonPreferences)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_polystrips_panel)
     bpy.utils.register_class(CGCOOKIE_OT_polystrips)
 
 def unregister():
+    bpy.utils.unregister_class(PolystripsToolsAddonPreferences)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_polystrips_panel)
     bpy.utils.unregister_class(CGCOOKIE_OT_polystrips)
