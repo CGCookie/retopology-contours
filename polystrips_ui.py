@@ -60,6 +60,7 @@ class PolystripsUI:
         settings = context.user_preferences.addons[AL.FolderName].preferences
         
         self.mode = 'main'
+        
         self.mode_pos      = (0,0)
         self.cur_pos       = (0,0)
         self.mode_radius   = 0
@@ -223,30 +224,43 @@ class PolystripsUI:
             contour_utilities.draw_3d_points(context, [p0], color, 8)
         
         if self.mode == 'sketch':
+            # draw smoothing line (end of sketch to current mouse position)
             contour_utilities.draw_polyline_from_points(context, [self.sketch_curpos, self.sketch[-1][0]], (0.5,0.5,0.2,0.8), 1, "GL_LINE_SMOOTH")
+            
+            # draw sketching stroke
             contour_utilities.draw_polyline_from_points(context, [co[0] for co in self.sketch], (1,1,.5,.8), 2, "GL_LINE_SMOOTH")
             
+            # report pressure reading
             info = str(round(self.sketch_pressure,3))
-            ''' draw text '''
             txt_width, txt_height = blf.dimensions(0, info)
             d = self.sketch_brush.pxl_rad
             blf.position(0, self.sketch_curpos[0] - txt_width/2, self.sketch_curpos[1] + d + txt_height, 0)
             blf.draw(0, info)
         
         if self.mode in {'scale tool','rotate tool'}:
+            # draw a scale/rotate line from tool origin to current mouse position
             contour_utilities.draw_polyline_from_points(context, [self.action_center, self.mode_pos], (0,0,0,0.5), 1, "GL_LINE_STIPPLE")
         
         bgl.glLineWidth(1)
         
         if self.mode != 'brush scale tool':
+            # draw the brushed oriented to surface
             ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.cur_pos, self.obj, settings)
             hit_p3d,hit_norm,hit_idx = hit
             if hit_idx != -1:
                 mx = self.obj.matrix_world
                 hit_p3d = mx * hit_p3d
                 draw_circle(context, hit_p3d, hit_norm.normalized(), self.stroke_radius_pressure, (1,1,1,.5))
+            if self.mode == 'sketch':
+                ray,hit = contour_utilities.ray_cast_region2d(region, r3d, self.sketch[0][0], self.obj, settings)
+                hit_p3d,hit_norm,hit_idx = hit
+                if hit_idx != -1:
+                    mx = self.obj.matrix_world
+                    hit_p3d = mx * hit_p3d
+                    draw_circle(context, hit_p3d, hit_norm.normalized(), self.stroke_radius_pressure, (1,1,1,.5))
         
-        self.sketch_brush.draw(context)
+        if self.mode == 'brush scale tool':
+            self.sketch_brush.draw(context, color=(1,1,1,.5), linewidth=1, color_size=(.8,.8,.8,.5))
     
     def draw_callback_debug(self, context):
         settings = context.user_preferences.addons[AL.FolderName].preferences

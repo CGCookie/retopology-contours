@@ -4481,12 +4481,12 @@ class SketchBrush(object):
         
         print('not implemented')
     
-    def draw(self, context):
+    def draw(self, context, color=(.7,.1,.8,.8), linewidth=2, color_size=(.8,.8,.8,.8)):
         #TODO color and size
         
         #draw the circle
         if self.mouse_circle != []:
-            contour_utilities.draw_polyline_from_points(context, self.mouse_circle, (.7,.1,.8,.8), 2, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_points(context, self.mouse_circle, color, linewidth, "GL_LINE_SMOOTH")
         
         #draw the sample points which are raycast
         if self.world_sample_points != []:
@@ -4496,7 +4496,7 @@ class SketchBrush(object):
     
         #draw the preview circle if changing brush size
         if self.preview_circle != []:
-            contour_utilities.draw_polyline_from_points(context, self.preview_circle, (.8,.8,.8,.8), 2, "GL_LINE_SMOOTH")
+            contour_utilities.draw_polyline_from_points(context, self.preview_circle, color_size, linewidth, "GL_LINE_SMOOTH")
             
 class ContourStatePreserver(object):
     def __init__(self, operator):
