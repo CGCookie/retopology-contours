@@ -55,6 +55,48 @@ global contour_cache
 global contour_mesh_cache
 
 
+class PolystripsToolsAddonPreferences(AddonPreferences):
+    bl_idname = __name__
+    
+    theme = IntProperty(
+        name='Theme',
+        description='Color theme to use',
+        default=2,
+        min=0,
+        max=2
+        )
+    
+    def draw(self, context):
+        layout = self.layout
+        
+        row = layout.row(align=True)
+        row.prop(self, "theme")
+
+
+class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
+    '''Retopologize Forms with polygon strips'''
+    bl_category = "Retopology"
+    bl_label = "Polystrips Retopology"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
+    
+    @classmethod
+    def poll(cls, context):
+        mode = bpy.context.mode
+        obj = context.active_object
+        return (obj and obj.type == 'MESH' and mode in ('OBJECT', 'EDIT_MESH'))
+    
+    def draw(self, context):
+        layout = self.layout
+        box = layout.box()
+        
+        if 'EDIT' in context.mode and len(context.selected_objects) != 2:
+            col = box.column()
+            col.label(text='No 2nd Object!')
+        col = box.column()
+        col.operator("cgcookie.polystrips", icon="MESH_UVSPHERE")
+
+
 class PolystripsUI:
     def __init__(self, context, event):
         settings = context.user_preferences.addons[AL.FolderName].preferences
@@ -1231,3 +1273,11 @@ class PolystripsUI:
             'pressure': event_pressure,
             'mradius':  pressure_to_radius(self.stroke_radius, event_pressure),
             }
+
+def register():
+    bpy.utils.register_class(PolystripsToolsAddonPreferences)
+    bpy.utils.register_class(CGCOOKIE_OT_retopo_polystrips_panel)
+
+def unregister():
+    bpy.utils.unregister_class(PolystripsToolsAddonPreferences)
+    bpy.utils.unregister_class(CGCOOKIE_OT_retopo_polystrips_panel)

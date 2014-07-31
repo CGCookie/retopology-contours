@@ -66,6 +66,7 @@ from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, Fl
 from bpy.types import Operator, AddonPreferences
 
 import polystrips_blender
+from polystrips_ui import PolystripsToolsAddonPreferences, CGCOOKIE_OT_retopo_polystrips_panel
 
 
 # Create a class that contains all location information for addons
@@ -2953,6 +2954,7 @@ def register():
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_menu)
     
     polystrips_blender.register()
+    polystrips_ui.register()
     
     # Create the addon hotkeys
     kc = bpy.context.window_manager.keyconfigs.addon
@@ -2970,7 +2972,8 @@ def unregister():
     clear_mesh_cache()
     
     polystrips_blender.unregister()
-    
+    polystrips_ui.unregister()
+
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_panel)
