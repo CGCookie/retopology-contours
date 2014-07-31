@@ -804,8 +804,9 @@ class PolystripsUI:
                     return ''
                 pt = pts[0]
                 t,d = self.sel_gedge.get_closest_point(pt)
-                self.polystrips.split_gedge_at_t(self.sel_gedge, t)
+                _,_,gv = self.polystrips.split_gedge_at_t(self.sel_gedge, t)
                 self.sel_gedge = None
+                self.sel_gvert = gv
             
             if eventd['press'] == 'U':
                 self.sel_gedge.gvert0.update_gedges()
@@ -835,7 +836,6 @@ class PolystripsUI:
                 x,y = eventd['mouse']
                 pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
                 if not pts:
-                    self.sel_gvert,self.sel_gedge = None,None
                     return ''
                 pt = pts[0]
                 for ge in self.polystrips.gedges:
@@ -863,6 +863,23 @@ class PolystripsUI:
         # selected gvert commands
         
         if self.sel_gvert:
+            
+            if eventd['press'] == 'K':
+                if not self.sel_gvert.is_endpoint():
+                    print('Selected GVert must be endpoint (exactly one GEdge)')
+                    return ''
+                x,y = eventd['mouse']
+                pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+                if not pts:
+                    return ''
+                pt = pts[0]
+                for ge in self.polystrips.gedges:
+                    if not ge.is_picked(pt): continue
+                    
+                    t,d = ge.get_closest_point(pt)
+                    self.polystrips.split_gedge_at_t(ge, t, connect_gvert=self.sel_gvert)
+                    return ''
+                return ''
             
             if eventd['press'] == 'X':
                 self.polystrips.disconnect_gvert(self.sel_gvert)

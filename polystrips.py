@@ -983,7 +983,7 @@ class PolyStrips(object):
         for ge in self.gedges:
             ge.update_visibility(r3d)
     
-    def split_gedge_at_t(self, gedge, t):
+    def split_gedge_at_t(self, gedge, t, connect_gvert=None):
         if gedge.zip_to_gedge or gedge.zip_attached: return
         
         p0,p1,p2,p3 = gedge.get_positions()
@@ -991,7 +991,14 @@ class PolyStrips(object):
         cb0,cb1 = cubic_bezier_split(p0,p1,p2,p3, t, self.length_scale)
         rm = cubic_bezier_blend_t(r0,r1,r2,r3, t)
         
-        gv_split = self.create_gvert(cb0[3], radius=rm)
+        if connect_gvert:
+            gv_split = connect_gvert
+            trans = cb0[3] - gv_split.position
+            for ge in gv_split.get_gedges_notnone():
+                ge.get_inner_gvert_at(gv_split).position += trans
+            gv_split.position += trans
+        else:
+            gv_split = self.create_gvert(cb0[3], radius=rm)
         
         gv0_0 = gedge.gvert0
         gv0_1 = self.create_gvert(cb0[1], radius=rm)
@@ -1012,7 +1019,7 @@ class PolyStrips(object):
         gv_split.update()
         gv_split.update_gedges()
         
-        return (ge0,ge1)
+        return (ge0,ge1,gv_split)
     
     def insert_gedge_from_stroke(self, stroke, only_ends, sgv0=None, sgv3=None, depth=0):
         '''
