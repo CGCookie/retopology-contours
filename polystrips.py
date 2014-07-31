@@ -76,7 +76,10 @@ class GVert:
         
         self.update()
     
-    def clone(self):
+    def clone_detached(self):
+        '''
+        creates detached clone of gvert (without gedges)
+        '''
         gv = GVert(self.obj, self.length_scale, Vector(self.position), self.radius, Vector(self.normal), Vector(self.tangent_x), Vector(self.tangent_y))
         gv.snap_pos = Vector(self.snap_pos)
         gv.snap_norm = Vector(self.snap_norm)
@@ -1485,15 +1488,49 @@ class PolyStrips(object):
         return (verts,quads)
     
     def rip_gvert(self, gvert):
+        '''
+        rips all connected gedges at gvert (duplicates given gvert)
+        '''
         if gvert.is_unconnected(): return
         l_gedges = gvert.get_gedges_notnone()
         for ge in l_gedges:
-            ngv = gvert.clone()
+            ngv = gvert.clone_detached()
             l_gv = [ngv if gv==gvert else gv for gv in ge.gverts()]
             self.disconnect_gedge(ge)
             self.create_gedge(*l_gv)
             self.gverts += [ngv]
+    
+    def rip_gedge(self, gedge, at_gvert=None):
+        '''
+        rips gedge at both ends or at given gvert (if specified)
+        '''
         
+        if at_gvert:
+            # detach gedge at the specified at_gvert
+            assert gedge.gvert0 == at_gvert or gedge.gvert3 == at_gvert
+            ngv = at_gvert.clone_detached()
+            l_gv = [ngv if gv==at_gvert else gv for gv in gedge.gverts()]
+            self.disconnect_gedge(gedge)
+            self.create_gedge(*l_gv)
+            self.gverts += [ngv]
+            return ngv
+        
+        # detach gedge at both ends
+        ngv0 = gedge.gvert0.clone_detached()
+        ngv3 = gedge.gvert3.clone_detached()
+        l_gv = [ngv0 if gv==gedge.gvert0 else ngv3 if gv==gedge.gvert3 else gv for gv in gedge.gverts()]
+        self.disconnect_gedge(gedge)
+        nge = self.create_gedge(*l_gv)
+        self.gverts += [ngv0,ngv3]
+        return nge
+    
+    def merge_gverts(self, gvert0, gvert1):
+        for ge in gvert1.get_gedges_notnone():
+            l_gv = [gvert0 if gv==gvert1 else gv for gv in ge.gverts()]
+            self.disconnect_gedge(ge)
+            self.create_gedge(*l_gv)
+        self.gverts = [gv for gv in self.gverts if gv!=gvert1]
+        gvert0.update_gedges()
 
 
 
