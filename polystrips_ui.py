@@ -854,9 +854,15 @@ class PolystripsUI:
             if eventd['press'] == 'A':
                 self.sel_gvert = self.sel_gedge.gvert0
                 self.sel_gedge = None
+                return ''
             if eventd['press'] == 'B':
                 self.sel_gvert = self.sel_gedge.gvert3
                 self.sel_gedge = None
+                return ''
+            
+            if eventd['press'] == 'CTRL+R' and not self.sel_gedge.is_zippered():
+                self.sel_gedge = self.polystrips.rip_gedge(self.sel_gedge)
+                return ''
         
         
         ###################################
@@ -932,9 +938,35 @@ class PolystripsUI:
                 return ''
             
             if eventd['press'] == 'CTRL+R':
-                self.polystrips.rip_gvert(self.sel_gvert)
-                self.sel_gvert = None
+                # self.polystrips.rip_gvert(self.sel_gvert)
+                # self.sel_gvert = None
+                # return ''
+                x,y = eventd['mouse']
+                pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+                if not pts:
+                    return ''
+                pt = pts[0]
+                for ge in self.sel_gvert.get_gedges_notnone():
+                    if not ge.is_picked(pt): continue
+                    self.sel_gvert = self.polystrips.rip_gedge(ge, at_gvert=self.sel_gvert)
+                    return ''
                 return ''
+            
+            if eventd['press'] == 'M':
+                x,y = eventd['mouse']
+                pts = general_utilities.ray_cast_path(eventd['context'], self.obj, [(x,y)])
+                if not pts:
+                    return ''
+                pt = pts[0]
+                for gv in self.polystrips.gverts:
+                    if not gv.is_picked(pt): continue
+                    if len(self.sel_gvert.get_gedges_notnone()) + len(gv.get_gedges_notnone()) > 4:
+                        print('Too many connected GEdges for merge!')
+                        continue
+                    self.polystrips.merge_gverts(self.sel_gvert, gv)
+                    return ''
+                return ''
+                
             
             if self.sel_gvert.zip_over_gedge:
                 gvthis = self.sel_gvert
