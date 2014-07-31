@@ -903,7 +903,8 @@ class PolystripsUI:
             
             if eventd['press'] == 'CTRL+R' and not self.sel_gedge.is_zippered():
                 self.sel_gedge = self.polystrips.rip_gedge(self.sel_gedge)
-                return ''
+                self.ready_tool(eventd, self.grab_tool_gedge)
+                return 'grab tool'
         
         
         ###################################
@@ -990,7 +991,8 @@ class PolystripsUI:
                 for ge in self.sel_gvert.get_gedges_notnone():
                     if not ge.is_picked(pt): continue
                     self.sel_gvert = self.polystrips.rip_gedge(ge, at_gvert=self.sel_gvert)
-                    return ''
+                    self.ready_tool(eventd, self.grab_tool_gvert_neighbors)
+                    return 'grab tool'
                 return ''
             
             if eventd['press'] == 'M':
