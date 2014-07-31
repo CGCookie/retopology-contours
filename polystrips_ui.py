@@ -76,7 +76,7 @@ class PolystripsToolsAddonPreferences(AddonPreferences):
 class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
     '''Retopologize Forms with polygon strips'''
     bl_category = "Retopology"
-    bl_label = "Polystrips Retopology"
+    bl_label = "Polystrips"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     
