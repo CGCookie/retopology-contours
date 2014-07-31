@@ -621,15 +621,16 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        
+        col = layout.column(align=True)
+        col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
+        
         box = layout.box()
-        
-        
+
         if 'EDIT' in context.mode and len(context.selected_objects) != 2:
             col = box.column()
             col.label(text='No 2nd Object!')
-        col = box.column()
-        col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
-        
+
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
         
         row = box.row()
