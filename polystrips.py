@@ -1525,12 +1525,15 @@ class PolyStrips(object):
         return nge
     
     def merge_gverts(self, gvert0, gvert1):
-        for ge in gvert1.get_gedges_notnone():
-            l_gv = [gvert0 if gv==gvert1 else gv for gv in ge.gverts()]
+        '''
+        merge gvert0 into gvert1
+        '''
+        for ge in gvert0.get_gedges_notnone():
+            l_gv = [gvert1 if gv==gvert0 else gv for gv in ge.gverts()]
             self.disconnect_gedge(ge)
             self.create_gedge(*l_gv)
-        self.gverts = [gv for gv in self.gverts if gv!=gvert1]
-        gvert0.update_gedges()
+        self.gverts = [gv for gv in self.gverts if gv!=gvert0]
+        gvert1.update_gedges()
 
 
 
