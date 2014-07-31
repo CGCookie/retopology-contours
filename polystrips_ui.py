@@ -94,7 +94,7 @@ class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
             col = box.column()
             col.label(text='No 2nd Object!')
         col = box.column()
-        col.operator("cgcookie.polystrips", icon="MESH_UVSPHERE")
+        col.operator("cgcookie.polystrips", icon="CURVE_BEZCURVE")
 
 
 class PolystripsUI:
