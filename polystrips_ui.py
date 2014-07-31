@@ -88,12 +88,11 @@ class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
     
     def draw(self, context):
         layout = self.layout
-        box = layout.box()
-        
+
+        col = layout.column(align=True)
+
         if 'EDIT' in context.mode and len(context.selected_objects) != 2:
-            col = box.column()
             col.label(text='No 2nd Object!')
-        col = box.column()
         col.operator("cgcookie.polystrips", icon="CURVE_BEZCURVE")
 
 
