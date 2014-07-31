@@ -93,7 +93,7 @@ class CGCOOKIE_OT_retopo_polystrips_panel(bpy.types.Panel):
 
         if 'EDIT' in context.mode and len(context.selected_objects) != 2:
             col.label(text='No 2nd Object!')
-        col.operator("cgcookie.polystrips", icon="CURVE_BEZCURVE")
+        col.operator("cgcookie.polystrips", icon="IPO_BEZIER")
 
 
 class PolystripsUI:
