@@ -41,6 +41,49 @@ navigation_events = {'Rotate View', 'Move View', 'Zoom View',
                      'NDOF Pan View', 'View Selected', 'Center View to Cursor'}
 
 
+def contour_default_keymap_generate():
+    km_dict = {}
+    C = bpy.context
+    wm = C.window_manager
+    #the default blender keyconfig can't be deleted except by python
+    #I think this is safe
+    keycon = wm.keyconfigs['Blender']
+    sel = C.user_preferences.inputs.select_mouse
+    act = 'LEFT' if sel == 'RIGHT' else 'RIGHT'
+    sel += 'MOUSE'
+    act += 'MOUSE'
+    
+    km_dict['action'] = act
+    km_dict['select'] = sel    
+    km_dict['scale'] = {'S'}
+    km_dict['translate'] = {'G'}
+    km_dict['rotate'] = {'R'}
+    km_dict['delete'] = {'X', 'DEL'}
+    km_dict['up count'] = {'CTRL+NUMPAD_PLUS','CTRL+WHEELUPMOUSE'}     
+    km_dict['dn count'] = {'CTRL+NUMPAD_MINUS','CTRL+WHEELDOWNMOUSE'}
+    km_dict['bridge'] = {'B'}
+    km_dict['new'] = {'N'}
+    km_dict['align'] = {'SHIFT+A', 'CRTL+A', 'ALT+A'}
+    km_dict['up shift'] = {'LEFT_ARROW'}
+    km_dict['dn shift'] = {'RIGHT_ARROW'}
+    km_dict['smooth'] = {'CTRL+S'}
+    km_dict['view cursor'] = {'C'}
+    km_dict['undo'] = {'CTRL+Z'}
+    km_dict['mode'] = {'TAB'}
+    km_dict['snap cursor'] = {'SHIFT+S'}
+ 
+    #bug, WHEELOUTMOUSE and WHEELINMOUSE used in 3dview keymap
+    #hwoever always reported as WHEELUPMOUSE/DOWNMOUSE in events
+    nav_keys = {'WHEELDOWNMOUSE','WHEELUPMOUSE'}
+
+    for kmi in keycon.keymaps['3D View'].keymap_items:
+        if kmi.name in navigation_events:     
+            nav_keys.add(kmi_details(kmi))
+                
+    km_dict['navigate'] = nav_keys
+    
+    return km_dict
+          
 def contour_keymap_generate():
     km_dict = {}
     
@@ -78,13 +121,10 @@ def contour_keymap_generate():
     keycon = wm.keyconfigs.active
     sel = C.user_preferences.inputs.select_mouse
     act = 'LEFT' if sel == 'RIGHT' else 'RIGHT'
-    
     sel += 'MOUSE'
-    act += 'MOUSE'
-    print('selection %s, action %s' % (sel, act))
-    
-    add_to_dict('action', act)
-    add_to_dict('select', sel)
+    act += 'MOUSE' 
+    add_to_dict('action', act, safety = False)
+    add_to_dict('select', sel, safety = False)
     
     #grab, scale, rotate
     for kmi in keycon.keymaps['Transform Modal Map'].keymap_items:
@@ -150,9 +190,7 @@ def contour_keymap_generate():
     add_to_dict('navigate', 'WHEELDOWNMOUSE')
     add_to_dict('navigate', 'WHEELUPMOUSE')
     
-    print('scale', km_dict['scale'])
-    print('rotate', km_dict['rotate'])  
-    print('translate', km_dict['translate'])        
+       
     return km_dict 
 def callback_register(self, context):
         #if str(bpy.app.build_revision)[2:7].lower == "unkno" or eval(str(bpy.app.build_revision)[2:7]) >= 53207:
