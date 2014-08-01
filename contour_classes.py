@@ -37,7 +37,7 @@ from general_utilities import dprint
 #from development.cgc-retopology import contour_utilities
 
 #Make the addon name and location accessible
-AL = general_utilities.AddonLocator()
+AL = general_utilities.AddonLocator(f=__file__)
 
 class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, SegmentCuts, SegmentCutSeries?
     def __init__(self, context, raw_points,

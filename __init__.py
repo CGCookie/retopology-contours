@@ -69,7 +69,7 @@ import polystrips_blender, polystrips_ui
 
 
 # Create a class that contains all location information for addons
-AL = general_utilities.AddonLocator()
+AL = general_utilities.AddonLocator(f=__file__)
 
 #a place to store stokes for later
 global contour_cache 
@@ -2953,8 +2953,8 @@ def register():
     bpy.utils.register_class(CGCOOKIE_OT_retopo_poly_sketch)
     bpy.utils.register_class(CGCOOKIE_OT_retopo_contour_menu)
     
-    polystrips_blender.register()
-    polystrips_ui.register()
+    #polystrips_blender.register()
+    #polystrips_ui.register()
     
     # Create the addon hotkeys
     kc = bpy.context.window_manager.keyconfigs.addon
@@ -2971,8 +2971,8 @@ def register():
 def unregister():
     clear_mesh_cache()
     
-    polystrips_blender.unregister()
-    polystrips_ui.unregister()
+    #polystrips_blender.unregister()
+    #polystrips_ui.unregister()
 
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
