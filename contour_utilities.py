@@ -41,10 +41,39 @@ navigation_events = {'Rotate View', 'Move View', 'Zoom View',
                      'NDOF Pan View', 'View Selected', 'Center View to Cursor'}
 
 
+def kmi_details(kmi):
+        kmi_ctrl    = 'CTRL+'  if kmi.ctrl  else ''
+        kmi_shift   = 'SHIFT+' if kmi.shift else ''
+        kmi_alt     = 'ALT+'   if kmi.alt   else ''
+        kmi_ftype   = kmi_ctrl + kmi_shift + kmi_alt + kmi.type
+        
+        return kmi_ftype
+    
 def contour_default_keymap_generate():
     km_dict = {}
     C = bpy.context
     wm = C.window_manager
+    
+    def add_to_dict(key,value, safety = True):
+        
+        if safety:
+            for k in km_dict.keys():
+                if value in km_dict[k]:
+                    print('already part of keymap dictionary %s  %s' % (key, value))
+                    return False
+                
+        if key in km_dict:
+            val = km_dict[key]
+            
+            if value not in val:
+                val.add(value)
+                return True
+            else:
+                return False
+        else:
+            km_dict[key] = set([value])
+            return True
+        
     #the default blender keyconfig can't be deleted except by python
     #I think this is safe
     keycon = wm.keyconfigs['Blender']
@@ -53,8 +82,8 @@ def contour_default_keymap_generate():
     sel += 'MOUSE'
     act += 'MOUSE'
     
-    km_dict['action'] = act
-    km_dict['select'] = sel    
+    km_dict['action'] = {act}
+    km_dict['select'] = {sel}    
     km_dict['scale'] = {'S'}
     km_dict['translate'] = {'G'}
     km_dict['rotate'] = {'R'}
@@ -73,15 +102,14 @@ def contour_default_keymap_generate():
     km_dict['snap cursor'] = {'SHIFT+S'}
  
     #bug, WHEELOUTMOUSE and WHEELINMOUSE used in 3dview keymap
-    #hwoever always reported as WHEELUPMOUSE/DOWNMOUSE in events
-    nav_keys = {'WHEELDOWNMOUSE','WHEELUPMOUSE'}
+    add_to_dict('navigate', 'WHEELUPMOUSE')
+    add_to_dict('navigate', 'WHEELDOWNMOUSE')
+    
 
     for kmi in keycon.keymaps['3D View'].keymap_items:
         if kmi.name in navigation_events:     
-            nav_keys.add(kmi_details(kmi))
-                
-    km_dict['navigate'] = nav_keys
-    
+            add_to_dict('navigate',kmi_details(kmi))
+            
     return km_dict
           
 def contour_keymap_generate():
@@ -107,14 +135,6 @@ def contour_keymap_generate():
             km_dict[key] = set([value])
             return True
     
-    def kmi_details(kmi):
-        kmi_ctrl    = 'CTRL+'  if kmi.ctrl  else ''
-        kmi_shift   = 'SHIFT+' if kmi.shift else ''
-        kmi_alt     = 'ALT+'   if kmi.alt   else ''
-        kmi_ftype   = kmi_ctrl + kmi_shift + kmi_alt + kmi.type
-        
-        return kmi_ftype
-    
     C = bpy.context
     wm = C.window_manager
     
@@ -129,12 +149,21 @@ def contour_keymap_generate():
     #grab, scale, rotate
     for kmi in keycon.keymaps['Transform Modal Map'].keymap_items:
         if kmi.propvalue == 'RESIZE':
-            if kmi.any: print('keymaps with any not supported!')
-            add_to_dict('scale', kmi_details(kmi))
+            if not add_to_dict('scale', kmi_details(kmi)):
+                print('Default Keymap, %s collide with other key' % kmi.name)
+                km_dict = contour_default_keymap_generate()
+                return km_dict
         if kmi.propvalue == 'ROTATE':
-            add_to_dict('rotate', kmi_details(kmi))
+            if not add_to_dict('rotate', kmi_details(kmi)):
+                print('Default Keymap, %s collide with other key' % kmi.name)
+                km_dict = contour_default_keymap_generate()
+                return km_dict
+                            
         if kmi.propvalue == 'TRANSLATE':
-            add_to_dict('translate', kmi_details(kmi))
+            if not add_to_dict('translate', kmi_details(kmi)):
+                print('Default Keymap, %s collide with other key' % kmi.name)
+                km_dict = contour_default_keymap_generate()
+                return km_dict
     
     #protected non dynamic keys
     add_to_dict('up count', 'CTRL+NUMPAD_PLUS')
@@ -167,16 +196,25 @@ def contour_keymap_generate():
     #undo
     for kmi in keycon.keymaps['Screen'].keymap_items:
         if kmi.idname == 'ed.undo':
-            add_to_dict('undo', kmi_details(kmi))
+            if not add_to_dict('undo', kmi_details(kmi)):
+                print('Default Keymap, %s collide with other key' % kmi.name)
+                km_dict = contour_default_keymap_generate()
+                return km_dict
     #delete
     for kmi in keycon.keymaps['Object Mode'].keymap_items:
         if kmi.idname == 'object.delete':
-            add_to_dict('delete', kmi_details(kmi))
+            if not add_to_dict('delete', kmi_details(kmi)):
+                print('Default Keymap, %s collide with other key' % kmi.name)
+                km_dict = contour_default_keymap_generate()
+                return km_dict
     
     #snap cursor selected
     for kmi in keycon.keymaps['3D View'].keymap_items:
         if kmi.idname == 'wm.call_menu' and kmi.properties.name == 'VIEW3D_MT_snap':
-            add_to_dict('snap cursor', kmi_details(kmi))
+            if not add_to_dict('snap cursor', kmi_details(kmi)):
+                print('Default Keymap, %s collide with other key' % kmi.name)
+                km_dict = contour_default_keymap_generate()
+                return km_dict
     
     #navigation keys last, to avoid conflicts eg, Ctl + Wheel
     #center view on cursor is included in nav
@@ -184,8 +222,8 @@ def contour_keymap_generate():
         if kmi.name in navigation_events:
                 
             if not add_to_dict('navigate', kmi_details(kmi)):
-                print(kmi.name)
-    
+                print('Left out %s navigation, collision with other key' % kmi.name)
+                
     #bug, WHEELOUTMOUSE and WHEELINMOUSE used in 3dview keymaap
     add_to_dict('navigate', 'WHEELDOWNMOUSE')
     add_to_dict('navigate', 'WHEELUPMOUSE')

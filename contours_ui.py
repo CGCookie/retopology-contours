@@ -410,7 +410,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         if now - self.msg_start_time > self.msg_duration:
             self.kill_timer(context)
             
-            if self.mode == 'mail guide':
+            if self.mode in {'main guide', 'sketch'}:
                 context.area.header_text_set(text = self.guide_msg)
             else:
                 context.area.header_text_set(text = self.loop_msg)
@@ -805,7 +805,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         context.area.header_text_set(text = self.guide_msg)    
     
     def mode_set_loop(self):
-        for path in self.paths:
+        for path in self.cut_paths:
             for cut in path.cuts:
                 cut.deselect(self.settings)
         if self.sel_path and len(self.sel_path.cuts):
@@ -822,7 +822,6 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                                 
         self.sel_path.connect_cuts_to_make_mesh(self.original_form)
         self.sel_path.update_visibility(context, self.original_form)
-        self.temporary_message_start(context, self.mode +': Shift ' + str(round(self.sel_path.cuts[0].shift,3)))
         
     def segment_n_loops(self,context, path, n):
         if n < 3: return
@@ -906,8 +905,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                 path.connect_cuts_to_make_mesh(self.original_form)
                 path.update_backbone(context, self.original_form, self.bme, self.sel_loop, insert = False)
                 path.update_visibility(context, self.original_form)
-        
-        self.temporary_message_start(context, self.mode +': Shift ' + str(self.sel_loop.shift))
+
                
     def loop_nverts_change(self, context, eventd, n):
         if n < 3:
@@ -936,10 +934,10 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                     path.connect_cuts_to_make_mesh(self.original_form)
                     path.update_visibility(context, self.original_form)
                     
-                    self.temporary_message_start(context, self.mode +': RING SEGMENTS %i' %path.ring_segments)
+                    self.temporary_message_start(context, 'RING SEGMENTS %i' %path.ring_segments)
                     self.msg_start_time = time.time()
                 else:
-                    self.temporary_message_start(context, self.mode +': RING SEGMENTS: Can not be changed.  Path Locked')
+                    self.temporary_message_start(context, 'RING SEGMENTS: Can not be changed.  Path Locked')
         
     def loop_align(self,context, eventd, undo = True):
         
@@ -1069,7 +1067,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         events_nav = self.keymap['navigate']
         handle_nav = False
         handle_nav |= eventd['ftype'] in events_nav
-    
+        
         if handle_nav: return 'nav'
             
         return ''
@@ -1100,6 +1098,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         if eventd['press'] in self.keymap['undo']:
             print('undo it!')
             self.undo_action()
+            self.temporary_message_start(eventd['context'], "UNDO: %i steps in undo_cache" % len(contour_undo_cache))
             return ''
         
         if eventd['press'] in self.keymap['mode']:
@@ -1141,7 +1140,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             if eventd['press'] in self.keymap['delete']:
                 
                 self.loops_delete(eventd['context'], [self.sel_loop])
-                self.temporary_message_start(eventd['context'], self.mode + ': DELETE')
+                self.temporary_message_start(eventd['context'], 'DELETE')
                 return ''
             
 
@@ -1157,15 +1156,17 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
             if eventd['press'] in self.keymap['align']:
                 self.loop_align(eventd['context'], eventd)
-                self.temporary_message_start(eventd['context'], 'Align Loop')
+                self.temporary_message_start(eventd['context'], 'ALIGN LOOP')
                 return ''
             
             if eventd['press'] in self.keymap['up shift']:
                 self.loop_shift(eventd['context'], eventd, up = True)
+                self.temporary_message_start(eventd['context'], 'SHIFT: ' + str(self.sel_loop.shift))
                 return ''
             
             if eventd['press'] in self.keymap['dn shift']:
                 self.loop_shift(eventd['context'], eventd, up = False)
+                self.temporary_message_start(eventd['context'], 'SHIFT: ' + str(self.sel_loop.shift))
                 return ''
             
             if eventd['press'] in self.keymap['up count']:
@@ -1182,10 +1183,12 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
             if eventd['press'] in self.keymap['snap cursor']:
                 eventd['context'].scene.cursor_location = self.sel_loop.plane_com
+                self.temporary_message_start(eventd['context'], "Cursor to loop")
                 return ''
             
             if eventd['press'] in self.keymap['view cursor']:
                 bpy.ops.view3d.view_center_cursor()
+                self.temporary_message_start(eventd['context'], "View to cursor")
                 return ''
                 
         return ''
@@ -1214,9 +1217,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
          
          
         if eventd['press'] in self.keymap['mode']:
-            
             self.mode_set_loop()
-
             return 'main loop'
          
         if eventd['press'] in self.keymap['new']:
@@ -1225,7 +1226,9 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         
         if eventd['press'] in self.keymap['undo']:
             self.undo_action()
+            self.temporary_message_start(eventd['context'], "UNDO: %i steps remain in undo_cache" % len(contour_undo_cache))
             return ''
+        
         #####################################
         # general, non modal commands
          
@@ -1264,10 +1267,12 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
             
             if eventd['press'] in self.keymap['up shift']:
                 self.segment_shift(eventd['context'], up = True)
+                self.temporary_message_start(eventd['context'], 'SHIFT: ' + str(round(self.sel_path.cuts[0].shift,3)))
                 return ''
             
             if eventd['press'] in self.keymap['dn shift']:
                 self.segment_shift(eventd['context'], up = False)
+                self.temporary_message_start(eventd['context'], 'SHIFT: ' + str(round(self.sel_path.cuts[0].shift,3)))
                 return 
             
             if eventd['press'] in self.keymap['up count']:
@@ -1276,7 +1281,7 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                     self.temporary_message_start(eventd['context'], 'PATH SEGMENTS: Path is locked, cannot adjust segments')
                 else:
                     self.segment_n_loops(eventd['context'], self.sel_path, n)    
-                
+                    self.temporary_message_start(eventd['context'], 'PATH SEGMENTS: %i' % n)
                 return ''
             
             if eventd['press'] in self.keymap['dn count']:
@@ -1287,17 +1292,18 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
                     self.temporary_message_start(eventd['context'], 'PATH SEGMENTS: You want more segments than that!')
                 else:
                     self.segment_n_loops(eventd['context'], self.sel_path, n)    
-                
+                    self.temporary_message_start(eventd['context'], 'PATH SEGMENTS: %i' % n)
                 return ''
             
             if eventd['press'] in self.keymap['smooth']:
                 
                 self.segment_smooth(eventd['context'], self.settings)
-                
+                #messaging handled in operator
                 return ''
             
             if eventd['press'] in self.keymap['snap cursor']:
                 self.cursor_to_segment(eventd['context'])
+                self.temporary_message_start(eventd['context'], 'Cursor to Segment')
                 return ''
              
              
@@ -1489,8 +1495,8 @@ class CGCOOKIE_OT_contours_rf(bpy.types.Operator):
         self.hot_key = None  #Keep track of which hotkey was pressed
         self.draw = False  #Being in the state of drawing a guide stroke
         
-        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, N: Force New Segment, TAB: toggle Guide mode'
-        self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments, TAB: toggle Loop mode'
+        self.loop_msg = 'LOOP MODE:  Sel, Trans, Rotate follow Blender, LMB: Cut, CTRL+WHEEL, +/-:increase/decrease segments, CTRL/SHIFT+A: Align, X: Delete, SHFT+S: Cursor to Stroke, C: View to Cursor, N: Force New Segment, TAB: toggle Guide mode'
+        self.guide_msg = 'GUIDE MODE: Sel follows Blender, LMB to Sketch, CTRL+S: smooth, CTRL+WHEEL, +/-: increase/decrease segments, <-,-> to Shift,TAB: toggle Loop mode'
         context.area.header_text_set(self.loop_msg)
         
         is_valid = is_object_valid(self.original_form)
