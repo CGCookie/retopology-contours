@@ -179,9 +179,8 @@ def contour_keymap_generate():
     add_to_dict('dn shift', 'RIGHT_ARROW')
     add_to_dict('smooth','CTRL+S')
     add_to_dict('view cursor', 'C')
-    add_to_dict('undo', 'CTRL+Z')
     add_to_dict('mode', 'TAB')
-    
+    #add_to_dict('undo', 'CTRL+Z') #force a collision to test default
     
     #shift  there are too many of tehse, including ALT+WHEELUPMOUSE
     #for kmi in keycon.keymaps['Frames'].keymap_items:
