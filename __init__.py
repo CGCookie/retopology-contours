@@ -224,12 +224,30 @@ class ContourToolsAddonPreferences(AddonPreferences):
             max=10,
             )
     
-    stroke_rgb = FloatVectorProperty(name="Stroke Color", description="Color of Strokes", min=0, max=1, default=(0,0.2,1), subtype="COLOR")
-    handle_rgb = FloatVectorProperty(name="Handle Color", description="Color of Stroke Handles", min=0, max=1, default=(0.6,0,0), subtype="COLOR")
-    vert_rgb = FloatVectorProperty(name="Vertex Color", description="Color of Verts", min=0, max=1, default=(0,0.2,1), subtype="COLOR")
-    geom_rgb = FloatVectorProperty(name="Geometry Color", description="Color For Edges", min=0, max=1, default=(0,1, .2), subtype="COLOR")
-    actv_rgb = FloatVectorProperty(name="Active Color", description="Active Cut Line", min=0, max=1, default=(0.6,.2,.8), subtype="COLOR")
+    theme = EnumProperty(
+        items=[
+            ('blue', 'Blue', 'Blue color scheme'),
+            ('green', 'Green', 'Green color scheme'),
+            ('orange', 'Orange', 'Orange color scheme'),
+            ],
+        name='theme',
+        default='blue'
+        )
     
+    def rgba_to_float(r, g, b, a):
+        return (r/255.0, g/255.0, b/255.0, a/255.0)
+
+    theme_colors_active = {
+        'blue': rgba_to_float(105, 246, 113, 255),
+        'green': rgba_to_float(102, 165, 240, 255),
+        'orange': rgba_to_float(102, 165, 240, 255)
+    }
+    theme_colors_mesh = {
+        'blue': rgba_to_float(102, 165, 240, 255),
+        'green': rgba_to_float(105, 246, 113, 255),
+        'orange': rgba_to_float(254, 145, 0, 255)
+    }
+
     raw_vert_size = IntProperty(
             name="Raw Vertex Size",
             default=1,
@@ -467,20 +485,14 @@ class ContourToolsAddonPreferences(AddonPreferences):
         row.prop(self, "use_x_ray", "Enable X-Ray at Mesh Creation")
         
 
+        # Theme testing
+        row = layout.row(align=True)
+        row.prop(self, "theme", "Theme")
+        
         # Visualization Settings
         box = layout.box().column(align=False)
         row = box.row()
-        row.label(text="Stroke And Loop Settings")
-
-        row = box.row()
-        row.prop(self, "stroke_rgb", text="Stroke Color")
-        row.prop(self, "handle_rgb", text="Handle Color")
-        row.prop(self, "actv_rgb", text="Hover Color")
-        
-        row = box.row()
-        row.prop(self, "vert_rgb", text="Vertex Color")
-        row.prop(self, "geom_rgb", text="Edge Color")
-        
+        row.label(text="Stroke And Loop Settings")        
 
         row = box.row(align=False)
         row.prop(self, "handle_size", text="Handle Size")
@@ -663,12 +675,6 @@ class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
 def retopo_draw_callback(self,context):
     
     settings = context.user_preferences.addons[AL.FolderName].preferences
-
-    stroke_color = settings.stroke_rgb
-    handle_color = settings.handle_rgb
-    hover_color = settings.actv_rgb
-    g_color = settings.geom_rgb
-    v_color = settings.vert_rgb
 
     if (self.post_update or self.modal_state == 'NAVIGATING') and context.space_data.use_occlude_geometry:
         for path in self.cut_paths:
@@ -927,16 +933,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     
     def click_new_cut(self,context, settings, event):
 
-        s_color = (settings.stroke_rgb[0],settings.stroke_rgb[1],settings.stroke_rgb[2],1)
-        h_color = (settings.handle_rgb[0],settings.handle_rgb[1],settings.handle_rgb[2],1)
-        g_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
-        v_color = (settings.vert_rgb[0],settings.vert_rgb[1],settings.vert_rgb[2],1)
-
-        new_cut = ContourCutLine(event.mouse_region_x, event.mouse_region_y,
-                                             stroke_color = s_color,
-                                             handle_color = h_color,
-                                             geom_color = g_color,
-                                             vert_color = v_color)
+        new_cut = ContourCutLine(event.mouse_region_x, event.mouse_region_y)
         
         
         for path in self.cut_paths:
@@ -976,7 +973,6 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.selected.update_screen_coords(context)
         self.selected.head = None
         self.selected.tail = None
-        self.selected.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
         
         if not len(self.selected.verts) or not len(self.selected.verts_simple):
             self.selected = None

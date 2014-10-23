@@ -50,6 +50,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.seg_lock = False
         self.ring_lock = False
         self.select = True
+        self.is_highlighted = False
         self.desc = 'CUT SERIES'
         self.cuts = []
         
@@ -90,8 +91,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         self.feature_factor = feature_factor
         
         ###DRAWING SETTINGS###
-        self.geom_color =  (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
-        #self.geom_color =  (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
         self.line_thickness = settings.line_thick + 1
     
     def do_select(self,settings):
@@ -101,14 +100,14 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     def deselect(self,settings):
         self.select = False
         self.unhighlight(settings)
-         
+    
     def highlight(self,settings):
-        #self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        self.is_highlighted = True
         self.line_thickness = settings.line_thick + 1
-        
+    
     def unhighlight(self,settings):
-        self.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1)
-        self.line_thickness = settings.line_thick
+        self.is_highlighted = False
+        self.line_thickness = settings.line_thick      
                
     def ray_cast_path(self,context, ob):
         region = context.region
@@ -273,15 +272,6 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
     def cuts_on_path(self,context,ob,bme):
         
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        gc = settings.geom_rgb
-        lc = settings.stroke_rgb
-        vc = settings.vert_rgb
-        hc = settings.handle_rgb
-                
-        g_color = (gc[0],gc[1],gc[2],1)
-        l_color = (lc[0],lc[1],lc[2],1)
-        v_color = (vc[0],vc[1],vc[2],1)
-        h_color = (hc[0],hc[1],hc[2],1)
         
         self.cuts = []
         
@@ -302,7 +292,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
             if i == len(self.cut_points) -1 and self.existing_tail:
                 continue
             
-            cut = ContourCutLine(0, 0, line_width = settings.line_thick, stroke_color = l_color, handle_color = h_color, geom_color = g_color, vert_color = v_color)
+            cut = ContourCutLine(0, 0, line_width = settings.line_thick)
             cut.seed_face_index = self.cut_point_seeds[i]
             cut.plane_pt = loc
             
@@ -1394,6 +1384,9 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         
         settings = context.user_preferences.addons[AL.FolderName].preferences
 
+        stroke_color = settings.theme_colors_active[settings.theme]
+        mesh_color = settings.theme_colors_mesh[settings.theme]
+
         #TODO:  Debug if None in self.world path.  How could this happen?       
         if path and self.world_path != [] and None not in self.world_path:
             
@@ -1423,7 +1416,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 
                 for follow in self.follow_lines:
                     contour_utilities.draw_polyline_from_3dpoints(context, follow, 
-                                                          self.geom_color, 
+                                                          mesh_color, 
                                                           self.line_thickness,"GL_LINE_STIPPLE")
 
             else:
@@ -1432,7 +1425,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                     for n in range(0,len(line)-1):
                         if self.follow_vis[i][n] and self.follow_vis[i][n+1]:
                             contour_utilities.draw_polyline_from_3dpoints(context, [line[n],line[n+1]], 
-                                                          self.geom_color, 
+                                                          mesh_color, 
                                                           self.line_thickness,"GL_LINE_STIPPLE")
                 
 class SketchEndPoint(object):
@@ -1514,15 +1507,9 @@ class ExistingVertList(object):
         
         '''
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        gc = settings.geom_rgb
-        lc = settings.stroke_rgb
-        vc = settings.vert_rgb
-        hc = settings.handle_rgb
                 
-        self.geom_color = (gc[0],gc[1],gc[2],1)
-        self.line_color = (lc[0],lc[1],lc[2],1)
-        self.vert_color = (vc[0],vc[1],vc[2],1)
-        self.h_color = (hc[0],hc[1],hc[2],1)
+        stroke_color = settings.theme_colors_active[settings.theme]
+        mesh_color = settings.theme_colors_mesh[settings.theme]
         
         self.desc = 'EXISTING_VERT_LIST'
         
@@ -1736,12 +1723,12 @@ class ExistingVertList(object):
                         
             if False not in self.verts_simple_visible:
                     contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
-                    contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
+                    contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, mesh_color,  settings.line_thick, 'GL_LINE_STIPPLE')
                     
                     if 0 in self.eds_simple[-1]:
                         contour_utilities.draw_polyline_from_3dpoints(context, 
                                                                       [self.verts_simple[-1],self.verts_simple[0]], 
-                                                                      self.geom_color,  
+                                                                      mesh_color,  
                                                                       settings.line_thick, 
                                                                       'GL_LINE_STIPPLE')
      
@@ -1751,12 +1738,12 @@ class ExistingVertList(object):
                         contour_utilities.draw_3d_points(context, [v], self.vert_color, settings.vert_size)
                             
                         if i < len(self.verts_simple) - 1 and self.verts_simple_visible[i+1]:
-                            contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], self.geom_color, settings.line_thick, 'GL_LINE_STIPPLE')
+                            contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], mesh_color, settings.line_thick, 'GL_LINE_STIPPLE')
             
                 if 0 in self.eds_simple[-1] and self.verts_simple_visible[0] and self.verts_simple_visible[-1]:
                         contour_utilities.draw_polyline_from_3dpoints(context, 
                                                                       [self.verts_simple[-1],self.verts_simple[0]], 
-                                                                      self.geom_color,  
+                                                                      mesh_color,  
                                                                       settings.line_thick, 
                                                                       'GL_LINE_STIPPLE')
             
@@ -3030,16 +3017,13 @@ class PolySkecthLine(object):
             
 class ContourCutLine(object): 
     
-    def __init__(self, x, y, line_width = 3,
-                 stroke_color = (0,0,1,1), 
-                 handle_color = (1,0,0,1),
-                 geom_color = (0,1,0,1),
-                 vert_color = (0,.2,1,1)):
+    def __init__(self, x, y, line_width = 3):
         
         self.desc = "CUT_LINE"
         self.select = False
-        self.head = ContourControlPoint(self,x,y, color = handle_color)
-        self.tail = ContourControlPoint(self,x,y, color = handle_color)
+        self.is_highlighted = False
+        self.head = ContourControlPoint(self,x,y)
+        self.tail = ContourControlPoint(self,x,y)
         #self.plane_tan = ContourControlPoint(self,x,y, color = (.8,.8,.8,1))
         #self.view_dir = view_dir
         self.target = None
@@ -3078,23 +3062,18 @@ class ContourCutLine(object):
         #variable used to shift loop beginning on high res loop
         self.shift = 0
         self.int_shift = 0
-        
-        #visual stuff
-        self.line_width = line_width
-        self.stroke_color = stroke_color
-        self.geom_color = geom_color
-        self.vert_color = vert_color
+
         
     def update_screen_coords(self,context):
         self.verts_screen = [location_3d_to_region_2d(context.region, context.space_data.region_3d, loc) for loc in self.verts]
         self.verts_simple_screen = [location_3d_to_region_2d(context.region, context.space_data.region_3d, loc) for loc in self.verts_simple]
     
     def highlight(self,settings):
-        self.geom_color = (settings.actv_rgb[0],settings.actv_rgb[1],settings.actv_rgb[2],1)
+        self.is_highlighted = True
         #adjust thickness?
     
     def unhighlight(self,settings):
-        self.geom_color = (settings.geom_rgb[0],settings.geom_rgb[1],settings.geom_rgb[2],1) 
+        self.is_highlighted = False 
                 
     def do_select(self,settings):
         self.select = True
@@ -3121,7 +3100,10 @@ class ContourCutLine(object):
         '''
         setings are the addon preferences for contour tools
         '''
-        
+        stroke_color = settings.theme_colors_active[settings.theme]
+        mesh_color = settings.theme_colors_mesh[settings.theme]
+
+
         debug = settings.debug
         #settings = context.user_preferences.addons[AL.FolderName].preferences
         
@@ -3170,10 +3152,10 @@ class ContourCutLine(object):
         if self.head:
             points = [(self.head.x,self.head.y),(self.tail.x,self.tail.y)]
             
-            contour_utilities.draw_polyline_from_points(context, points, self.stroke_color, settings.stroke_thick, "GL_LINE_STIPPLE")
+            contour_utilities.draw_polyline_from_points(context, points, stroke_color, settings.stroke_thick, "GL_LINE_STIPPLE")
         
             #draw the two handles
-            contour_utilities.draw_points(context, points, self.head.color, settings.handle_size)
+            contour_utilities.draw_points(context, points, stroke_color, settings.handle_size)
         
         #draw the current plane point and the handle to change plane orientation
         #if self.plane_pt and settings.draw_widget:
@@ -3189,39 +3171,45 @@ class ContourCutLine(object):
             
             if three_dimensional:
                 
-                contour_utilities.draw_3d_points(context, self.verts, self.vert_color, settings.raw_vert_size)
+                contour_utilities.draw_3d_points(context, self.verts, mesh_color, settings.raw_vert_size)
 
         
         
         
         
         if False not in self.verts_simple_visible:
-                contour_utilities.draw_3d_points(context, self.verts_simple, self.vert_color, 3)
-                contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, self.geom_color,  settings.line_thick, 'GL_LINE_STIPPLE')
-                
+                contour_utilities.draw_3d_points(context, self.verts_simple, mesh_color, 3)
+                if self.is_highlighted:
+                    contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, stroke_color,  settings.line_thick*2, 'GL_LINE_STIPPLE')
+                else: 
+                    contour_utilities.draw_polyline_from_3dpoints(context, self.verts_simple, mesh_color,  settings.line_thick, 'GL_LINE_STIPPLE')
+
+
                 if self.edges != [] and 0 in self.edges[-1]:
                     contour_utilities.draw_polyline_from_3dpoints(context, 
                                                                   [self.verts_simple[-1],self.verts_simple[0]], 
-                                                                  self.geom_color,  
+                                                                  mesh_color,  
                                                                   settings.line_thick, 
                                                                   'GL_LINE_STIPPLE')
             
         else:
             for i, v in enumerate(self.verts_simple):
                 if self.verts_simple_visible[i]:
-                    contour_utilities.draw_3d_points(context, [v], self.vert_color, settings.vert_size)
+                    contour_utilities.draw_3d_points(context, [v], mesh_color, settings.vert_size)
                         
                     if i < len(self.verts_simple) - 1 and self.verts_simple_visible[i+1]:
-                        contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], self.geom_color, settings.line_thick, 'GL_LINE_STIPPLE')
-        
+                        if self.is_highlighted:
+                            contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], stroke_color, settings.line_thick*2, 'GL_LINE_STIPPLE')
+                        else:
+                            contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], mesh_color, settings.line_thick, 'GL_LINE_STIPPLE')
+
             if self.edges != [] and 0 in self.edges[-1] and self.verts_simple_visible[0] and self.verts_simple_visible[-1]:
-                    contour_utilities.draw_polyline_from_3dpoints(context, 
-                                                                  [self.verts_simple[-1],self.verts_simple[0]], 
-                                                                  self.geom_color,  
-                                                                  settings.line_thick, 
-                                                                  'GL_LINE_STIPPLE')
-        
-                
+                    if self.is_highlighted:
+                        contour_utilities.draw_polyline_from_3dpoints(context, [self.verts_simple[-1],self.verts_simple[0]], stroke_color, settings.line_thick, 'GL_LINE_STIPPLE')
+                    else:
+                        contour_utilities.draw_polyline_from_3dpoints(context, [self.verts_simple[-1],self.verts_simple[0]], mesh_color, settings.line_thick, 'GL_LINE_STIPPLE')
+
+
         if debug:
             if settings.vert_inds:
                 for i, point in enumerate(self.verts):
