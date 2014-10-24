@@ -31,6 +31,7 @@ import contour_utilities, general_utilities
 from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
 import bmesh
 import blf
+import bgl
 
 #from development.cgc-retopology import contour_utilities
 
@@ -1387,6 +1388,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
         stroke_color = settings.theme_colors_active[settings.theme]
         mesh_color = settings.theme_colors_mesh[settings.theme]
 
+        bgl.glEnable(bgl.GL_POINT_SMOOTH)
         #TODO:  Debug if None in self.world path.  How could this happen?       
         if path and self.world_path != [] and None not in self.world_path:
             
