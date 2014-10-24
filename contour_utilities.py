@@ -544,6 +544,25 @@ def draw_polyline_from_3dpoints(context, points_3d, color, thickness, LINE_TYPE)
         bgl.glLineWidth(1)
     return
     
+def draw_quads_from_3dpoints(context, points_3d, color):
+    '''
+    a simple way to draw a set of quads
+    slow...becuase it must convert to screen every time
+    but allows you to pan and zoom around
+    
+    args:
+        points_3d: a list of tuples as x,y,z
+        color: tuple (r,g,b,a)
+    '''
+    points = [location_3d_to_region_2d(context.region, context.space_data.region_3d, loc) for loc in points_3d]
+    bgl.glEnable(bgl.GL_BLEND)
+    bgl.glColor4f(*color)
+    bgl.glBegin(bgl.GL_QUADS)
+    for coord in points:  
+        bgl.glVertex2f(*coord)
+    bgl.glEnd()  
+    return
+
 def get_path_length(verts):
     '''
     sum up the length of a string of vertices
