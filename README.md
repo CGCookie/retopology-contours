@@ -1,16 +1,13 @@
-CG Cookie Retopology Tool Set
+CG Cookie Contours Retopology Tool
 ==========
 
-This is a suite of tools developed by CG Cookie that brings several dedicated retopology tools to Blender. 
+The Contours Retopology tool is an addon for Blender that provides quick and easy ways retopologize cylindrical forms. Use cases include organic forms, such as arms, legs, tentacles, tails, horns, etc.
 
-Tools in development: 
-- Contours  
-- Poly Strips
-- Poly Patches
-- Cut 
+The tool works by drawing strokes perpendicular to the form to define the contour of the shape. Immediately upon drawing the first stroke, a preview mesh is generated, showing you exactly what you’ll get. You can draw as many strokes as you like, in any order, from any direction.
 
-Tool Documentation: http://cgcookie.com/blender/docs/contour-retopology/
+The add-on is available for purchase from the Blender Market: http://cgcookiemarkets.com/blender/all-products/contours-retopology-tool/
 
-Support Forums: http://cgcookie.com/blender/forums/forum/contour-retopology-tool/
+Documentation: http://cgcookiemarkets.com/blender/all-products/contours-retopology-tool/?view=docs
 
-Tool Design Doc: https://docs.google.com/document/d/1C2umhGBQPmCygpqoKkXLTPT4d0_0Q_3k7HbQCZaFjKI/edit#
+Support Forums: http://cgcookiemarkets.com/blender/all-products/contours-retopology-tool/?view=support
+
