@@ -1427,6 +1427,19 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                             contour_utilities.draw_polyline_from_3dpoints(context, [line[n],line[n+1]], 
                                                           mesh_color, 
                                                           self.line_thickness,"GL_LINE_STIPPLE")
+
+            # Do the fill for vis-faces
+            fl,fv = self.follow_lines, self.follow_vis
+            leni,lenj = len(fl),len(fl[0])
+            quad_pts = []
+            i1 = leni-1
+            for i0 in range(leni):
+                for j0 in range(lenj-1):
+                    j1 = j0 + 1
+                    if fv[i0][j0] and fv[i1][j0] and fv[i1][j1] and fv[i0][j1]:
+                        quad_pts += [fl[i0][j0], fl[i1][j0], fl[i1][j1], fl[i0][j1]]
+                i1 = i0
+            contour_utilities.draw_quads_from_3dpoints(context, quad_pts, (mesh_color[0],mesh_color[1],mesh_color[2],mesh_color[3]*0.2))
                 
 class SketchEndPoint(object):
     def __init__(self,context, parent, end, color = (.1,.2,.8,1), size = 4, mouse_radius = 10):
