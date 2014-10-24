@@ -22,9 +22,9 @@ Created by Patrick Moore
 bl_info = {
     "name": "Contour Retopology Tool",
     "description": "A tool to retopologize forms quickly with contour strokes.",
-    "author": "Patrick Moore",
-    "version": (1, 1, 0),
-    "blender": (2, 7, 1),
+    "author": "Jonathan Williamson, Patrick Moore",
+    "version": (1, 2, 0),
+    "blender": (2, 7, 2),
     "location": "View 3D > Tool Shelf",
     "warning": '',  # used for warning icon and text in addons panel
     "wiki_url": "http://cgcookie.com/blender/docs/contour-retopology/",
