@@ -213,7 +213,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     vert_size = IntProperty(
             name="Vertex Size",
-            default=3,
+            default=4,
             min = 1,
             max = 10,
             )
@@ -257,7 +257,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
     
     handle_size = IntProperty(
             name="Handle Vertex Size",
-            default=5,
+            default=8,
             min = 1,
             max = 10,
             )
