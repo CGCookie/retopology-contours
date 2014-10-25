@@ -377,7 +377,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 cut_no = surface_no.cross(cut.plane_no)
                 
                 if self.existing_head:
-                    stop_plane = [self.existing_head.plane_com, sef.existing_head.plane_no]
+                    stop_plane = [self.existing_head.plane_com, self.existing_head.plane_no]
                 else:
                     stop_plane = [cut.plane_com, cut.plane_no]
                 
@@ -1490,9 +1490,6 @@ class ExistingVertList(object):
         
         '''
         settings = context.user_preferences.addons[AL.FolderName].preferences
-                
-        stroke_color = settings.theme_colors_active[settings.theme]
-        mesh_color = settings.theme_colors_mesh[settings.theme]
         
         self.desc = 'EXISTING_VERT_LIST'
         
@@ -1674,6 +1671,8 @@ class ExistingVertList(object):
             debug = settings.debug
             #settings = context.user_preferences.addons[AL.FolderName].preferences
             
+            stroke_color = settings.theme_colors_active[settings.theme]
+            mesh_color = settings.theme_colors_mesh[settings.theme]
        
             if debug > 1:
                 if self.plane_com:
@@ -1718,7 +1717,7 @@ class ExistingVertList(object):
             else:
                 for i, v in enumerate(self.verts_simple):
                     if self.verts_simple_visible[i]:
-                        contour_utilities.draw_3d_points(context, [v], self.vert_color, settings.vert_size)
+                        contour_utilities.draw_3d_points(context, [v], mesh_color, settings.vert_size)
                             
                         if i < len(self.verts_simple) - 1 and self.verts_simple_visible[i+1]:
                             contour_utilities.draw_polyline_from_3dpoints(context, [v, self.verts_simple[i+1]], mesh_color, settings.line_thick, 'GL_LINE_STIPPLE')
