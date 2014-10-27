@@ -33,22 +33,6 @@ bl_info = {
 
 # Add the current __file__ path to the search path
 import sys,os
-sys.path.append(os.path.dirname(__file__))
-
-'''    
-if "bpy" in locals():
-    import imp
-    imp.reload(contour_classes)
-    imp.reload(contour_utilities)
-    imp.reload(general_utilities)
-
-    print("Reloaded multifiles")
-    
-else:
-    from . import contour_classes,  contour_utilities, general_utilities
-    
-    print("Imported multifiles")
-'''
 
 import bpy
 import bmesh
@@ -58,12 +42,14 @@ import sys
 import copy
 import time
 from mathutils import Vector
-from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
-import contour_utilities, general_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
 from mathutils.geometry import intersect_line_plane, intersect_point_line
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 from bpy.props import EnumProperty, StringProperty,BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
 from bpy.types import Operator, AddonPreferences
+
+from . import contour_utilities
+from . import general_utilities
+from .contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
 
 # Create a class that contains all location information for addons
 AL = general_utilities.AddonLocator()
