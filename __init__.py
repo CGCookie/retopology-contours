@@ -2136,10 +2136,10 @@ def register():
 #unregistration
 def unregister():
     clear_mesh_cache()
+    bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_menu)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_cache_clear)
     bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_panel)
-    bpy.utils.unregister_class(CGCOOKIE_OT_retopo_contour_menu)
     bpy.utils.unregister_class(ContourToolsAddonPreferences)
 
     # Remove addon hotkeys
