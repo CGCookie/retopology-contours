@@ -2446,6 +2446,8 @@ def cross_section_walker(bme, pt, no, find_from, eind_from, co_from, epsilon):
     # track what we've seen
     finds_dict = {find_from: 0}
     
+    bme.edges.ensure_lookup_table();
+
     f_cur = next(f for f in bme.edges[eind_from].link_faces if f.index != find_from)
     find_current = f_cur.index
     
@@ -2495,7 +2497,9 @@ def cross_section_seed_ver1(bme, mx,
     imx = mx.inverted()
     pt  = imx * point
     no  = (imx.to_3x3() * normal).normalized()
-    
+
+    bme.faces.ensure_lookup_table();
+
     # make sure that plane crosses face!
     lco = [v.co for v in bme.faces[seed_index].verts]
     ld = [no.dot(co - pt) for co in lco]
