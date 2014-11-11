@@ -2438,15 +2438,19 @@ def cross_section_walker(bme, pt, no, find_from, eind_from, co_from, epsilon):
     verts is list of verts as the intersections of edges and cutting plane (in order)
     looped is bool indicating if walk wrapped around bmesh
     '''
-    
+
     # returned values
     verts = [co_from]
     looped = False
     
     # track what we've seen
     finds_dict = {find_from: 0}
-    
-    bme.edges.ensure_lookup_table();
+
+    # get blender version
+    bver = '%03d.%03d.%03d' % (bpy.app.version[0],bpy.app.version[1],bpy.app.version[2])
+
+    if bver > '002.072.000':
+        bme.edges.ensure_lookup_table();
 
     f_cur = next(f for f in bme.edges[eind_from].link_faces if f.index != find_from)
     find_current = f_cur.index
@@ -2498,7 +2502,11 @@ def cross_section_seed_ver1(bme, mx,
     pt  = imx * point
     no  = (imx.to_3x3() * normal).normalized()
 
-    bme.faces.ensure_lookup_table();
+    # get blender version
+    bver = '%03d.%03d.%03d' % (bpy.app.version[0],bpy.app.version[1],bpy.app.version[2])
+
+    if bver > '002.072.000':
+        bme.faces.ensure_lookup_table();
 
     # make sure that plane crosses face!
     lco = [v.co for v in bme.faces[seed_index].verts]
