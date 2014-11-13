@@ -20,7 +20,10 @@ Donated to CGCookie and the world
 '''
 
 #This class makes it easier to be install location independent
-import sys, os
+import sys
+import os
+
+
 class AddonLocator(object):
     def __init__(self):
         self.fullInitPath = __file__

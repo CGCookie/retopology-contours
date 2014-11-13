@@ -21,17 +21,19 @@ Created by Patrick Moore
 
 ####class definitions####
 
-import bpy
+import copy
 import math
 import time
-import copy
 from mathutils import Vector, Quaternion
 from mathutils.geometry import intersect_point_line, intersect_line_plane
-import contour_utilities, general_utilities
-from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
-import bmesh
-import blf
+
 import bgl
+import bpy
+import blf
+import bmesh
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d, region_2d_to_origin_3d
+
+import contour_utilities, general_utilities
 
 #from development.cgc-retopology import contour_utilities
 
