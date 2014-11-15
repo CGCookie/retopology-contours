@@ -686,6 +686,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         mode
         '''
 
+        stroke_color = settings.theme_colors_active[settings.theme]
+        mesh_color = settings.theme_colors_mesh[settings.theme]
+
         # Identify hover target for highlighting
         if self.cut_paths != []:
             target_at_all = False
@@ -763,11 +766,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 breakout = True
                                 if best < settings.extend_radius:
                                     snapped = True
-                                    self.snap_color = (1, 0, 0, 1)
+                                    self.snap_color = (stroke_color)
 
                                 else:
                                     alpha = 1 - best/(2*settings.extend_radius)
-                                    self.snap_color = (1, 0, 0, alpha)
+                                    self.snap_color = (mesh_color)
 
                                 break
 
