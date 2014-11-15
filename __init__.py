@@ -648,13 +648,15 @@ def retopo_draw_callback(self, context):
         self.cut_line_widget.draw(context)
 
     if len(self.draw_cache):
-        contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1, 0.5, 1, 0.8), 2, "GL_LINE_SMOOTH")
+        # Draw guide line
+        contour_utilities.draw_polyline_from_points(context, self.draw_cache, self.snap_color, 2, "GL_LINE_SMOOTH")
 
     if len(self.cut_paths):
         for path in self.cut_paths:
             path.draw(context, path=True, nodes=settings.show_nodes, rings=True, follows=True, backbone=settings.show_backbone)
 
     if len(self.snap_circle):
+        # Draw snap circle
         contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
 
 
