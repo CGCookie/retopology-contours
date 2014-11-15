@@ -51,7 +51,7 @@ from bpy.props import EnumProperty, StringProperty, BoolProperty, IntProperty, F
 
 import contour_utilities
 import general_utilities
-from contours_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
+from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
 
 # Create a class that contains all location information for addons
 AL = general_utilities.AddonLocator()
