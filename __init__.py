@@ -648,13 +648,15 @@ def retopo_draw_callback(self, context):
         self.cut_line_widget.draw(context)
 
     if len(self.draw_cache):
-        contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1, 0.5, 1, 0.8), 2, "GL_LINE_SMOOTH")
+        # Draw guide line
+        contour_utilities.draw_polyline_from_points(context, self.draw_cache, self.snap_color, 2, "GL_LINE_SMOOTH")
 
     if len(self.cut_paths):
         for path in self.cut_paths:
             path.draw(context, path=True, nodes=settings.show_nodes, rings=True, follows=True, backbone=settings.show_backbone)
 
     if len(self.snap_circle):
+        # Draw snap circle
         contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
 
 
@@ -685,6 +687,9 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         and snapping when the mouse moves in guide
         mode
         '''
+
+        stroke_color = settings.theme_colors_active[settings.theme]
+        mesh_color = settings.theme_colors_mesh[settings.theme]
 
         # Identify hover target for highlighting
         if self.cut_paths != []:
@@ -763,11 +768,11 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 breakout = True
                                 if best < settings.extend_radius:
                                     snapped = True
-                                    self.snap_color = (1, 0, 0, 1)
+                                    self.snap_color = (stroke_color)
 
                                 else:
                                     alpha = 1 - best/(2*settings.extend_radius)
-                                    self.snap_color = (1, 0, 0, alpha)
+                                    self.snap_color = (mesh_color)
 
                                 break
 
