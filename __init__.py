@@ -1205,7 +1205,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     self.temporary_message_start(context, 'Center View to Cursor')
                     return {'RUNNING_MODAL'}
 
-                elif event.type == 'S' and event.value == 'PRESS':
+                elif event.type == 'S' and event.value == 'PRESS' and event.shift:
                     if self.selected:
                         context.scene.cursor_location = self.selected.plane_com
                         self.temporary_message_start(context, 'Cursor to selected loop or segment')
@@ -2046,7 +2046,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         self.hot_key = None  #Keep track of which hotkey was pressed
         self.draw = False  #Being in the state of drawing a guide stroke
         
-        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, S: Cursor to Stroke, C: View to Cursor, N: Force New Segment, TAB: toggle Guide mode'
+        self.loop_msg = 'LOOP MODE:  LMB: Select Stroke, X: Delete Sroke, , G: Translate, R: Rotate, Ctrl/Shift + A: Align, Shift + S: Cursor to Stroke, C: View to Cursor, N: Force New Segment, TAB: toggle Guide mode'
         self.guide_msg = 'GUIDE MODE: LMB to Draw or Select, Ctrl/Shift/ALT + S to smooth, WHEEL or +/- to increase/decrease segments, TAB: toggle Loop mode'
         context.area.header_text_set(self.loop_msg)
         
