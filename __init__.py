@@ -26,7 +26,7 @@ bl_info = {
     "version": (1, 2, 1),
     "blender": (2, 7, 2),
     "location": "View 3D > Tool Shelf",
-    "warning": '',  # used for warning icon and text in addons panel
+    "warning": '',  # Used for warning icon and text in addons panel
     "wiki_url": "http://cgcookie.com/blender/docs/contour-retopology/",
     "tracker_url": "https://github.com/CGCookie/retopology/issues?labels=Bug&milestone=1&state=open",
     "category": "3D View"}
@@ -39,19 +39,19 @@ sys.path.append(os.path.dirname(__file__))
 import copy
 import math
 import time
-import bpy
-import blf
-import bmesh
 from mathutils import Vector
 from mathutils.geometry import intersect_line_plane, intersect_point_line
 
+import blf
+import bmesh
+import bpy
+from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 from bpy.types import Operator, AddonPreferences
 from bpy.props import EnumProperty, StringProperty, BoolProperty, IntProperty, FloatVectorProperty, FloatProperty
-from bpy_extras.view3d_utils import location_3d_to_region_2d, region_2d_to_vector_3d, region_2d_to_location_3d
 
 import contour_utilities
 import general_utilities
-from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
+from contours_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
 
 # Create a class that contains all location information for addons
 AL = general_utilities.AddonLocator()
