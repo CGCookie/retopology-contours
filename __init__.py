@@ -458,15 +458,14 @@ class ContourToolsAddonPreferences(AddonPreferences):
         row.prop(self, "auto_align")
         row.prop(self, "live_update")
         row.prop(self, "use_perspective")
-        
+
         row = layout.row()
         row.prop(self, "use_x_ray", "Enable X-Ray at Mesh Creation")
-        
 
         # Theme testing
         row = layout.row(align=True)
         row.prop(self, "theme", "Theme")
-        
+
         # Visualization Settings
         box = layout.box().column(align=False)
         row = box.row()
@@ -479,14 +478,14 @@ class ContourToolsAddonPreferences(AddonPreferences):
         row = box.row(align=False)
         row.prop(self, "show_edges", text="Show Edge Loops")
         row.prop(self, "line_thick", text ="Edge Thickness")
-        
+
         row = box.row(align=False)
         row.prop(self, "show_ring_edges", text="Show Edge Rings")
         row.prop(self, "vert_size")
 
         row = box.row(align=True)
         row.prop(self, "show_cut_indices", text = "Edge Indices")
-        
+
         # Widget Settings
         box = layout.box().column(align=False)
         row = box.row()
@@ -499,7 +498,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row = box.row()
             row.prop(self, "widget_radius", text="Radius")
             row.prop(self,"widget_radius_inner", text="Active Radius")
-            
+
             row = box.row()
             row.prop(self, "widget_thickness", text="Line Thickness")
             row.prop(self, "widget_thickness2", text="2nd Line Thickness")
@@ -520,13 +519,12 @@ class ContourToolsAddonPreferences(AddonPreferences):
 
         row = box.row()
         row.prop(self, "show_debug", text="Show Debug Settings")
-        
+
         if self.show_debug:
             row = box.row()
             row.prop(self, "new_method")
             row.prop(self, "debug")
-            
-            
+
             row = box.row()
             row.prop(self, "vert_inds", text="Show Vertex Indices")
             row.prop(self, "simple_vert_inds", text="Show Simple Indices")
@@ -534,13 +532,13 @@ class ContourToolsAddonPreferences(AddonPreferences):
             row = box.row()
             row.prop(self, "show_verts", text="Show Raw Vertices")
             row.prop(self, "raw_vert_size")
-            
+
             row = box.row()
             row.prop(self, "show_backbone", text="Show Backbone")
             row.prop(self, "show_nodes", text="Show Cut Nodes")
             row.prop(self, "show_ring_inds", text="Show Ring Indices")
-            
-        
+
+
 class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
     '''Retopologize Forms with Contour Strokes'''
     bl_category = "Retopology"
@@ -555,46 +553,45 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         return (obj and obj.type == 'MESH' and mode in ('OBJECT', 'EDIT_MESH'))
 
 
-
     def draw(self, context):
         layout = self.layout
         box = layout.box()
-        
-        
+
         if 'EDIT' in context.mode and len(context.selected_objects) != 2:
             col = box.column()
             col.label(text='No 2nd Object!')
         col = box.column()
         col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
-        
+
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
-        
+
         row = box.row()
         row.prop(cgc_contour, "vertex_count")
-        
+
         row = box.row()
         row.prop(cgc_contour, "cut_count")
 
-        ### Commenting out for now until this is further improved and made to work again ###
+        # Commenting out for now until this is further improved and made to work again ###
         # row = box.row()
         # row.prop(cgc_contour, "cyclic")
-        
+
         row = box.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
 
         col = box.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
-        
+
         if cgc_contour.show_experimental:
             box = layout.box()
             row = box.row()
             row.operator("cgcookie.retopo_poly_sketch", icon='MESH_UVSPHERE')
-        
+
             row = box.row()
             row.prop(cgc_contour, "density_factor")
 
-class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):  
+
+class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
     bl_label = "Retopology"
     bl_space_type = 'VIEW_3D'
     bl_idname = "object.retopology_menu"
@@ -610,19 +607,20 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
         if cgc_contour.show_experimental:
             layout.operator("cgcookie.retopo_poly_sketch")
 
+
 class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
     '''Removes the temporary object and mesh data from the cache. Do this if you have altered your original form in any way'''
     bl_idname = "cgcookie.clear_cache"
-    bl_label = "Clear Contour Cache" 
-    
+    bl_label = "Clear Contour Cache"
+
     def execute(self,context):
-        
+
         clear_mesh_cache()
-        
         return {'FINISHED'}
-    
-def retopo_draw_callback(self,context):
-    
+
+
+def retopo_draw_callback(self, context):
+
     settings = context.user_preferences.addons[AL.FolderName].preferences
 
     if (self.post_update or self.modal_state == 'NAVIGATING') and context.space_data.use_occlude_geometry:
@@ -630,47 +628,46 @@ def retopo_draw_callback(self,context):
             path.update_visibility(context, self.original_form)
             for cut_line in path.cuts:
                 cut_line.update_visibility(context, self.original_form)
-                    
+
         self.post_update = False
-        
 
     for i, c_cut in enumerate(self.cut_lines):
         if self.widget_interaction and self.drag_target == c_cut:
             interact = True
         else:
             interact = False
-        
-        c_cut.draw(context, settings,three_dimensional = self.navigating, interacting = interact)
+
+        c_cut.draw(context, settings, three_dimensional=self.navigating, interacting=interact)
 
         if c_cut.verts_simple != [] and settings.show_cut_indices:
             loc = location_3d_to_region_2d(context.region, context.space_data.region_3d, c_cut.verts_simple[0])
             blf.position(0, loc[0], loc[1], 0)
             blf.draw(0, str(i))
 
-
     if self.cut_line_widget and settings.draw_widget:
         self.cut_line_widget.draw(context)
-        
+
     if len(self.draw_cache):
-        contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1,.5,1,.8), 2, "GL_LINE_SMOOTH")
-        
+        contour_utilities.draw_polyline_from_points(context, self.draw_cache, (1, 0.5, 1, 0.8), 2, "GL_LINE_SMOOTH")
+
     if len(self.cut_paths):
         for path in self.cut_paths:
-            path.draw(context, path = True, nodes = settings.show_nodes, rings = True, follows = True, backbone = settings.show_backbone    )
-            
+            path.draw(context, path=True, nodes=settings.show_nodes, rings=True, follows=True, backbone=settings.show_backbone)
+
     if len(self.snap_circle):
         contour_utilities.draw_polyline_from_points(context, self.snap_circle, self.snap_color, 2, "GL_LINE_SMOOTH")
-        
+
+
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
     '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
     bl_idname = "cgcookie.retop_contour"
     bl_label = "Draw Contours"
-    
+
     @classmethod
-    def poll(cls,context):
+    def poll(cls, context):
         if context.mode not in {'EDIT_MESH','OBJECT'}:
             return False
-        
+
         if context.active_object:
             if context.mode == 'EDIT_MESH':
                 if len(context.selected_objects) > 1:
@@ -681,15 +678,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 return context.object.type == 'MESH'
         else:
             return False
-    
-    def hover_guide_mode(self,context, settings, event):
+
+    def hover_guide_mode(self, context, settings, event):
         '''
         handles mouse selection, hovering, highlighting
         and snapping when the mouse moves in guide
         mode
         '''
-        
-        #identify hover target for highlighting
+
+        # Identify hover target for highlighting
         if self.cut_paths != []:
             target_at_all = False
             breakout = False
@@ -704,46 +701,46 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         self.hover_target = path
                         breakout = True
                         break
-                
+
                 if breakout:
                     break
-                                  
+
             if not target_at_all:
                 self.hover_target = None
-        
-        #assess snap points
+
+        # Assess snap points
         if self.cut_paths != [] and not self.force_new:
             rv3d = context.space_data.region_3d
             breakout = False
             snapped = False
             for path in self.cut_paths:
-                
+
                 end_cuts = []
                 if not path.existing_head and len(path.cuts):
                     end_cuts.append(path.cuts[0])
                 if not path.existing_tail and len(path.cuts):
                     end_cuts.append(path.cuts[-1])
-                    
+
                 if path.existing_head and not len(path.cuts):
                     end_cuts.append(path.existing_head)
-                    
+
                 for n, end_cut in enumerate(end_cuts):
-                    
-                    #potential verts to snap to
+
+                    # Potential verts to snap to
                     snaps = [v for i, v in enumerate(end_cut.verts_simple) if end_cut.verts_simple_visible[i]]
-                    #the screen versions os those
+                    # The screen versions os those
                     screen_snaps = [location_3d_to_region_2d(context.region,rv3d,snap) for snap in snaps]
-                    
+
                     mouse = Vector((event.mouse_region_x,event.mouse_region_y))
                     dists = [(mouse - snap).length for snap in screen_snaps]
-                    
+
                     if len(dists):
                         best = min(dists)
-                        if best < 2 * settings.extend_radius and best > 4: #TODO unify selection mouse pixel radius.
+                        if best < 2 * settings.extend_radius and best > 4:  #TODO unify selection mouse pixel radius.
 
                             best_vert = screen_snaps[dists.index(best)]
                             view_z = rv3d.view_rotation * Vector((0,0,1))
-                            if view_z.dot(end_cut.plane_no) > -.75 and view_z.dot(end_cut.plane_no) < .75:
+                            if view_z.dot(end_cut.plane_no) > -0.75 and view_z.dot(end_cut.plane_no) < 0.75:
 
                                 imx = rv3d.view_matrix.inverted()
                                 normal_3d = imx.transposed() * end_cut.plane_no
@@ -754,36 +751,35 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 left = angle + math.pi
                                 right =  angle
                                 self.snap = [path, end_cut]
-                                
+
                                 if end_cut.desc == 'CUT_LINE' and len(path.cuts) > 1:
-    
-                                    self.snap_circle = contour_utilities.pi_slice(best_vert[0],best_vert[1],settings.extend_radius,.1 * settings.extend_radius, left,right, 20,t_fan = True)
+
+                                    self.snap_circle = contour_utilities.pi_slice(best_vert[0], best_vert[1], settings.extend_radius, 0.1 * settings.extend_radius, left, right, 20, t_fan=True)
                                     self.snap_circle.append(self.snap_circle[0])
                                 else:
                                     self.snap_circle = contour_utilities.simple_circle(best_vert[0], best_vert[1], settings.extend_radius, 20)
                                     self.snap_circle.append(self.snap_circle[0])
-                                    
+
                                 breakout = True
                                 if best < settings.extend_radius:
                                     snapped = True
-                                    self.snap_color = (1,0,0,1)
-                                    
+                                    self.snap_color = (1, 0, 0, 1)
+
                                 else:
                                     alpha = 1 - best/(2*settings.extend_radius)
-                                    self.snap_color = (1,0,0,alpha)
-                                    
+                                    self.snap_color = (1, 0, 0, alpha)
+
                                 break
-                        
+
                     if breakout:
                         break
-                    
+
             if not breakout:
                 self.snap = []
                 self.snap_circle = []
-                    
-                    
-        
-    def hover_loop_mode(self,context, settings, event):
+
+
+    def hover_loop_mode(self, context, settings, event):
         '''
         Handles mouse selection and hovering
         '''
@@ -836,37 +832,38 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             if not target_at_all:
                 self.hover_target = None
                 self.cut_line_widget = None
-                
-    def new_path_from_draw(self,context,settings):
+
+
+    def new_path_from_draw(self, context, settings):
         '''
         package all the steps needed to make a new path
         TODO: What if errors?
         '''
         path = ContourCutSeries(context, self.draw_cache,
-                                    segments = settings.cut_count,
-                                    ring_segments = settings.vertex_count,
-                                    cull_factor = settings.cull_factor, 
-                                    smooth_factor = settings.smooth_factor,
-                                    feature_factor = settings.feature_factor)
-        
-        
+                                    segments=settings.cut_count,
+                                    ring_segments=settings.vertex_count,
+                                    cull_factor=settings.cull_factor, 
+                                    smooth_factor=settings.smooth_factor,
+                                    feature_factor=settings.feature_factor)
+
+
         path.ray_cast_path(context, self.original_form)
         if len(path.raw_world) == 0:
             print('NO RAW PATH')
             return None
         path.find_knots()
-        
+
         if self.snap != [] and not self.force_new:
             merge_series = self.snap[0]
             merge_ring = self.snap[1]
-            
+
             path.snap_merge_into_other(merge_series, merge_ring, context, self.original_form, self.bme)
-            
+
             return merge_series
 
         path.smooth_path(context, ob = self.original_form)
         path.create_cut_nodes(context)
-        path.snap_to_object(self.original_form, raw = False, world = False, cuts = True)
+        path.snap_to_object(self.original_form, raw=False, world=False, cuts=True)
         path.cuts_on_path(context, self.original_form, self.bme)
         path.connect_cuts_to_make_mesh(self.original_form)
         path.backbone_from_cuts(context, self.original_form, self.bme)
@@ -876,69 +873,68 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
             path.cuts[-1].do_select(settings)
         
         self.cut_paths.append(path)
-        
 
         return path
-    
-    def click_new_cut(self,context, settings, event):
+
+
+    def click_new_cut(self, context, settings, event):
 
         new_cut = ContourCutLine(event.mouse_region_x, event.mouse_region_y)
-        
-        
+
         for path in self.cut_paths:
             for cut in path.cuts:
                 cut.deselect(settings)
-                
+
         new_cut.do_select(settings)
         self.cut_lines.append(new_cut)
-        
+
         return new_cut
-    
-    def release_place_cut(self,context,settings, event):
+
+
+    def release_place_cut(self, context, settings, event):
         self.selected.tail.x = event.mouse_region_x
         self.selected.tail.y = event.mouse_region_y
-        
+
         width = Vector((self.selected.head.x, self.selected.head.y)) - Vector((self.selected.tail.x, self.selected.tail.y))
-        
-        #prevent small errant strokes
+
+        # Prevent small errant strokes
         if width.length < 20: #TODO: Setting for minimum pixel width
             self.cut_lines.remove(self.selected)
             self.selected = None
             print('Placed cut is too short')
             return
-        
-        #hit the mesh for the first time
-        hit = self.selected.hit_object(context, self.original_form, method = 'VIEW')
-        
+
+        # Hit the mesh for the first time
+        hit = self.selected.hit_object(context, self.original_form, method='VIEW')
+
         if not hit:
             self.cut_lines.remove(self.selected)
             self.selected = None
             print('Placed cut did not hit the mesh')
             return
-        
+
         self.selected.cut_object(context, self.original_form, self.bme)
         self.selected.simplify_cross(self.segments)
         self.selected.update_com()
         self.selected.update_screen_coords(context)
         self.selected.head = None
         self.selected.tail = None
-        
+
         if not len(self.selected.verts) or not len(self.selected.verts_simple):
             self.selected = None
             print('cut failure')  #TODO, header text message.
-            
+
             return
-    
-        
+
         if settings.debug > 1:
             print('release_place_cut')
             print('len(self.cut_paths) = %d' % len(self.cut_paths))
             print('self.force_new = ' + str(self.force_new))
-        
+
         if self.cut_paths != [] and not self.force_new:
             for path in self.cut_paths:
-                if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor):
-                    #the cut belongs to the series now
+                if path.insert_new_cut(context, self.original_form, self.bme, self.selected, search=settings.search_factor):
+                    # The cut belongs to the series now
                     path.connect_cuts_to_make_mesh(self.original_form)
                     path.update_visibility(context, self.original_form)
                     path.seg_lock = True
@@ -949,57 +945,58 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     for other_path in self.cut_paths:
                         if other_path != self.selected_path:
                             other_path.deselect(settings)
-                    # no need to search for more paths
+                    # No need to search for more paths
                     return
-        
-        #create a blank segment
+
+        # Create a blank segment
         path = ContourCutSeries(context, [],
-                        cull_factor = settings.cull_factor, 
-                        smooth_factor = settings.smooth_factor,
-                        feature_factor = settings.feature_factor)
-        
-        path.insert_new_cut(context, self.original_form, self.bme, self.selected, search = settings.search_factor)
-        path.seg_lock = False  #not locked yet...not until a 2nd cut is added in loop mode
+                        cull_factor=settings.cull_factor, 
+                        smooth_factor=settings.smooth_factor,
+                        feature_factor=settings.feature_factor)
+
+        path.insert_new_cut(context, self.original_form, self.bme, self.selected, search=settings.search_factor)
+        path.seg_lock = False  # Not locked yet...not until a 2nd cut is added in loop mode
         path.segments = 1
         path.ring_segments = len(self.selected.verts_simple)
         path.connect_cuts_to_make_mesh(self.original_form)
         path.update_visibility(context, self.original_form)
-        
+
         for other_path in self.cut_paths:
             other_path.deselect(settings)
-        
+
         self.cut_paths.append(path)
         self.selected_path = path
         path.do_select(settings)
-        
+
         self.cut_lines.remove(self.selected)
         self.force_new = False
-    
+
+
     def finish_mesh(self, context):
         back_to_edit = (context.mode == 'EDIT_MESH')
-                    
-        #This is where all the magic happens
+
+        # This is where all the magic happens
         print('pushing data into bmesh')
         for path in self.cut_paths:
             path.push_data_into_bmesh(context, self.destination_ob, self.dest_bme, self.original_form, self.dest_me)
-        
+
         if back_to_edit:
             print('updating edit mesh')
             bmesh.update_edit_mesh(self.dest_me, tessface=False, destructive=True)
-        
+
         else:
-            #write the data into the object
+            # Write the data into the object
             print('write data into the object')
             self.dest_bme.to_mesh(self.dest_me)
-        
-            #remember we created a new object
+
+            # Remember we created a new object
             print('link destination object')
             context.scene.objects.link(self.destination_ob)
-            
+
             print('select and make active')
             self.destination_ob.select = True
             context.scene.objects.active = self.destination_ob
-            
+
             if context.space_data.local_view:
                 view_loc = context.space_data.region_3d.view_location.copy()
                 view_rot = context.space_data.region_3d.view_rotation.copy()
@@ -1011,142 +1008,141 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                 context.space_data.region_3d.view_rotation = view_rot
                 context.space_data.region_3d.view_distance = view_dist
                 context.space_data.region_3d.update()
-        
+
         print('wrap up')
         context.area.header_text_set()
         contour_utilities.callback_cleanup(self,context)
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
-        
+
         print('finished mesh!')
         return {'FINISHED'}
-        
-    def widget_transform(self,context,settings, event):
-        
-        self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y, shift = event.shift)
-        
-            
+
+
+    def widget_transform(self, context, settings, event):
+
+        self.cut_line_widget.user_interaction(context, event.mouse_region_x, event.mouse_region_y, shift=event.shift)
+
         self.selected.cut_object(context, self.original_form, self.bme)
         self.selected.simplify_cross(self.selected_path.ring_segments)
         self.selected.update_com()
-        self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
-        
+        self.selected_path.align_cut(self.selected, mode='BETWEEN', fine_grain=True)
+
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
         self.selected_path.update_visibility(context, self.original_form)
-        
+
         self.temporary_message_start(context, 'WIDGET_TRANSFORM: ' + str(self.cut_line_widget.transform_mode))    
-    
-    def guide_arrow_shift(self,context,event):
+
+
+    def guide_arrow_shift(self, context, event):
         if event.type == 'LEFT_ARROW':         
             for cut in self.selected_path.cuts:
-                cut.shift += .05
+                cut.shift += 0.05
                 cut.simplify_cross(self.selected_path.ring_segments)
         else:
             for cut in self.selected_path.cuts:
-                cut.shift += -.05
+                cut.shift += -0.05
                 cut.simplify_cross(self.selected_path.ring_segments)
-                                
+
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
         self.selected_path.update_visibility(context, self.original_form)  
 
-    def loop_arrow_shift(self,context,event):    
+
+    def loop_arrow_shift(self, context, event):    
         if event.type == 'LEFT_ARROW':
-            self.selected.shift += .05
-            
+            self.selected.shift += 0.05
+
         else:
-            self.selected.shift += -.05
-            
+            self.selected.shift += -0.05
+
         self.selected.simplify_cross(self.selected_path.ring_segments)
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-        self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
+        self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert=False)
         self.selected_path.update_visibility(context, self.original_form)
-            
 
         self.temporary_message_start(context, self.mode +': Shift ' + str(self.selected.shift))
-                                                
-    def loop_align_modal(self,context, event):
+
+
+    def loop_align_modal(self, context, event):
         if not event.ctrl and not event.shift:
             act = 'BETWEEN'
-                
-        #align ahead    
+
+        # Align ahead    
         elif event.ctrl and not event.shift:
             act = 'FORWARD'
-            
-        #align behind    
+
+        # Align behind    
         elif event.shift and not event.ctrl:
             act = 'BACKWARD'
-            
-        self.selected_path.align_cut(self.selected, mode = act, fine_grain = True)
+ 
+        self.selected_path.align_cut(self.selected, mode=act, fine_grain=True)
         self.selected.simplify_cross(self.selected_path.ring_segments)
-        
+
         self.selected_path.connect_cuts_to_make_mesh(self.original_form)
-        self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
+        self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert=False)
         self.selected_path.update_visibility(context, self.original_form)
         self.temporary_message_start(context, 'Align Loop: %s' % act)
-            
+
+
     def loop_hotkey_modal(self,context,event):
-            
 
         if self.hot_key == 'G':
-            self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
-                                                        self.original_form, self.bme,
-                                                        self.selected,
-                                                        self.selected_path,
-                                                        event.mouse_region_x,event.mouse_region_y,
-                                                        hotkey = self.hot_key)
+            self.cut_line_widget = CutLineManipulatorWidget(context, 
+                                                            self.settings,
+                                                            self.original_form, self.bme,
+                                                            self.selected,
+                                                            self.selected_path,
+                                                            event.mouse_region_x,event.mouse_region_y,
+                                                            hotkey=self.hot_key)
             self.cut_line_widget.transform_mode = 'EDGE_SLIDE'
 
-        
         elif self.hot_key == 'R':
-            #TODO...if CoM is off screen, then what?
+            # TODO...if CoM is off screen, then what?
             screen_pivot = location_3d_to_region_2d(context.region,context.space_data.region_3d,self.selected.plane_com)
             self.cut_line_widget = CutLineManipulatorWidget(context, self.settings, 
-                                                        self.original_form, self.bme,
-                                                        self.selected,
-                                                        self.selected_path,
-                                                        screen_pivot[0],screen_pivot[1],
-                                                        hotkey = self.hot_key)
+                                                            self.original_form, self.bme,
+                                                            self.selected,
+                                                            self.selected_path,
+                                                            screen_pivot[0],screen_pivot[1],
+                                                            hotkey = self.hot_key)
             self.cut_line_widget.transform_mode = 'ROTATE_VIEW'
-            
-        
-        
+
         self.cut_line_widget.initial_x = event.mouse_region_x
         self.cut_line_widget.initial_y = event.mouse_region_y
         self.cut_line_widget.derive_screen(context)
-    
-    
-    def temporary_message_start(self,context, message):
+
+
+    def temporary_message_start(self, context, message):
         self.msg_start_time = time.time()
         if not self._timer:
             self._timer = context.window_manager.event_timer_add(0.1, context.window)
         
         context.area.header_text_set(text = message)    
-                                                 
-    
+
+
     def modal(self, context, event):
         context.area.tag_redraw()
         settings = context.user_preferences.addons[AL.FolderName].preferences
-        
+
         if event.type == 'Z' and event.ctrl and event.value == 'PRESS':
             self.temporary_message_start(context, "Undo Action")
             self.undo_action()
-            
-        #check messages
+
+        # Check messages
         if event.type == 'TIMER':
             now = time.time()
             if now - self.msg_start_time > self.msg_duration:
                 if self._timer:
                     context.window_manager.event_timer_remove(self._timer)
                     self._timer = None
-                
+
                 if self.mode == 'GUIDE':
-                    context.area.header_text_set(text = self.guide_msg)
+                    context.area.header_text_set(text=self.guide_msg)
                 else:
-                    context.area.header_text_set(text = self.loop_msg)
-                
-                
+                    context.area.header_text_set(text=self.loop_msg)
+
         if self.modal_state == 'NAVIGATING':
-            
+
             if (event.type in {'MOUSEMOVE',
                                'MIDDLEMOUSE', 
                                 'NUMPAD_2', 
@@ -1158,79 +1154,74 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                 'NUMPAD_5', 
                                 'NUMPAD_7',
                                 'NUMPAD_9'} and event.value == 'RELEASE'):
-            
+
                 self.modal_state = 'WAITING'
                 self.post_update = True
                 return {'PASS_THROUGH'}
-            
+
             if (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
-            
+
                 self.modal_state = 'WAITING'
                 self.post_update = True 
                 return {'PASS_THROUGH'}
-        
+
         if self.mode == 'LOOP':
-            
+
             if self.modal_state == 'WAITING':
-                
+
                 if (event.type in {'ESC','RIGHT_MOUSE'} and 
                     event.value == 'PRESS'):
-                    
+
                     context.area.header_text_set()
                     contour_utilities.callback_cleanup(self,context)
                     if self._timer:
                         context.window_manager.event_timer_remove(self._timer)
-                        
+
                     return {'CANCELLED'}
-                
+
                 elif (event.type == 'TAB' and 
                       event.value == 'PRESS'):
-                    
+
                     self.mode = 'GUIDE'
                     self.selected = None  #WHY?
                     if self.selected_path:
                         self.selected_path.highlight(settings)
-                    
+
                     if self._timer:
                         context.window_manager.event_timer_remove(self._timer)
                         self._timer = None
-                
-                    
-                    context.area.header_text_set(text = self.guide_msg)
-                
+
+                    context.area.header_text_set(text=self.guide_msg)
+
                 elif event.type == 'N' and event.value == 'PRESS':
                     self.force_new = self.force_new != True
                     #self.selected_path = None
                     self.snap = None
-                    
+
                     self.temporary_message_start(context, self.mode +': FORCE NEW: ' + str(self.force_new))
                     return {'RUNNING_MODAL'}
-                
+
                 elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
                     event.value == 'PRESS'):
-                    
+
                     return self.finish_mesh(context)
-                
 
-                    
                 if event.type == 'MOUSEMOVE':
-                    
                     self.hover_loop_mode(context, settings, event)
-
                 
                 elif (event.type == 'C' and
                       event.value == 'PRESS'):
-                    
+
                     bpy.ops.view3d.view_center_cursor()
                     self.temporary_message_start(context, 'Center View to Cursor')
                     return {'RUNNING_MODAL'}
-                
+
                 elif event.type == 'S' and event.value == 'PRESS':
                     if self.selected:
                         context.scene.cursor_location = self.selected.plane_com
                         self.temporary_message_start(context, 'Cursor to selected loop or segment')
-                
-                #NAVIGATION KEYS
+
+                # Navigation Keys
                 elif (event.type in {'MIDDLEMOUSE', 
                                     'NUMPAD_2', 
                                     'NUMPAD_4', 
@@ -1241,31 +1232,32 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     'NUMPAD_5', 
                                     'NUMPAD_7',
                                     'NUMPAD_9'} and event.value == 'PRESS'):
-                    
+
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
                     self.temporary_message_start(context, self.mode + ': NAVIGATING')
 
                     return {'PASS_THROUGH'}
+
                 elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
-                    
+
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
                     self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
-                
-                #ZOOM KEYS
+
+                # Zoom Keys
                 elif (event.type in  {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and not 
                         (event.ctrl or event.shift)):
-                    
+
                     self.post_update = True
                     return{'PASS_THROUGH'}
-                
+
                 elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
-                    
+
                     if self.hover_target and self.hover_target != self.selected:
-                        
+
                         self.selected = self.hover_target    
                         if not event.shift:
                             for path in self.cut_paths:
@@ -1277,16 +1269,15 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     self.selected_path = path
                                 else:
                                     path.deselect(settings)
-                        
-                        #select the ring
+
+                        # Select the ring
                         self.hover_target.do_select(settings)
-                        
-                    
+
                     elif self.hover_target  and self.hover_target == self.selected:
-                        
+
                         self.create_undo_snapshot('WIDGET_TRANSFORM')
                         self.modal_state = 'WIDGET_TRANSFORM'
-                        #sometimes, there is not a widget from the hover?
+                        # Sometimes, there is not a widget from the hover?
                         self.cut_line_widget = CutLineManipulatorWidget(context, 
                                                                         settings,
                                                                         self.original_form, self.bme,
@@ -1295,23 +1286,22 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                                                         event.mouse_region_x,
                                                                         event.mouse_region_y)
                         self.cut_line_widget.derive_screen(context)
-                        
+
                     else:
                         self.create_undo_snapshot('CUTTING')
                         self.modal_state = 'CUTTING'
                         self.temporary_message_start(context, self.mode + ': CUTTING')
-                        #make a new cut and handle it with self.selected
+                        # Make a new cut and handle it with self.selected
                         self.selected = self.click_new_cut(context, settings, event)
-                        
-                        
+
                     return {'RUNNING_MODAL'}
-                
+
                 if self.selected:
                     #print(event.type + " " + event.value)
-                    
+
                     #G -> HOTKEY
                     if event.type == 'G' and event.value == 'PRESS':
-                        
+
                         self.create_undo_snapshot('HOTKEY_TRANSFORM')
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'G'
@@ -1320,77 +1310,76 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         return {'RUNNING_MODAL'}
                     #R -> HOTKEY
                     if event.type == 'R' and event.value == 'PRESS':
-                        
+
                         self.create_undo_snapshot('HOTKEY_TRANSFORM')
                         self.modal_state = 'HOTKEY_TRANSFORM'
                         self.hot_key = 'R'
                         self.loop_hotkey_modal(context,event)
                         self.temporary_message_start(context, self.mode + ':Hotkey Rotate')
                         return {'RUNNING_MODAL'}
-                    
+
                     #X, DEL -> DELETE
                     elif event.type == 'X' and event.value == 'PRESS':
-                        
+
                         self.create_undo_snapshot('DELETE')
                         if len(self.selected_path.cuts) > 1 or (len(self.selected_path.cuts) == 1 and self.selected_path.existing_head):
                             self.selected_path.remove_cut(context, self.original_form, self.bme, self.selected)
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
                             self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)
-                        
+
                         else:
                             self.cut_paths.remove(self.selected_path)
                             self.selected_path = None
-                            
+
                         self.selected = None
                         self.temporary_message_start(context, self.mode + ': DELETE')
-                    
+
                     #S -> CURSOR SELECTED CoM
-                    
+
                     #LEFT_ARROW, RIGHT_ARROW to shift
                     elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and 
                           event.value == 'PRESS'):
                         self.create_undo_snapshot('LOOP_SHIFT') 
                         self.loop_arrow_shift(context,event)
-                        
+
                         return {'RUNNING_MODAL'}
-                    
+
                     elif event.type == 'A' and event.value == 'PRESS':
                         self.create_undo_snapshot('ALIGN')
                         self.loop_align_modal(context,event)
-                         
+
                         return {'RUNNING_MODAL'}
-                        
+
                     elif ((event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl) or
                           (event.type in {'NUMPAD_PLUS','NUMPAD_MINUS'} and event.value == 'PRESS') and event.ctrl):
-                        
+
                         self.create_undo_snapshot('RING_SEGMENTS')  
                         if not self.selected_path.ring_lock:
                             old_segments = self.selected_path.ring_segments
                             self.selected_path.ring_segments += 1 - 2 * (event.type == 'WHEELDOWNMOUSE' or event.type == 'NUMPAD_MINUS')
                             if self.selected_path.ring_segments < 3:
                                 self.selected_path.ring_segments = 3
-                                
+
                             for cut in self.selected_path.cuts:
                                 new_bulk_shift = round(cut.shift * old_segments/self.selected_path.ring_segments)
                                 new_fine_shift = old_segments/self.selected_path.ring_segments * cut.shift - new_bulk_shift
-                                
-                                
+
                                 new_shift =  self.selected_path.ring_segments/old_segments * cut.shift
-                                
+
                                 print(new_shift - new_bulk_shift - new_fine_shift)
                                 cut.shift = new_shift
                                 cut.simplify_cross(self.selected_path.ring_segments)
-                            
+
                             self.selected_path.backbone_from_cuts(context, self.original_form, self.bme)    
                             self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                             self.selected_path.update_visibility(context, self.original_form)
-                            
+
                             self.temporary_message_start(context, self.mode +': RING SEGMENTS %i' %self.selected_path.ring_segments)
                             self.msg_start_time = time.time()
                         else:
                             self.temporary_message_start(context, self.mode +': RING SEGMENTS: Can not be changed.  Path Locked')
-                            
+
                         #else:
                             #let the user know the path is locked
                             #header message set
@@ -1398,26 +1387,24 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                         return {'RUNNING_MODAL'}
                     #if hover == selected:
                         #LEFTCLICK -> WIDGET
-                        
-                
-                        
+
                 return {'RUNNING_MODAL'}
-                        
+
             elif self.modal_state == 'CUTTING':
-                
+
                 if event.type == 'MOUSEMOVE':
                     #pass mouse coords to widget
                     x = str(event.mouse_region_x)
                     y = str(event.mouse_region_y)
                     message = self.mode + ':CUTTING: X: ' +  x + '  Y:  ' +  y
-                    context.area.header_text_set(text = message)
-                    
+                    context.area.header_text_set(text=message)
+
                     self.selected.tail.x = event.mouse_region_x
                     self.selected.tail.y = event.mouse_region_y
                     #self.seleted.screen_to_world(context)
-                    
+
                     return {'RUNNING_MODAL'}
-                
+
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
 
                     #the new cut is created
@@ -1425,106 +1412,99 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                     #the new cut is assessed to be an extension of selected gemometry
                     #the new cut is assessed to become the beginning of a new path
                     self.release_place_cut(context, settings, event)
-                    
-                    
-                    #we return to waiting
+
+                    # We return to waiting
                     self.modal_state = 'WAITING'
                     return {'RUNNING_MODAL'}
-            
-            
+
             elif self.modal_state == 'HOTKEY_TRANSFORM':
                 if self.hot_key == 'G':
                     action = 'Grab'
                 elif self.hot_key == 'R':
                     action = 'Rotate'
-                    
+
                 if event.shift:
                         action = 'FINE CONTROL ' + action
-                
+
                 if event.type == 'MOUSEMOVE':
-                    #pass mouse coords to widget
+                    # Pass mouse coords to widget
                     x = str(event.mouse_region_x)
                     y = str(event.mouse_region_y)
                     message  = self.mode + ": " + action + ": X: " +  x + '  Y:  ' +  y
                     self.temporary_message_start(context, message)
 
-                    #widget.user_interaction
+                    # Widget.user_interaction
                     self.cut_line_widget.user_interaction(context, event.mouse_region_x,event.mouse_region_y)
                     self.selected.cut_object(context, self.original_form, self.bme)
                     self.selected.simplify_cross(self.selected_path.ring_segments)
                     self.selected.update_com()
-                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
-                    
+                    self.selected_path.align_cut(self.selected, mode='BETWEEN', fine_grain=True)
+
                     self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                     self.selected_path.update_visibility(context, self.original_form)
                     return {'RUNNING_MODAL'}
-                
-                
+
+
                 #LEFTMOUSE event.value == 'PRESS':#RET, ENTER
                 if (event.type in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER'} and
                     event.value == 'PRESS'):
                     #confirm transform
                     #recut, align, visibility?, and update the segment
-                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
+                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert=False)
                     self.modal_state = 'WAITING'
                     return {'RUNNING_MODAL'}
-                
+
                 if (event.type in {'ESC', 'RIGHTMOUSE'} and
                     event.value == 'PRESS'):
                     self.cut_line_widget.cancel_transform()
                     self.selected.cut_object(context, self.original_form, self.bme)
                     self.selected.simplify_cross(self.selected_path.ring_segments)
-                    self.selected_path.align_cut(self.selected, mode = 'BETWEEN', fine_grain = True)
+                    self.selected_path.align_cut(self.selected, mode='BETWEEN', fine_grain=True)
                     self.selected.update_com()
-                    
+
                     self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                     self.selected_path.update_visibility(context, self.original_form)
                     self.modal_state = 'WAITING'
                     return {'RUNNING_MODAL'}
-                
             
             elif self.modal_state == 'WIDGET_TRANSFORM':
-                
-                #MOUSEMOVE
+
+                # Mouse move
                 if event.type == 'MOUSEMOVE':
                     if event.shift:
                         action = 'FINE WIDGET'
                     else:
                         action = 'WIDGET'
-                    
-                    
+
                     self.widget_transform(context, settings, event)
-                    
+
                     return {'RUNNING_MODAL'}
-               
+
                 elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                     #destroy the widget
                     self.cut_line_widget = None
                     self.modal_state = 'WAITING'
-                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert = False)
-                    
+                    self.selected_path.update_backbone(context, self.original_form, self.bme, self.selected, insert=False)
+
                     return {'RUNNING_MODAL'}
-                    
+
                 elif  event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS' and self.hot_key:
                     self.cut_line_widget.cancel_transform()
                     self.selected.cut_object(context, self.original_form, self.bme)
                     self.selected.simplify_cross(self.selected_path.ring_segments)
                     self.selected.update_com()
-                    
+
                     self.selected_path.connect_cuts_to_make_mesh(self.original_form)
                     self.selected_path.update_visibility(context, self.original_form)
-                    
+
                 return {'RUNNING_MODAL'}
-            
-            
-                
-                
+
             return{'RUNNING_MODAL'}
-        
+
         if self.mode == 'GUIDE':
-            
+
             if self.modal_state == 'WAITING':
-                #NAVIGATION KEYS
+                # Navigation Keys
                 if (event.type in {'MIDDLEMOUSE', 
                                     'NUMPAD_2', 
                                     'NUMPAD_4', 
@@ -1535,26 +1515,26 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
                                     'NUMPAD_5', 
                                     'NUMPAD_7',
                                     'NUMPAD_9'} and event.value == 'PRESS'):
-                    
+
                     self.modal_state = 'NAVIGATING'
                     self.post_update = True
                     self.temporary_message_start(context, 'NAVIGATING')
 
                     return {'PASS_THROUGH'}
-                
+
                 elif (event.type in {'ESC','RIGHT_MOUSE'} and 
                     event.value == 'PRESS'):
-                    
+
                     context.area.header_text_set()
                     contour_utilities.callback_cleanup(self,context)
                     if self._timer:
                         context.window_manager.event_timer_remove(self._timer)
-                        
+
                     return {'CANCELLED'}
-                
+
                 elif (event.type in {'RET', 'NUMPAD_ENTER'} and 
                     event.value == 'PRESS'):
-                    
+
                     return self.finish_mesh(context)
                 
                 elif (event.type in {'TRACKPADPAN', 'TRACKPADZOOM'} or event.type.startswith('NDOF_')):
