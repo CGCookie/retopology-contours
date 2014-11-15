@@ -196,12 +196,6 @@ class ContourToolsAddonPreferences(AddonPreferences):
         default=False,
         )
 
-    show_experimental = BoolProperty(
-        name="Enable Experimental",
-        description="Enable experimental features and functions that are still in development, useful for experimenting and likely to crash",
-        default=False,
-        )
-
     vert_size = IntProperty(
         name="Vertex Size",
         default=4,
@@ -582,14 +576,6 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         col = box.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
 
-        if cgc_contour.show_experimental:
-            box = layout.box()
-            row = box.row()
-            row.operator("cgcookie.retopo_poly_sketch", icon='MESH_UVSPHERE')
-
-            row = box.row()
-            row.prop(cgc_contour, "density_factor")
-
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
     bl_label = "Retopology"
@@ -604,8 +590,6 @@ class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
 
         layout.operator("cgcookie.retop_contour")
-        if cgc_contour.show_experimental:
-            layout.operator("cgcookie.retopo_poly_sketch")
 
 
 class CGCOOKIE_OT_retopo_cache_clear(bpy.types.Operator):
