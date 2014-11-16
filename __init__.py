@@ -560,6 +560,9 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
         col.operator("cgcookie.retop_contour", icon='IPO_LINEAR')
         col.prop(cgc_contour, "vertex_count")
+
+        col = layout.column()
+        col.label("Guide Mode:")
         col.prop(cgc_contour, "ring_count")
 
         # Commenting out for now until this is further improved and made to work again ###
