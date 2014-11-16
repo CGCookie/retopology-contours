@@ -359,7 +359,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
 
     cut_count = IntProperty(
         name="Ring Count",
-        description="The Number of Cuts Per Guide Stroke",
+        description="The Number of Segments Per Guide Stroke",
         default=10,
         min=3,
         max=100,
@@ -551,31 +551,27 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        box = layout.box()
+        col = layout.column()
 
         if 'EDIT' in context.mode and len(context.selected_objects) != 2:
-            col = box.column()
             col.label(text='No 2nd Object!')
-        col = box.column()
         col.operator("cgcookie.retop_contour", icon='MESH_UVSPHERE')
 
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
 
-        row = box.row()
-        row.prop(cgc_contour, "vertex_count")
-
-        row = box.row()
-        row.prop(cgc_contour, "cut_count")
+        col = layout.column(align=True)
+        col.prop(cgc_contour, "vertex_count")
+        col.prop(cgc_contour, "cut_count")
 
         # Commenting out for now until this is further improved and made to work again ###
         # row = box.row()
         # row.prop(cgc_contour, "cyclic")
 
-        row = box.row()
+        row = layout.row()
         row.prop(cgc_contour, "recover")
         row.prop(cgc_contour, "recover_clip")
 
-        col = box.column()
+        col = layout.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
 
 
@@ -649,7 +645,7 @@ def retopo_draw_callback(self, context):
 
 
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
-    '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
+    '''Draw Perpendicular Strokes to Retopologize Cylindrical Forms'''
     bl_idname = "cgcookie.retop_contour"
     bl_label = "Draw Contours"
 
