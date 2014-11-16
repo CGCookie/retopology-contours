@@ -359,7 +359,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
 
     cut_count = IntProperty(
         name="Ring Count",
-        description="The Number of Cuts Per Guide Stroke",
+        description="The Number of Segments Per Guide Stroke",
         default=10,
         min=3,
         max=100,
