@@ -569,7 +569,9 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
         row = layout.row()
         row.prop(cgc_contour, "recover")
-        row.prop(cgc_contour, "recover_clip")
+
+        if cgc_contour.recover:
+            row.prop(cgc_contour, "recover_clip")
 
         col = layout.column()
         col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
