@@ -53,6 +53,8 @@ import contour_utilities
 import general_utilities
 from contour_classes import ContourCutLine, ExistingVertList, CutLineManipulatorWidget, ContourCutSeries, ContourStatePreserver
 
+from lib import common_drawing
+
 # Create a class that contains all location information for addons
 AL = general_utilities.AddonLocator()
 
@@ -607,6 +609,8 @@ def retopo_draw_callback(self, context):
 
     settings = context.user_preferences.addons[AL.FolderName].preferences
 
+    stroke_color = settings.theme_colors_active[settings.theme]
+
     if (self.post_update or self.modal_state == 'NAVIGATING') and context.space_data.use_occlude_geometry:
         for path in self.cut_paths:
             path.update_visibility(context, self.original_form)
@@ -633,7 +637,7 @@ def retopo_draw_callback(self, context):
 
     if len(self.draw_cache):
         # Draw guide line
-        contour_utilities.draw_polyline_from_points(context, self.draw_cache, self.snap_color, 2, "GL_LINE_SMOOTH")
+        common_drawing.draw_polyline_from_points(context, self.draw_cache, stroke_color, 2, "GL_LINE_STIPPLE")
 
     if len(self.cut_paths):
         for path in self.cut_paths:
