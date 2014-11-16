@@ -357,7 +357,7 @@ class ContourToolsAddonPreferences(AddonPreferences):
         max=250,
         )
 
-    cut_count = IntProperty(
+    ring_count = IntProperty(
         name="Ring Count",
         description="The Number of Segments Per Guide Stroke",
         default=10,
@@ -551,21 +551,26 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        col = layout.column()
-
-        if 'EDIT' in context.mode and len(context.selected_objects) != 2:
-            col.label(text='No 2nd Object!')
-        col.operator("cgcookie.retop_contour", icon='IPO_LINEAR')
+        col = layout.column(align=True)
 
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
 
-        col = layout.column(align=True)
+        if 'EDIT' in context.mode and len(context.selected_objects) != 2:
+            col.label(text='No 2nd Object!')
+
+        col.operator("cgcookie.retop_contour", icon='IPO_LINEAR')
         col.prop(cgc_contour, "vertex_count")
-        col.prop(cgc_contour, "cut_count")
+
+        col = layout.column()
+        col.label("Guide Mode:")
+        col.prop(cgc_contour, "ring_count")
 
         # Commenting out for now until this is further improved and made to work again ###
         # row = box.row()
         # row.prop(cgc_contour, "cyclic")
+
+        col = layout.column()
+        col.label("Cache:")
 
         row = layout.row()
         row.prop(cgc_contour, "recover")
@@ -573,8 +578,8 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         if cgc_contour.recover:
             row.prop(cgc_contour, "recover_clip")
 
-        col = layout.column()
-        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
+        row = layout.row()
+        row.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
 
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
@@ -831,7 +836,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         TODO: What if errors?
         '''
         path = ContourCutSeries(context, self.draw_cache,
-                                    segments=settings.cut_count,
+                                    segments=settings.ring_count,
                                     ring_segments=settings.vertex_count,
                                     cull_factor=settings.cull_factor, 
                                     smooth_factor=settings.smooth_factor,
@@ -1784,7 +1789,7 @@ class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
         # Default verts in a loop (spans)
         self.segments = settings.vertex_count
         # Default number of loops in a segment
-        self.guide_cuts = settings.cut_count
+        self.guide_cuts = settings.ring_count
 
         # If edit mode
         if context.mode == 'EDIT_MESH':
