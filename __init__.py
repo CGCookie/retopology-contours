@@ -569,14 +569,17 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
         # row = box.row()
         # row.prop(cgc_contour, "cyclic")
 
+        col = layout.column()
+        col.label("Cache:")
+
         row = layout.row()
         row.prop(cgc_contour, "recover")
 
         if cgc_contour.recover:
             row.prop(cgc_contour, "recover_clip")
 
-        col = layout.column()
-        col.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
+        row = layout.row()
+        row.operator("cgcookie.clear_cache", text = "Clear Cache", icon = 'CANCEL')
 
 
 class CGCOOKIE_OT_retopo_contour_menu(bpy.types.Menu):
