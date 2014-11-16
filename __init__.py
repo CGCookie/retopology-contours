@@ -561,7 +561,6 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
         col = layout.column(align=True)
         col.prop(cgc_contour, "vertex_count")
-
         col.prop(cgc_contour, "cut_count")
 
         # Commenting out for now until this is further improved and made to work again ###
@@ -646,7 +645,7 @@ def retopo_draw_callback(self, context):
 
 
 class CGCOOKIE_OT_retopo_contour(bpy.types.Operator):
-    '''Draw Perpendicular Strokes to Cylindrical Form for Retopology'''
+    '''Draw Perpendicular Strokes to Retopologize Cylindrical Forms'''
     bl_idname = "cgcookie.retop_contour"
     bl_label = "Draw Contours"
 
