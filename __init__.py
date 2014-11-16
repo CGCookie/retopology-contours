@@ -551,15 +551,14 @@ class CGCOOKIE_OT_retopo_contour_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        col = layout.column()
-
-        if 'EDIT' in context.mode and len(context.selected_objects) != 2:
-            col.label(text='No 2nd Object!')
-        col.operator("cgcookie.retop_contour", icon='IPO_LINEAR')
+        col = layout.column(align=True)
 
         cgc_contour = context.user_preferences.addons[AL.FolderName].preferences
 
-        col = layout.column(align=True)
+        if 'EDIT' in context.mode and len(context.selected_objects) != 2:
+            col.label(text='No 2nd Object!')
+
+        col.operator("cgcookie.retop_contour", icon='IPO_LINEAR')
         col.prop(cgc_contour, "vertex_count")
         col.prop(cgc_contour, "ring_count")
 
