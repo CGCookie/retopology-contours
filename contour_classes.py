@@ -404,7 +404,7 @@ class ContourCutSeries(object):  #TODO:  nomenclature consistency. Segment, Segm
                 cut_no = surface_no.cross(cut.plane_no)
                 
                 if self.existing_tail:
-                    stop_plane = [self.existing_tail.plane_com, sef.existing_tail.plane_no]
+                    stop_plane = [self.existing_tail.plane_com, self.existing_tail.plane_no]
                 else:
                     stop_plane = [cut.plane_com, cut.plane_no]
                 
